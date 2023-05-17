@@ -9,3 +9,5 @@ edition = "2021"
 byteorder = "1.4.3"
 serde = { version = "1.0.163", features = ["derive"] }
 serde_json = "1.0.96"
+three-d = "0.15.0"
+three-d-asset = "0.5.0"

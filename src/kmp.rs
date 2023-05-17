@@ -2,9 +2,9 @@ use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
 
-// every struct here should have a new() function that takes a reader and returns a new struct, and a write() function that writes itself as bytes to the writer
+// every struct here should have a read() function that takes a reader and returns a read struct, and a write() function that writes itself as bytes to the writer
 pub trait KMPData {
-    fn new(rdr: impl Read) -> io::Result<Self>
+    fn read(rdr: impl Read) -> io::Result<Self>
     where
         Self: Sized;
 
@@ -34,24 +34,25 @@ pub struct KMP {
     stgi: Section<STGI>,
 }
 impl KMPData for KMP {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
-        let header = Header::new(&mut rdr)?;
+    /// Read a KMP from an object that implements Read, returning either a KMP object or an error.
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
+        let header = Header::read(&mut rdr)?;
 
-        let ktpt = Section::<KTPT>::new(&mut rdr)?;
-        let enpt = Section::<ENPT>::new(&mut rdr)?;
-        let enph = Section::<Path>::new(&mut rdr)?;
-        let itpt = Section::<ITPT>::new(&mut rdr)?;
-        let itph = Section::<Path>::new(&mut rdr)?;
-        let ckpt = Section::<CKPT>::new(&mut rdr)?;
-        let ckph = Section::<Path>::new(&mut rdr)?;
-        let gobj = Section::<GOBJ>::new(&mut rdr)?;
-        let poti = Section::<POTI>::new(&mut rdr)?;
-        let area = Section::<AREA>::new(&mut rdr)?;
-        let came = Section::<CAME>::new(&mut rdr)?;
-        let jgpt = Section::<JGPT>::new(&mut rdr)?;
-        let cnpt = Section::<CNPT>::new(&mut rdr)?;
-        let mspt = Section::<MSPT>::new(&mut rdr)?;
-        let stgi = Section::<STGI>::new(&mut rdr)?;
+        let ktpt = Section::<KTPT>::read(&mut rdr)?;
+        let enpt = Section::<ENPT>::read(&mut rdr)?;
+        let enph = Section::<Path>::read(&mut rdr)?;
+        let itpt = Section::<ITPT>::read(&mut rdr)?;
+        let itph = Section::<Path>::read(&mut rdr)?;
+        let ckpt = Section::<CKPT>::read(&mut rdr)?;
+        let ckph = Section::<Path>::read(&mut rdr)?;
+        let gobj = Section::<GOBJ>::read(&mut rdr)?;
+        let poti = Section::<POTI>::read(&mut rdr)?;
+        let area = Section::<AREA>::read(&mut rdr)?;
+        let came = Section::<CAME>::read(&mut rdr)?;
+        let jgpt = Section::<JGPT>::read(&mut rdr)?;
+        let cnpt = Section::<CNPT>::read(&mut rdr)?;
+        let mspt = Section::<MSPT>::read(&mut rdr)?;
+        let stgi = Section::<STGI>::read(&mut rdr)?;
 
         Ok(KMP {
             header,
@@ -72,6 +73,7 @@ impl KMPData for KMP {
             stgi,
         })
     }
+    /// Write the KMP object to an object that implements Write.
     fn write<T>(&self, wtr: T) -> io::Result<T>
     where
         T: Write,
@@ -107,7 +109,7 @@ pub struct Header {
     section_offsets: [u32; 15],
 }
 impl KMPData for Header {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
         // get the first 4 bytes of the file for file magic
         let mut file_magic = [0u8; 4];
         for i in 0..4 {
@@ -181,7 +183,7 @@ struct SectionHeader {
     additional_value: u16,
 }
 impl KMPData for SectionHeader {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
         let mut section_name = [0u8; 4];
         for i in 0..4 {
             let byte = rdr.read_u8()?;
@@ -227,13 +229,13 @@ impl<T> KMPData for Section<T>
 where
     T: KMPData,
 {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
-        // make a new section header object
-        let section_header = SectionHeader::new(&mut rdr)?;
-        // for each entry in the section, make a new entry object
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
+        // make a read section header object
+        let section_header = SectionHeader::read(&mut rdr)?;
+        // for each entry in the section, make a read entry object
         let mut entries = Vec::new();
         for _ in 0..section_header.num_entries {
-            let entry = T::new(&mut rdr)?;
+            let entry = T::read(&mut rdr)?;
             entries.push(entry);
         }
         // return the section object
@@ -263,7 +265,7 @@ pub struct Path {
     next_group: [u8; 6],
 }
 impl KMPData for Path {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
         let start = rdr.read_u8()?;
         let group_length = rdr.read_u8()?;
         let mut prev_group = [0u8; 6];
@@ -307,7 +309,7 @@ pub struct KTPT {
     player_index: i16,
 }
 impl KMPData for KTPT {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
         let mut position = [0f32; 3];
         for i in 0..3 {
             let byte = rdr.read_f32::<BE>()?;
@@ -354,7 +356,7 @@ pub struct ENPT {
     setting_3: u8,
 }
 impl KMPData for ENPT {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
         let mut position = [0f32; 3];
         for i in 0..3 {
             let byte = rdr.read_f32::<BE>()?;
@@ -396,7 +398,7 @@ pub struct ITPT {
     setting_2: u16,
 }
 impl KMPData for ITPT {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
         let mut position = [0f32; 3];
         for i in 0..3 {
             let byte = rdr.read_f32::<BE>()?;
@@ -437,7 +439,7 @@ pub struct CKPT {
     next_cp: u8,
 }
 impl KMPData for CKPT {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
         let cp_left = [rdr.read_f32::<BE>()?, rdr.read_f32::<BE>()?];
         let cp_right = [rdr.read_f32::<BE>()?, rdr.read_f32::<BE>()?];
         let respawn_pos = rdr.read_u8()?;
@@ -483,7 +485,7 @@ pub struct GOBJ {
     presence_flags: u16,
 }
 impl KMPData for GOBJ {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
         let object_id = rdr.read_u16::<BE>()?;
         let padding = rdr.read_u16::<BE>()?;
         let mut position = [0f32; 3];
@@ -551,7 +553,7 @@ struct POTIPoint {
     setting_2: u16,
 }
 impl KMPData for POTIPoint {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
         let mut position = [0f32; 3];
         for i in 0..3 {
             let byte = rdr.read_f32::<BE>()?;
@@ -587,13 +589,13 @@ pub struct POTI {
     routes: Vec<POTIPoint>,
 }
 impl KMPData for POTI {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
         let num_points = rdr.read_u16::<BE>()?;
         let setting_1 = rdr.read_u8()?;
         let setting_2 = rdr.read_u8()?;
         let mut routes = Vec::new();
         for _ in 0..num_points {
-            routes.push(POTIPoint::new(&mut rdr)?);
+            routes.push(POTIPoint::read(&mut rdr)?);
         }
         Ok(POTI {
             num_points,
@@ -632,7 +634,7 @@ pub struct AREA {
     enpt_id: u8,
 }
 impl KMPData for AREA {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
         let shape = rdr.read_u8()?;
         let kind = rdr.read_u8()?;
         let came_index = rdr.read_u8()?;
@@ -720,7 +722,7 @@ pub struct CAME {
     time: f32,
 }
 impl KMPData for CAME {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
         let kind = rdr.read_u8()?;
         let next_index = rdr.read_u8()?;
         let shake = rdr.read_u8()?;
@@ -813,7 +815,7 @@ pub struct JGPT {
     extra_data: i16,
 }
 impl KMPData for JGPT {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
         let mut position = [0f32; 3];
         for i in 0..3 {
             let byte = rdr.read_f32::<BE>()?;
@@ -858,7 +860,7 @@ pub struct CNPT {
     shoot_effect: i16,
 }
 impl KMPData for CNPT {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
         let mut postition = [0f32; 3];
         for i in 0..3 {
             let byte = rdr.read_f32::<BE>()?;
@@ -903,7 +905,7 @@ pub struct MSPT {
     unknown: u16,
 }
 impl KMPData for MSPT {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
         let mut position = [0f32; 3];
         for i in 0..3 {
             let byte = rdr.read_f32::<BE>()?;
@@ -952,7 +954,7 @@ pub struct STGI {
     speed_mod: f32,
 }
 impl KMPData for STGI {
-    fn new(mut rdr: impl Read) -> io::Result<Self> {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
         let lap_count = rdr.read_u8()?;
         let pole_pos = rdr.read_u8()?;
         let driver_distance = rdr.read_u8()?;
