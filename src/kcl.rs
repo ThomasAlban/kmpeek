@@ -134,7 +134,7 @@ impl KCL {
 
         Ok(KCL { tris })
     }
-
+    //test
     pub fn build_model(&self, context: &Context) -> Vec<Gm<Mesh, ColorMaterial>> {
         let mut gm: Vec<Gm<Mesh, ColorMaterial>> = Vec::new();
 
