@@ -1,45 +1,46 @@
 use byteorder::{ReadBytesExt, BE};
 use std::io::{self, Read, Seek, SeekFrom};
 use three_d::*;
+use three_d_asset::*;
 
-const KCL_COLORS: [[f32; 4]; 32] = [
-    [1.0, 1.0, 1.0, 1.0], // Road
-    [1.0, 0.9, 0.8, 1.0], // Slippery Road (sand/dirt)
-    [0.0, 0.8, 0.0, 1.0], // Weak Off-Road
-    [0.0, 0.6, 0.0, 1.0], // Off-Road
-    [0.0, 0.4, 0.0, 1.0], // Heavy Off-Road
-    [0.8, 0.9, 1.0, 1.0], // Slippery Road (ice)
-    [1.0, 0.5, 0.0, 1.0], // Boost Panel
-    [1.0, 0.6, 0.0, 1.0], // Boost Ramp
-    [1.0, 0.8, 0.0, 1.0], // Slow Ramp
-    [0.9, 0.9, 1.0, 0.5], // Item Road
-    [0.7, 0.1, 0.1, 1.0], // Solid Fall
-    [0.0, 0.5, 1.0, 1.0], // Moving Water
-    [0.6, 0.6, 0.6, 1.0], // Wall
-    [0.0, 0.0, 0.6, 0.8], // Invisible Wall
-    [0.6, 0.6, 0.7, 0.5], // Item Wall
-    [0.6, 0.6, 0.6, 1.0], // Wall
-    [0.8, 0.0, 0.0, 0.8], // Fall Boundary
-    [1.0, 0.0, 0.5, 0.8], // Cannon Activator
-    [0.5, 0.0, 1.0, 0.5], // Force Recalculation
-    [0.0, 0.3, 1.0, 1.0], // Half-pipe Ramp
-    [0.6, 0.6, 0.6, 1.0], // Wall (items pass through)
-    [0.9, 0.9, 1.0, 1.0], // Moving Road
-    [0.9, 0.7, 1.0, 1.0], // Sticky Road
-    [1.0, 1.0, 1.0, 1.0], // Road (alt sfx)
-    [1.0, 0.0, 1.0, 0.8], // Sound Trigger
-    [0.4, 0.6, 0.4, 0.8], // Weak Wall
-    [0.8, 0.0, 1.0, 0.8], // Effect Trigger
-    [1.0, 0.0, 1.0, 0.5], // Item State Modifier
-    [0.0, 0.6, 0.0, 0.8], // Half-pipe Invis Wall
-    [0.9, 0.9, 1.0, 1.0], // Rotating Road
-    [0.8, 0.7, 0.8, 1.0], // Special Wall
-    [0.6, 0.6, 0.6, 1.0], // Wall
+pub const KCL_COLORS: [[f32; 4]; 32] = [
+    [1.0, 1.0, 1.0, 1.0], // road
+    [1.0, 0.9, 0.8, 1.0], // slippery road (sand/dirt)
+    [0.0, 0.8, 0.0, 1.0], // weak off-road
+    [0.0, 0.6, 0.0, 1.0], // off-road
+    [0.0, 0.4, 0.0, 1.0], // heavy off-road
+    [0.8, 0.9, 1.0, 1.0], // slippery road (ice)
+    [1.0, 0.5, 0.0, 1.0], // boost panel
+    [1.0, 0.6, 0.0, 1.0], // boost ramp
+    [1.0, 0.8, 0.0, 1.0], // slow ramp
+    [0.9, 0.9, 1.0, 0.5], // item road
+    [0.7, 0.1, 0.1, 1.0], // solid fall
+    [0.0, 0.5, 1.0, 1.0], // moving water
+    [0.6, 0.6, 0.6, 1.0], // wall
+    [0.0, 0.0, 0.6, 0.8], // invisible wall
+    [0.6, 0.6, 0.7, 0.5], // item wall
+    [0.6, 0.6, 0.6, 1.0], // wall
+    [0.8, 0.0, 0.0, 0.8], // fall boundary
+    [1.0, 0.0, 0.5, 0.8], // cannon activator
+    [0.5, 0.0, 1.0, 0.5], // force recalculation
+    [0.0, 0.3, 1.0, 1.0], // half-pipe ramp
+    [0.6, 0.6, 0.6, 1.0], // wall (items pass through)
+    [0.9, 0.9, 1.0, 1.0], // moving road
+    [0.9, 0.7, 1.0, 1.0], // sticky road
+    [1.0, 1.0, 1.0, 1.0], // road (alt sfx)
+    [1.0, 0.0, 1.0, 0.8], // sound trigger
+    [0.4, 0.6, 0.4, 0.8], // weak wall
+    [0.8, 0.0, 1.0, 0.8], // effect trigger
+    [1.0, 0.0, 1.0, 0.5], // item state modifier
+    [0.0, 0.6, 0.0, 0.8], // half-pipe invis wall
+    [0.9, 0.9, 1.0, 1.0], // rotating road
+    [0.8, 0.7, 0.8, 1.0], // special wall
+    [0.6, 0.6, 0.6, 1.0], // wall
 ];
 
 pub struct Tri {
-    pub vertices: [Vec3; 3],
-    pub color: [f32; 4],
+    pub vertices: Vec<Vec3>,
+    pub color: Color,
 }
 
 pub struct KCL {
@@ -121,55 +122,44 @@ impl KCL {
             let v1 = *vertex;
             let v2 = vertex + (cross_b * (length / cross_b.dot(*nrm_c)));
             let v3 = vertex + (cross_a * (length / cross_a.dot(*nrm_c)));
-            // let v2 = vertex + &(cross_b.scale(length / cross_b.dot(nrm_c)));
-            // let v3 = vertex + &(cross_a.scale(length / cross_a.dot(nrm_c)));
 
-            let color = KCL_COLORS[kcl_flag_index as usize];
+            let color = Color::from_rgba_slice(&KCL_COLORS[kcl_flag_index as usize]);
 
             tris.push(Tri {
-                vertices: [v1, v2, v3],
+                vertices: vec![v1, v2, v3],
                 color,
             });
         }
-
         Ok(KCL { tris })
     }
-    //test
-    pub fn build_model(&self, context: &Context) -> Vec<Gm<Mesh, ColorMaterial>> {
-        let mut gm: Vec<Gm<Mesh, ColorMaterial>> = Vec::new();
 
+    pub fn build_model(&self, context: &Context) -> Gm<Mesh, PhysicalMaterial> {
+        let mut positions = Vec::new();
+        let mut colors = Vec::new();
         for tri in &self.tris {
-            let positions = vec![
-                vec3(tri.vertices[0].x, tri.vertices[0].y, tri.vertices[0].z),
-                vec3(tri.vertices[1].x, tri.vertices[1].y, tri.vertices[1].z),
-                vec3(tri.vertices[2].x, tri.vertices[2].y, tri.vertices[2].z),
-            ];
-
-            let mesh = Gm::new(
-                Mesh::new(
-                    &context,
-                    &CpuMesh {
-                        positions: Positions::F32(positions),
-                        colors: Some(vec![
-                            Color {
-                                r: (tri.color[0] * 255.) as u8,
-                                g: (tri.color[1] * 255.) as u8,
-                                b: (tri.color[2] * 255.) as u8,
-                                a: (tri.color[3] * 255.) as u8,
-                            };
-                            3
-                        ]),
-                        ..Default::default()
-                    },
-                ),
-                ColorMaterial::default(),
-            );
-
-            // Construct a model, with a default color material, thereby transferring the mesh data to the GPU
-            gm.push(mesh);
+            positions.extend(tri.vertices.clone());
+            colors.extend([tri.color; 3]);
         }
-        gm
-    }
 
-    //pub fn build_model(&self, context: &Context) -> Model<ColorMaterial> {}
+        let positions = Positions::F32(positions);
+
+        let mut cpu_mesh = CpuMesh {
+            positions,
+            colors: Some(colors),
+            ..Default::default()
+        };
+        cpu_mesh.compute_normals();
+
+        let geometry = Mesh::new(&context, &cpu_mesh);
+
+        let material = PhysicalMaterial::new(
+            context,
+            &PbrMaterial {
+                metallic: 0.7,
+                ..Default::default()
+            },
+        );
+
+        Gm::new(geometry, material)
+    }
 }

@@ -9,14 +9,13 @@ use three_d::*;
 pub fn main() {
     let window = Window::new(WindowSettings {
         title: "test".to_string(),
-        max_size: Some((1280, 720)),
         ..Default::default()
     })
     .unwrap();
 
     let context = window.gl();
 
-    let f = File::open("course1.kcl").unwrap();
+    let f = File::open("dry_dry_ruins.kcl").unwrap();
     let kcl = KCL::read(f).unwrap();
     let gm = kcl.build_model(&context);
 
@@ -40,11 +39,19 @@ pub fn main() {
         vec3(avg_point.x, avg_point.y, avg_point.z),
         vec3(0.0, 1.0, 0.0),
         degrees(45.0),
-        1.,
+        1000.,
         10000000.0,
     );
 
+    let u8_colors = KCL_COLORS.map(|i| i.map(|j| (j * 255.) as u8));
+    println!("{:#?}", u8_colors);
+
     let mut control = OrbitControl::new(*camera.target(), 1.0, 10000000.0);
+
+    let dir_light_1 = DirectionalLight::new(&context, 0.9, Color::WHITE, &vec3(0., -1., -1.));
+    let dir_light_2 = DirectionalLight::new(&context, 0.9, Color::WHITE, &vec3(0., -1., 1.));
+
+    let ambient_light = renderer::light::AmbientLight::new(&context, 0.8, Color::WHITE);
 
     // Start the main render loop
     window.render_loop(
@@ -55,13 +62,10 @@ pub fn main() {
 
         control.handle_events(&mut camera, &mut frame_input.events);
 
-        // Get the screen render target to be able to render something on the screen
         frame_input.screen()
-            // Clear the color and depth of the screen render target
             .clear(ClearState::color_and_depth(0.8, 0.8, 0.8, 1.0, 1.0))
-            // Render the triangle with the color material which uses the per vertex colors defined at construction
             .render(
-                &camera, &gm, &[]
+                &camera, &gm, &[&ambient_light, &dir_light_1, &dir_light_2]
             );
 
         // Returns default frame output to end the frame
