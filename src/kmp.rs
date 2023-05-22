@@ -1,6 +1,7 @@
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
+use three_d::*;
 
 // every struct here should have a read() function that takes a reader and returns a read struct, and a write() function that writes itself as bytes to the writer
 pub trait KMPData {
@@ -14,24 +15,24 @@ pub trait KMPData {
 }
 
 /// stores all the data of the KMP file
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct KMP {
-    header: Header,
-    ktpt: Section<KTPT>,
-    enpt: Section<ENPT>,
-    enph: Section<Path>,
-    itpt: Section<ITPT>,
-    itph: Section<Path>,
-    ckpt: Section<CKPT>,
-    ckph: Section<Path>,
-    gobj: Section<GOBJ>,
-    poti: Section<POTI>,
-    area: Section<AREA>,
-    came: Section<CAME>,
-    jgpt: Section<JGPT>,
-    cnpt: Section<CNPT>,
-    mspt: Section<MSPT>,
-    stgi: Section<STGI>,
+    pub header: Header,
+    pub ktpt: Section<KTPT>,
+    pub enpt: Section<ENPT>,
+    pub enph: Section<Path>,
+    pub itpt: Section<ITPT>,
+    pub itph: Section<Path>,
+    pub ckpt: Section<CKPT>,
+    pub ckph: Section<Path>,
+    pub gobj: Section<GOBJ>,
+    pub poti: Section<POTI>,
+    pub area: Section<AREA>,
+    pub came: Section<CAME>,
+    pub jgpt: Section<JGPT>,
+    pub cnpt: Section<CNPT>,
+    pub mspt: Section<MSPT>,
+    pub stgi: Section<STGI>,
 }
 impl KMPData for KMP {
     /// Read a KMP from an object that implements Read, returning either a KMP object or an error.
@@ -98,8 +99,39 @@ impl KMPData for KMP {
     }
 }
 
+impl KMP {
+    pub fn build_model(&self, context: &Context) -> Vec<Gm<Mesh, PhysicalMaterial>> {
+        let mut gms = Vec::new();
+
+        for point in self.gobj.entries.iter() {
+            // if point.object_id != 0x65 {
+            //     continue;
+            // }
+            let position = vec3(point.position[0], point.position[1], point.position[2]);
+            let mut sphere = Gm::new(
+                Mesh::new(&context, &CpuMesh::sphere(16)),
+                PhysicalMaterial::new(
+                    &context,
+                    &CpuMaterial {
+                        albedo: Color {
+                            r: 255,
+                            g: 0,
+                            b: 0,
+                            a: 255,
+                        },
+                        ..Default::default()
+                    },
+                ),
+            );
+            sphere.set_transformation(Mat4::from_translation(position) * Mat4::from_scale(60.));
+            gms.push(sphere);
+        }
+        gms
+    }
+}
+
 /// The header, which contains general information about the KMP
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Header {
     file_magic: String,
     file_len: u32,
@@ -175,7 +207,7 @@ impl KMPData for Header {
 }
 
 /// Each section has a header containing its info (like the name and number of entries)
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct SectionHeader {
     section_name: String,
     num_entries: u16,
@@ -217,13 +249,13 @@ impl KMPData for SectionHeader {
 }
 
 /// A generic type for a section of a KMP - each section contains a header, and a number of entries.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Section<T>
 where
     T: KMPData,
 {
     section_header: SectionHeader,
-    entries: Vec<T>,
+    pub entries: Vec<T>,
 }
 impl<T> KMPData for Section<T>
 where
@@ -257,7 +289,7 @@ where
 }
 
 /// Sections of the KMP such as ENPH (enemy paths), ITPH (item paths) all have the same data structure, so all use this Path struct.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Path {
     start: u8,
     group_length: u8,
@@ -302,7 +334,7 @@ impl KMPData for Path {
 }
 
 /// The KTPT (kart point) section describes kart points; the starting position for racers.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct KTPT {
     position: [f32; 3],
     rotation: [f32; 3],
@@ -347,9 +379,9 @@ impl KMPData for KTPT {
 }
 
 /// The ENPT (enemy point) section describes enemy points; the routes of CPU racers. The CPU racers attempt to follow the path described by each group of points (as determined by ENPH). More than 0xFF (255) entries will force a console freeze while loading the track.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ENPT {
-    position: [f32; 3],
+    pub position: [f32; 3],
     leniency: f32,
     setting_1: u16,
     setting_2: u8,
@@ -390,7 +422,7 @@ impl KMPData for ENPT {
 }
 
 /// The ITPT (item point) section describes item points; the Red Shell and Bullet Bill routes. The items attempt to follow the path described by each group of points (as determined by ITPH). More than 0xFF (255) entries will force a console freeze while loading the track.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ITPT {
     position: [f32; 3],
     bullet_bill_control: f32,
@@ -429,7 +461,7 @@ impl KMPData for ITPT {
 }
 
 /// The CKPT (checkpoint) section describes checkpoints; the routes players must follow to count laps. The racers must follow the path described by each group of points (as determined by CKPH). More than 0xFF (255) entries are possible if the last group begins at index ≤254. This is not recommended because Lakitu will always appear on-screen.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CKPT {
     cp_left: [f32; 2],
     cp_right: [f32; 2],
@@ -472,12 +504,12 @@ impl KMPData for CKPT {
 }
 
 /// The GOBJ (geo object) section describes objects; things such as item boxes, pipes and also controlled objects such as sound triggers.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GOBJ {
-    object_id: u16,
+    pub object_id: u16,
     /// this is part of the extended presence flags, but the value must be 0 if the object does not use this extension
     padding: u16,
-    position: [f32; 3],
+    pub position: [f32; 3],
     rotation: [f32; 3],
     scale: [f32; 3],
     route: u16,
@@ -546,7 +578,7 @@ impl KMPData for GOBJ {
 }
 
 /// Each POTI entry can contain a number of POTI entries/points.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct POTIPoint {
     position: [f32; 3],
     setting_1: u16,
@@ -581,7 +613,7 @@ impl KMPData for POTIPoint {
 }
 
 /// The POTI (point information) section describes routes; these are routes for many things including cameras and objects.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct POTI {
     num_points: u16,
     setting_1: u8,
@@ -619,7 +651,7 @@ impl KMPData for POTI {
 }
 
 /// The AREA (area) section describes areas; used to determine which camera to use, for example. The size is 5000 for both the positive and negative sides of the X and Z-axes, and 10000 for only the positive side of the Y-axis.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AREA {
     shape: u8,
     kind: u8,
@@ -702,7 +734,7 @@ impl KMPData for AREA {
 }
 
 /// The CAME (camera) section describes cameras; used to determine cameras for starting routes, Time Trial pans, etc.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CAME {
     kind: u8,
     next_index: u8,
@@ -807,7 +839,7 @@ impl KMPData for CAME {
 }
 
 /// The JGPT (jugem point) section describes "Jugem" points; the respawn positions. The index is relevant for the link of the CKPT section.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct JGPT {
     position: [f32; 3],
     rotation: [f32; 3],
@@ -852,7 +884,7 @@ impl KMPData for JGPT {
 }
 
 /// The CNPT (cannon point) section describes cannon points; the cannon target positions.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CNPT {
     postition: [f32; 3],
     angle: [f32; 3],
@@ -897,7 +929,7 @@ impl KMPData for CNPT {
 }
 
 /// The MSPT (mission success point) section describes end positions. After battles and tournaments have ended, the players are placed on this point(s).
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MSPT {
     position: [f32; 3],
     angle: [f32; 3],
@@ -942,7 +974,7 @@ impl KMPData for MSPT {
 }
 
 /// The STGI (stage info) section describes stage information; information about a track.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct STGI {
     lap_count: u8,
     pole_pos: u8,
