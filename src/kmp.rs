@@ -1,7 +1,7 @@
+use bevy::{math::vec3, prelude::*};
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
-use three_d::*;
 
 // every struct here should have a read() function that takes a reader and returns a read struct, and a write() function that writes itself as bytes to the writer
 pub trait KMPData {
@@ -100,33 +100,37 @@ impl KMPData for KMP {
 }
 
 impl KMP {
-    pub fn build_model(&self, context: &Context) -> Vec<Gm<Mesh, PhysicalMaterial>> {
-        let mut gms = Vec::new();
-
+    pub fn build_model(
+        &self,
+        commands: &mut Commands,
+        meshes: &mut ResMut<Assets<Mesh>>,
+        materials: &mut ResMut<Assets<StandardMaterial>>,
+    ) {
         for point in self.gobj.entries.iter() {
-            // if point.object_id != 0x65 {
-            //     continue;
-            // }
-            let position = vec3(point.position[0], point.position[1], point.position[2]);
-            let mut sphere = Gm::new(
-                Mesh::new(&context, &CpuMesh::sphere(16)),
-                PhysicalMaterial::new(
-                    &context,
-                    &CpuMaterial {
-                        albedo: Color {
-                            r: 255,
-                            g: 0,
-                            b: 0,
-                            a: 255,
-                        },
-                        ..Default::default()
-                    },
-                ),
+            if point.object_id != 0x65 {
+                continue;
+            }
+
+            let mesh = meshes.add(
+                shape::UVSphere {
+                    radius: 100.,
+                    ..default()
+                }
+                .into(),
             );
-            sphere.set_transformation(Mat4::from_translation(position) * Mat4::from_scale(60.));
-            gms.push(sphere);
+            let material = materials.add(Color::rgb(1., 0., 0.6).into());
+
+            commands.spawn((PbrBundle {
+                mesh,
+                material,
+                transform: Transform::from_xyz(
+                    point.position[0],
+                    point.position[1],
+                    point.position[2],
+                ),
+                ..default()
+            },));
         }
-        gms
     }
 }
 
@@ -168,10 +172,7 @@ impl KMPData for Header {
         if num_sections != 15 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!(
-                    "Invalid number of sections in header, expected 15 but found {}",
-                    num_sections
-                ),
+                format!("Expected 15 sections but found {num_sections}"),
             ));
         }
         let header_len = rdr.read_u16::<BE>()?;
