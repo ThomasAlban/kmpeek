@@ -1,4 +1,5 @@
-use bevy::{math::vec3, prelude::*};
+use bevy::prelude::*;
+use bevy_mod_picking::{prelude::RaycastPickTarget, *};
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
@@ -12,6 +13,25 @@ pub trait KMPData {
     fn write<T>(&self, wtr: T) -> io::Result<T>
     where
         T: Write;
+
+    fn read_vec3(rdr: &mut impl Read) -> io::Result<Vec3> {
+        let mut vec = [0f32; 3];
+        for i in 0..3 {
+            let byte = rdr.read_f32::<BE>()?;
+            vec[i] = byte;
+        }
+        Ok(vec.into())
+    }
+
+    fn write_vec3<T>(mut wtr: T, vec3: Vec3) -> io::Result<T>
+    where
+        T: Write,
+    {
+        wtr.write_f32::<BE>(vec3.x)?;
+        wtr.write_f32::<BE>(vec3.y)?;
+        wtr.write_f32::<BE>(vec3.z)?;
+        Ok(wtr)
+    }
 }
 
 /// stores all the data of the KMP file
@@ -107,8 +127,12 @@ impl KMP {
         materials: &mut ResMut<Assets<StandardMaterial>>,
     ) {
         for point in self.gobj.entries.iter() {
-            if point.object_id != 0x65 {
-                continue;
+            let material: Handle<StandardMaterial>;
+            if point.object_id == 0x65 {
+                // itembox
+                material = materials.add(Color::rgb(0., 0., 1.).into());
+            } else {
+                material = materials.add(Color::rgb(1., 0., 0.).into());
             }
 
             let mesh = meshes.add(
@@ -118,18 +142,21 @@ impl KMP {
                 }
                 .into(),
             );
-            let material = materials.add(Color::rgb(1., 0., 0.6).into());
 
-            commands.spawn((PbrBundle {
-                mesh,
-                material,
-                transform: Transform::from_xyz(
-                    point.position[0],
-                    point.position[1],
-                    point.position[2],
-                ),
-                ..default()
-            },));
+            commands.spawn((
+                PbrBundle {
+                    mesh,
+                    material,
+                    transform: Transform::from_xyz(
+                        point.position[0],
+                        point.position[1],
+                        point.position[2],
+                    ),
+                    ..default()
+                },
+                PickableBundle::default(),
+                RaycastPickTarget::default(),
+            ));
         }
     }
 }
@@ -337,22 +364,14 @@ impl KMPData for Path {
 /// The KTPT (kart point) section describes kart points; the starting position for racers.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KTPT {
-    position: [f32; 3],
-    rotation: [f32; 3],
+    position: Vec3,
+    rotation: Vec3,
     player_index: i16,
 }
 impl KMPData for KTPT {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let mut position = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            position[i] = byte;
-        }
-        let mut rotation = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            rotation[i] = byte;
-        }
+        let position = Self::read_vec3(&mut rdr)?;
+        let rotation = Self::read_vec3(&mut rdr)?;
         let player_index = rdr.read_i16::<BE>()?;
         // padding
         rdr.read_u16::<BE>()?;
@@ -366,12 +385,8 @@ impl KMPData for KTPT {
     where
         T: Write,
     {
-        for e in self.position {
-            wtr.write_f32::<BE>(e)?;
-        }
-        for e in self.rotation {
-            wtr.write_f32::<BE>(e)?;
-        }
+        wtr = Self::write_vec3(wtr, self.position)?;
+        wtr = Self::write_vec3(wtr, self.rotation)?;
         wtr.write_i16::<BE>(self.player_index)?;
         // padding
         wtr.write_u16::<BE>(0)?;
@@ -382,7 +397,7 @@ impl KMPData for KTPT {
 /// The ENPT (enemy point) section describes enemy points; the routes of CPU racers. The CPU racers attempt to follow the path described by each group of points (as determined by ENPH). More than 0xFF (255) entries will force a console freeze while loading the track.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ENPT {
-    pub position: [f32; 3],
+    pub position: Vec3,
     leniency: f32,
     setting_1: u16,
     setting_2: u8,
@@ -390,11 +405,7 @@ pub struct ENPT {
 }
 impl KMPData for ENPT {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let mut position = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            position[i] = byte;
-        }
+        let position = Self::read_vec3(&mut rdr)?;
         let leniency = rdr.read_f32::<BE>()?;
         let setting_1 = rdr.read_u16::<BE>()?;
         let setting_2 = rdr.read_u8()?;
@@ -411,9 +422,7 @@ impl KMPData for ENPT {
     where
         T: Write,
     {
-        for e in self.position {
-            wtr.write_f32::<BE>(e)?;
-        }
+        wtr = Self::write_vec3(wtr, self.position)?;
         wtr.write_f32::<BE>(self.leniency)?;
         wtr.write_u16::<BE>(self.setting_1)?;
         wtr.write_u8(self.setting_2)?;
@@ -425,18 +434,14 @@ impl KMPData for ENPT {
 /// The ITPT (item point) section describes item points; the Red Shell and Bullet Bill routes. The items attempt to follow the path described by each group of points (as determined by ITPH). More than 0xFF (255) entries will force a console freeze while loading the track.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ITPT {
-    position: [f32; 3],
+    position: Vec3,
     bullet_bill_control: f32,
     setting_1: u16,
     setting_2: u16,
 }
 impl KMPData for ITPT {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let mut position = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            position[i] = byte;
-        }
+        let position = Self::read_vec3(&mut rdr)?;
         let bullet_bill_control = rdr.read_f32::<BE>()?;
         let setting_1 = rdr.read_u16::<BE>()?;
         let setting_2 = rdr.read_u16::<BE>()?;
@@ -451,9 +456,7 @@ impl KMPData for ITPT {
     where
         T: Write,
     {
-        for e in self.position {
-            wtr.write_f32::<BE>(e)?;
-        }
+        wtr = Self::write_vec3(wtr, self.position)?;
         wtr.write_f32::<BE>(self.bullet_bill_control)?;
         wtr.write_u16::<BE>(self.setting_1)?;
         wtr.write_u16::<BE>(self.setting_2)?;
@@ -510,9 +513,9 @@ pub struct GOBJ {
     pub object_id: u16,
     /// this is part of the extended presence flags, but the value must be 0 if the object does not use this extension
     padding: u16,
-    pub position: [f32; 3],
-    rotation: [f32; 3],
-    scale: [f32; 3],
+    pub position: Vec3,
+    rotation: Vec3,
+    scale: Vec3,
     route: u16,
     settings: [u16; 8],
     presence_flags: u16,
@@ -521,21 +524,9 @@ impl KMPData for GOBJ {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let object_id = rdr.read_u16::<BE>()?;
         let padding = rdr.read_u16::<BE>()?;
-        let mut position = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            position[i] = byte;
-        }
-        let mut rotation = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            rotation[i] = byte;
-        }
-        let mut scale = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            scale[i] = byte;
-        }
+        let position = Self::read_vec3(&mut rdr)?;
+        let rotation = Self::read_vec3(&mut rdr)?;
+        let scale = Self::read_vec3(&mut rdr)?;
         let route = rdr.read_u16::<BE>()?;
         let mut settings = [0u16; 8];
         for i in 0..8 {
@@ -560,15 +551,9 @@ impl KMPData for GOBJ {
     {
         wtr.write_u16::<BE>(self.object_id)?;
         wtr.write_u16::<BE>(self.padding)?;
-        for e in self.position {
-            wtr.write_f32::<BE>(e)?;
-        }
-        for e in self.rotation {
-            wtr.write_f32::<BE>(e)?;
-        }
-        for e in self.scale {
-            wtr.write_f32::<BE>(e)?;
-        }
+        wtr = Self::write_vec3(wtr, self.position)?;
+        wtr = Self::write_vec3(wtr, self.rotation)?;
+        wtr = Self::write_vec3(wtr, self.scale)?;
         wtr.write_u16::<BE>(self.route)?;
         for e in self.settings {
             wtr.write_u16::<BE>(e)?;
@@ -581,17 +566,13 @@ impl KMPData for GOBJ {
 /// Each POTI entry can contain a number of POTI entries/points.
 #[derive(Debug, Serialize, Deserialize)]
 struct POTIPoint {
-    position: [f32; 3],
+    position: Vec3,
     setting_1: u16,
     setting_2: u16,
 }
 impl KMPData for POTIPoint {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let mut position = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            position[i] = byte;
-        }
+        let position = Self::read_vec3(&mut rdr)?;
         let setting_1 = rdr.read_u16::<BE>()?;
         let setting_2 = rdr.read_u16::<BE>()?;
         Ok(POTIPoint {
@@ -604,9 +585,7 @@ impl KMPData for POTIPoint {
     where
         T: Write,
     {
-        for e in self.position {
-            wtr.write_f32::<BE>(e)?;
-        }
+        wtr = Self::write_vec3(wtr, self.position)?;
         wtr.write_u16::<BE>(self.setting_1)?;
         wtr.write_u16::<BE>(self.setting_2)?;
         Ok(wtr)
@@ -658,9 +637,9 @@ pub struct AREA {
     kind: u8,
     came_index: u8,
     priority: u8,
-    position: [f32; 3],
-    rotation: [f32; 3],
-    scale: [f32; 3],
+    position: Vec3,
+    rotation: Vec3,
+    scale: Vec3,
     setting_1: u16,
     setting_2: u16,
     route: u8,
@@ -672,21 +651,9 @@ impl KMPData for AREA {
         let kind = rdr.read_u8()?;
         let came_index = rdr.read_u8()?;
         let priority = rdr.read_u8()?;
-        let mut position = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            position[i] = byte;
-        }
-        let mut rotation = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            rotation[i] = byte;
-        }
-        let mut scale = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            scale[i] = byte;
-        }
+        let position = Self::read_vec3(&mut rdr)?;
+        let rotation = Self::read_vec3(&mut rdr)?;
+        let scale = Self::read_vec3(&mut rdr)?;
         let setting_1 = rdr.read_u16::<BE>()?;
         let setting_2 = rdr.read_u16::<BE>()?;
         let route = rdr.read_u8()?;
@@ -715,15 +682,9 @@ impl KMPData for AREA {
         wtr.write_u8(self.kind)?;
         wtr.write_u8(self.came_index)?;
         wtr.write_u8(self.priority)?;
-        for e in self.position {
-            wtr.write_f32::<BE>(e)?;
-        }
-        for e in self.rotation {
-            wtr.write_f32::<BE>(e)?;
-        }
-        for e in self.scale {
-            wtr.write_f32::<BE>(e)?;
-        }
+        wtr = Self::write_vec3(wtr, self.position)?;
+        wtr = Self::write_vec3(wtr, self.rotation)?;
+        wtr = Self::write_vec3(wtr, self.scale)?;
         wtr.write_u16::<BE>(self.setting_1)?;
         wtr.write_u16::<BE>(self.setting_2)?;
         wtr.write_u8(self.route)?;
@@ -746,12 +707,12 @@ pub struct CAME {
     view_velocity: u16,
     start: u8,
     movie: u8,
-    position: [f32; 3],
-    rotation: [f32; 3],
+    position: Vec3,
+    rotation: Vec3,
     zoom_start: f32,
     zoom_end: f32,
-    view_start: [f32; 3],
-    view_end: [f32; 3],
+    view_start: Vec3,
+    view_end: Vec3,
     time: f32,
 }
 impl KMPData for CAME {
@@ -765,28 +726,12 @@ impl KMPData for CAME {
         let view_velocity = rdr.read_u16::<BE>()?;
         let start = rdr.read_u8()?;
         let movie = rdr.read_u8()?;
-        let mut position = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            position[i] = byte;
-        }
-        let mut rotation = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            rotation[i] = byte;
-        }
+        let position = Self::read_vec3(&mut rdr)?;
+        let rotation = Self::read_vec3(&mut rdr)?;
         let zoom_start = rdr.read_f32::<BE>()?;
         let zoom_end = rdr.read_f32::<BE>()?;
-        let mut view_start = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            view_start[i] = byte;
-        }
-        let mut view_end = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            view_end[i] = byte;
-        }
+        let view_start = Self::read_vec3(&mut rdr)?;
+        let view_end = Self::read_vec3(&mut rdr)?;
         let time = rdr.read_f32::<BE>()?;
         Ok(CAME {
             kind,
@@ -820,20 +765,10 @@ impl KMPData for CAME {
         wtr.write_u16::<BE>(self.view_velocity)?;
         wtr.write_u8(self.start)?;
         wtr.write_u8(self.movie)?;
-        for e in self.position {
-            wtr.write_f32::<BE>(e)?;
-        }
-        for e in self.rotation {
-            wtr.write_f32::<BE>(e)?;
-        }
-        wtr.write_f32::<BE>(self.zoom_start)?;
-        wtr.write_f32::<BE>(self.zoom_end)?;
-        for e in self.view_start {
-            wtr.write_f32::<BE>(e)?;
-        }
-        for e in self.view_end {
-            wtr.write_f32::<BE>(e)?;
-        }
+        wtr = Self::write_vec3(wtr, self.position)?;
+        wtr = Self::write_vec3(wtr, self.rotation)?;
+        wtr = Self::write_vec3(wtr, self.view_start)?;
+        wtr = Self::write_vec3(wtr, self.view_end)?;
         wtr.write_f32::<BE>(self.time)?;
         Ok(wtr)
     }
@@ -842,23 +777,15 @@ impl KMPData for CAME {
 /// The JGPT (jugem point) section describes "Jugem" points; the respawn positions. The index is relevant for the link of the CKPT section.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JGPT {
-    position: [f32; 3],
-    rotation: [f32; 3],
+    position: Vec3,
+    rotation: Vec3,
     respawn_id: u16,
     extra_data: i16,
 }
 impl KMPData for JGPT {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let mut position = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            position[i] = byte;
-        }
-        let mut rotation = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            rotation[i] = byte;
-        }
+        let position = Self::read_vec3(&mut rdr)?;
+        let rotation = Self::read_vec3(&mut rdr)?;
         let respawn_id = rdr.read_u16::<BE>()?;
         let extra_data = rdr.read_i16::<BE>()?;
         Ok(JGPT {
@@ -872,12 +799,8 @@ impl KMPData for JGPT {
     where
         T: Write,
     {
-        for e in self.position {
-            wtr.write_f32::<BE>(e)?;
-        }
-        for e in self.rotation {
-            wtr.write_f32::<BE>(e)?;
-        }
+        wtr = Self::write_vec3(wtr, self.position)?;
+        wtr = Self::write_vec3(wtr, self.rotation)?;
         wtr.write_u16::<BE>(self.respawn_id)?;
         wtr.write_i16::<BE>(self.extra_data)?;
         Ok(wtr)
@@ -887,27 +810,19 @@ impl KMPData for JGPT {
 /// The CNPT (cannon point) section describes cannon points; the cannon target positions.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CNPT {
-    postition: [f32; 3],
-    angle: [f32; 3],
+    position: Vec3,
+    angle: Vec3,
     id: u16,
     shoot_effect: i16,
 }
 impl KMPData for CNPT {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let mut postition = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            postition[i] = byte;
-        }
-        let mut angle = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            angle[i] = byte;
-        }
+        let position = Self::read_vec3(&mut rdr)?;
+        let angle = Self::read_vec3(&mut rdr)?;
         let id = rdr.read_u16::<BE>()?;
         let shoot_effect = rdr.read_i16::<BE>()?;
         Ok(CNPT {
-            postition,
+            position,
             angle,
             id,
             shoot_effect,
@@ -917,12 +832,8 @@ impl KMPData for CNPT {
     where
         T: Write,
     {
-        for e in self.postition {
-            wtr.write_f32::<BE>(e)?;
-        }
-        for e in self.angle {
-            wtr.write_f32::<BE>(e)?;
-        }
+        wtr = Self::write_vec3(wtr, self.position)?;
+        wtr = Self::write_vec3(wtr, self.angle)?;
         wtr.write_u16::<BE>(self.id)?;
         wtr.write_i16::<BE>(self.shoot_effect)?;
         Ok(wtr)
@@ -932,23 +843,15 @@ impl KMPData for CNPT {
 /// The MSPT (mission success point) section describes end positions. After battles and tournaments have ended, the players are placed on this point(s).
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MSPT {
-    position: [f32; 3],
-    angle: [f32; 3],
+    position: Vec3,
+    angle: Vec3,
     id: u16,
     unknown: u16,
 }
 impl KMPData for MSPT {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let mut position = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            position[i] = byte;
-        }
-        let mut angle = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            angle[i] = byte;
-        }
+        let position = Self::read_vec3(&mut rdr)?;
+        let angle = Self::read_vec3(&mut rdr)?;
         let id = rdr.read_u16::<BE>()?;
         let unknown = rdr.read_u16::<BE>()?;
         Ok(MSPT {
@@ -962,12 +865,8 @@ impl KMPData for MSPT {
     where
         T: Write,
     {
-        for e in self.position {
-            wtr.write_f32::<BE>(e)?;
-        }
-        for e in self.angle {
-            wtr.write_f32::<BE>(e)?;
-        }
+        wtr = Self::write_vec3(wtr, self.position)?;
+        wtr = Self::write_vec3(wtr, self.angle)?;
         wtr.write_u16::<BE>(self.id)?;
         wtr.write_u16::<BE>(self.unknown)?;
         Ok(wtr)

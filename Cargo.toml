@@ -7,6 +7,8 @@ edition = "2021"
 
 [dependencies]
 bevy = "0.10.1"
+bevy_mod_picking = "0.13.0"
+bevy_transform_gizmo = "0.6.0"
 byteorder = "1.4.3"
 serde = { version = "1.0.163", features = ["derive"] }
 serde_json = "1.0.96"

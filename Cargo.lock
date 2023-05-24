@@ -624,6 +624,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_mod_picking"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7aa3a4ab156dbab0b0f755531e5b92bb6bcef90d1b07b374c7f7c707e6940fc"
+dependencies = [
+ "bevy",
+ "bevy_mod_raycast",
+]
+
+[[package]]
+name = "bevy_mod_picking"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88f94e18ae111035e9bfd4793d1af9e090d35b0fd1048da2d9e32205a1a5104c"
+dependencies = [
+ "bevy",
+ "bevy_picking_core",
+ "bevy_picking_highlight",
+ "bevy_picking_input",
+ "bevy_picking_raycast",
+ "bevy_picking_selection",
+ "bevy_picking_sprite",
+ "bevy_picking_ui",
+]
+
+[[package]]
+name = "bevy_mod_raycast"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc98a75743120396c8f3e3b47bfeb7f3d39248c46a625972005e51ca4d110a2a"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
 name = "bevy_pbr"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -643,6 +678,79 @@ dependencies = [
  "bitflags",
  "bytemuck",
  "radsort",
+]
+
+[[package]]
+name = "bevy_picking_core"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce51af210395ad182b5ddc27375b660d68f105a9e279a887446d593b85299be2"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
+name = "bevy_picking_highlight"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58d3662d8ac1b05897dc29188b88068cd58a2f1623a496a32e903a9ea3df4f46"
+dependencies = [
+ "bevy",
+ "bevy_picking_core",
+ "bevy_picking_input",
+ "bevy_picking_selection",
+]
+
+[[package]]
+name = "bevy_picking_input"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9449ba2725ed32a035d5490bbe963f73c83751e363a9bd114d66e43e04355fcc"
+dependencies = [
+ "bevy",
+ "bevy_picking_core",
+ "bevy_picking_selection",
+]
+
+[[package]]
+name = "bevy_picking_raycast"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93fca29f78b3812dc864d60ec7b65007342f3494a0dfcfe4a2109519b1c60ea3"
+dependencies = [
+ "bevy",
+ "bevy_mod_raycast",
+ "bevy_picking_core",
+]
+
+[[package]]
+name = "bevy_picking_selection"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "599747c37ba57a0bec4f544453d36e63b2dbdba690eab4f87e64b6fd4abd5cf4"
+dependencies = [
+ "bevy",
+ "bevy_picking_core",
+]
+
+[[package]]
+name = "bevy_picking_sprite"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cc81a501e994d026480344a2d81421d9c5e41108f12c595f4307652748b1e7c"
+dependencies = [
+ "bevy",
+ "bevy_picking_core",
+]
+
+[[package]]
+name = "bevy_picking_ui"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7fc50ec022d16828628d6f8166813f816e85e8b9869fc11ea4be1a05b5ed112b"
+dependencies = [
+ "bevy",
+ "bevy_picking_core",
 ]
 
 [[package]]
@@ -853,6 +961,18 @@ dependencies = [
  "bevy_hierarchy",
  "bevy_math",
  "bevy_reflect",
+]
+
+[[package]]
+name = "bevy_transform_gizmo"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9eee913740e44abba70f1f8b811310d70ac01276d74d847b118ec82db9766fa4"
+dependencies = [
+ "bevy",
+ "bevy_mod_picking 0.12.0",
+ "bevy_mod_raycast",
+ "naga",
 ]
 
 [[package]]
@@ -1854,6 +1974,8 @@ name = "kmpeek"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bevy_mod_picking 0.13.0",
+ "bevy_transform_gizmo",
  "byteorder",
  "serde",
  "serde_json",
