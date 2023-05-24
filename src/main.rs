@@ -6,7 +6,13 @@ use camera_input::*;
 use kcl::*;
 use kmp::*;
 
-use bevy::prelude::*;
+use bevy::{
+    prelude::*,
+    render::{
+        settings::{Backends, WgpuSettings},
+        RenderPlugin,
+    },
+};
 use bevy_mod_picking::{prelude::RaycastPickCamera, DefaultPickingPlugins};
 use smooth_bevy_cameras::{
     controllers::fps::{FpsCameraBundle, FpsCameraController, FpsCameraPlugin},
@@ -17,13 +23,22 @@ use std::fs::File;
 fn main() {
     App::new()
         .insert_resource(Msaa::Sample4)
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "KMPeek".into(),
-                ..default()
-            }),
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "KMPeek".into(),
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(RenderPlugin {
+                    wgpu_settings: WgpuSettings {
+                        backends: Some(Backends::DX12),
+                        ..default()
+                    },
+                }),
+        )
         .add_plugin(LookTransformPlugin)
         .add_plugin(FpsCameraPlugin {
             override_input_system: true,
