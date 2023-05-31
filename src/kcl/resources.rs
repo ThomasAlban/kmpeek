@@ -2,7 +2,42 @@ use bevy::{math::vec3, prelude::*};
 use byteorder::{ReadBytesExt, BE};
 use std::io::{self, Read, Seek, SeekFrom};
 
-pub const KCL_COLORS: [[f32; 4]; 32] = [
+pub enum KclFlag {
+    Road1,
+    SlipperyRoad1,
+    WeakOffRoad,
+    OffRoad,
+    HeavyOffRoad,
+    SlipperyRoad2,
+    BoostPanel,
+    BoostRamp,
+    JumpPad,
+    ItemRoad,
+    SolidFall,
+    MovingWater,
+    Wall1,
+    InvisibleWall1,
+    ItemWall,
+    Wall2,
+    FallBoundary,
+    CannonTrigger,
+    ForceRecalculation,
+    HalfPipeRamp,
+    PlayerOnlyWall,
+    MovingRoad,
+    StickyRoad,
+    Road2,
+    SoundTrigger,
+    WeakWall,
+    EffectTrigger,
+    ItemStateModifier,
+    HalfPipeInvisibleWall,
+    RotatingRoad,
+    SpecialWall,
+    InvisibleWall2,
+}
+
+pub const KCL_COLOURS: [[f32; 4]; 32] = [
     [1.0, 1.0, 1.0, 1.0], // road
     [1.0, 0.9, 0.8, 1.0], // slippery road (sand/dirt)
     [0.0, 0.8, 0.0, 1.0], // weak off-road
@@ -34,7 +69,7 @@ pub const KCL_COLORS: [[f32; 4]; 32] = [
     [0.0, 0.6, 0.0, 0.8], // half-pipe invis wall
     [0.9, 0.9, 1.0, 1.0], // rotating road
     [0.8, 0.7, 0.8, 1.0], // special wall
-    [0.6, 0.6, 0.6, 1.0], // wall
+    [0.6, 0.6, 0.6, 1.0], // invisible wall 2
 ];
 
 #[derive(Resource)]
@@ -46,7 +81,7 @@ pub struct Kcl {
 pub struct VertexGroup {
     pub visible: bool,
     pub vertices: Vec<Vec3>,
-    pub color: [f32; 4],
+    pub colour: [f32; 4],
 }
 
 impl Kcl {
@@ -89,11 +124,11 @@ impl Kcl {
 
         let mut vertex_groups: Vec<VertexGroup> = Vec::new();
 
-        for color in KCL_COLORS.iter() {
+        for colour in KCL_COLOURS {
             vertex_groups.push(VertexGroup {
                 visible: true,
                 vertices: Vec::new(),
-                color: *color,
+                colour,
             });
         }
 

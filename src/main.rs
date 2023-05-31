@@ -2,6 +2,7 @@ mod camera;
 mod kcl;
 mod kmp;
 mod ui;
+mod utils;
 
 use camera::*;
 use kcl::*;
@@ -34,8 +35,8 @@ fn main() {
         })
         .add_plugin(UIPlugin)
         .add_plugin(CameraPlugin)
-        .add_plugin(KCLPlugin)
-        .add_plugin(KMPPlugin)
+        .add_plugin(KclPlugin)
+        .add_plugin(KmpPlugin)
         // make sure this startup system runs before spawning the models
         .add_startup_system(setup.in_base_set(StartupSet::PreStartup))
         .run();

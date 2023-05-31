@@ -5,9 +5,9 @@ mod resources;
 mod systems;
 
 pub use resources::Kmp;
-pub struct KMPPlugin;
+pub struct KmpPlugin;
 
-impl Plugin for KMPPlugin {
+impl Plugin for KmpPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(systems::spawn_model);
     }

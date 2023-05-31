@@ -48,7 +48,7 @@ trait WriteArrays: Write {
 impl<W: Write> WriteArrays for W {}
 
 // every struct here should have a read() function that takes a reader and returns a read struct, and a write() function that writes itself as bytes to the writer
-pub trait KMPData {
+pub trait KmpData {
     fn read(rdr: impl Read) -> io::Result<Self>
     where
         Self: Sized;
@@ -128,7 +128,6 @@ impl Kmp {
         for _ in 0..header_len {
             wtr.write_u8(0)?;
         }
-
         // for each section, we set the section offset in the header to its position relative to the end of the header
         // then we write the section to the writer
         macro_rules! section {
@@ -155,7 +154,6 @@ impl Kmp {
 
         // set the header file length to where we currently are (which is the end of the file)
         self.header.file_len = wtr.stream_position()? as u32;
-
         // go back to the beginning and write the file header
         wtr.rewind()?;
         wtr = self.header.write(wtr)?;
@@ -174,7 +172,7 @@ pub struct Header {
     version_num: u32,
     section_offsets: [u32; 15],
 }
-impl KMPData for Header {
+impl KmpData for Header {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         // get the first 4 bytes of the file for file magic
         let file_magic = rdr.read_array::<u8, 4>()?;
@@ -241,7 +239,7 @@ struct SectionHeader {
     /// The POTI section stores the total number of points of all routes here. The CAME section stores different values. For all other sections, the value is 0 (padding).
     additional_value: u16,
 }
-impl KMPData for SectionHeader {
+impl KmpData for SectionHeader {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let section_name = rdr.read_array::<u8, 4>()?;
         let section_name = String::from_utf8(section_name.to_vec());
@@ -275,14 +273,14 @@ impl KMPData for SectionHeader {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Section<T>
 where
-    T: KMPData,
+    T: KmpData,
 {
     section_header: SectionHeader,
     pub entries: Vec<T>,
 }
-impl<T> KMPData for Section<T>
+impl<T> KmpData for Section<T>
 where
-    T: KMPData,
+    T: KmpData,
 {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         // make a read section header object
@@ -319,13 +317,12 @@ pub struct Path {
     prev_group: [u8; 6],
     next_group: [u8; 6],
 }
-impl KMPData for Path {
+impl KmpData for Path {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let start = rdr.read_u8()?;
         let group_length = rdr.read_u8()?;
         let prev_group = rdr.read_array::<u8, 6>()?;
         let next_group = rdr.read_array::<u8, 6>()?;
-        // padding
         rdr.read_u16::<BE>()?;
         Ok(Path {
             start,
@@ -340,10 +337,9 @@ impl KMPData for Path {
     {
         wtr.write_u8(self.start)?;
         wtr.write_u8(self.group_length)?;
-        wtr.write_all(self.prev_group.as_slice())?;
-        wtr.write_all(self.next_group.as_slice())?;
-        // padding
-        wtr.write_all(0u16.to_be_bytes().as_slice())?;
+        wtr.write_array(self.prev_group)?;
+        wtr.write_array(self.next_group)?;
+        wtr.write_u16::<BE>(0)?;
         Ok(wtr)
     }
 }
@@ -355,12 +351,11 @@ pub struct Ktpt {
     rotation: Vec3,
     player_index: i16,
 }
-impl KMPData for Ktpt {
+impl KmpData for Ktpt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let position = rdr.read_vec3()?;
         let rotation = rdr.read_vec3()?;
         let player_index = rdr.read_i16::<BE>()?;
-        // padding
         rdr.read_u16::<BE>()?;
         Ok(Ktpt {
             position,
@@ -375,7 +370,6 @@ impl KMPData for Ktpt {
         wtr.write_vec3(self.position)?;
         wtr.write_vec3(self.rotation)?;
         wtr.write_i16::<BE>(self.player_index)?;
-        // padding
         wtr.write_u16::<BE>(0)?;
         Ok(wtr)
     }
@@ -390,7 +384,7 @@ pub struct Enpt {
     setting_2: u8,
     setting_3: u8,
 }
-impl KMPData for Enpt {
+impl KmpData for Enpt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let position = rdr.read_vec3()?;
         let leniency = rdr.read_f32::<BE>()?;
@@ -426,7 +420,7 @@ pub struct Itpt {
     setting_1: u16,
     setting_2: u16,
 }
-impl KMPData for Itpt {
+impl KmpData for Itpt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let position = rdr.read_vec3()?;
         let bullet_bill_control = rdr.read_f32::<BE>()?;
@@ -461,7 +455,7 @@ pub struct Ckpt {
     prev_cp: u8,
     next_cp: u8,
 }
-impl KMPData for Ckpt {
+impl KmpData for Ckpt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let cp_left = [rdr.read_f32::<BE>()?, rdr.read_f32::<BE>()?];
         let cp_right = [rdr.read_f32::<BE>()?, rdr.read_f32::<BE>()?];
@@ -507,7 +501,7 @@ pub struct Gobj {
     settings: [u16; 8],
     presence_flags: u16,
 }
-impl KMPData for Gobj {
+impl KmpData for Gobj {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let object_id = rdr.read_u16::<BE>()?;
         let padding = rdr.read_u16::<BE>()?;
@@ -551,7 +545,7 @@ struct PotiPoint {
     setting_1: u16,
     setting_2: u16,
 }
-impl KMPData for PotiPoint {
+impl KmpData for PotiPoint {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let position = rdr.read_vec3()?;
         let setting_1 = rdr.read_u16::<BE>()?;
@@ -581,7 +575,7 @@ pub struct Poti {
     setting_2: u8,
     routes: Vec<PotiPoint>,
 }
-impl KMPData for Poti {
+impl KmpData for Poti {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let num_points = rdr.read_u16::<BE>()?;
         let setting_1 = rdr.read_u8()?;
@@ -626,7 +620,7 @@ pub struct Area {
     route: u8,
     enpt_id: u8,
 }
-impl KMPData for Area {
+impl KmpData for Area {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let shape = rdr.read_u8()?;
         let kind = rdr.read_u8()?;
@@ -639,7 +633,6 @@ impl KMPData for Area {
         let setting_2 = rdr.read_u16::<BE>()?;
         let route = rdr.read_u8()?;
         let enpt_id = rdr.read_u8()?;
-        // padding
         rdr.read_u16::<BE>()?;
         Ok(Area {
             shape,
@@ -670,7 +663,6 @@ impl KMPData for Area {
         wtr.write_u16::<BE>(self.setting_2)?;
         wtr.write_u8(self.route)?;
         wtr.write_u8(self.enpt_id)?;
-        // padding
         wtr.write_u16::<BE>(0)?;
         Ok(wtr)
     }
@@ -696,7 +688,7 @@ pub struct Came {
     view_end: Vec3,
     time: f32,
 }
-impl KMPData for Came {
+impl KmpData for Came {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let kind = rdr.read_u8()?;
         let next_index = rdr.read_u8()?;
@@ -765,7 +757,7 @@ pub struct Jgpt {
     respawn_id: u16,
     extra_data: i16,
 }
-impl KMPData for Jgpt {
+impl KmpData for Jgpt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let position = rdr.read_vec3()?;
         let rotation = rdr.read_vec3()?;
@@ -798,7 +790,7 @@ pub struct Cnpt {
     id: u16,
     shoot_effect: i16,
 }
-impl KMPData for Cnpt {
+impl KmpData for Cnpt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let position = rdr.read_vec3()?;
         let angle = rdr.read_vec3()?;
@@ -831,7 +823,7 @@ pub struct Mspt {
     id: u16,
     unknown: u16,
 }
-impl KMPData for Mspt {
+impl KmpData for Mspt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let position = rdr.read_vec3()?;
         let angle = rdr.read_vec3()?;
@@ -859,23 +851,23 @@ impl KMPData for Mspt {
 /// The STGI (stage info) section describes stage information; information about a track.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Stgi {
-    lap_count: u8,
-    pole_pos: u8,
-    driver_distance: u8,
-    lens_flare_flashing: u8,
-    flare_color: u32,
-    flare_transparency: u8,
+    pub lap_count: u8,
+    pub pole_pos: u8,
+    pub driver_distance: u8,
+    pub lens_flare_flashing: u8,
+    pub flare_colour: [u8; 4],
     /// Always 0 in Nintendo tracks. This is for the speed modifier cheat code.
-    speed_mod: f32,
+    pub speed_mod: f32,
 }
-impl KMPData for Stgi {
+impl KmpData for Stgi {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let lap_count = rdr.read_u8()?;
         let pole_pos = rdr.read_u8()?;
         let driver_distance = rdr.read_u8()?;
         let lens_flare_flashing = rdr.read_u8()?;
-        let flare_color = rdr.read_u32::<BE>()?;
-        let flare_transparency = rdr.read_u8()?;
+        // first byte of flare colour not needed
+        rdr.read_u8()?;
+        let flare_colour = rdr.read_array::<u8, 4>()?;
         // padding
         rdr.read_u8()?;
         let mut speed_mod = [0u8; 4];
@@ -888,8 +880,7 @@ impl KMPData for Stgi {
             pole_pos,
             driver_distance,
             lens_flare_flashing,
-            flare_color,
-            flare_transparency,
+            flare_colour,
             speed_mod,
         })
     }
@@ -901,13 +892,12 @@ impl KMPData for Stgi {
         wtr.write_u8(self.pole_pos)?;
         wtr.write_u8(self.driver_distance)?;
         wtr.write_u8(self.lens_flare_flashing)?;
-        wtr.write_u32::<BE>(self.flare_color)?;
-        wtr.write_u8(self.flare_transparency)?;
-        // padding
         wtr.write_u8(0)?;
+        wtr.write_array(self.flare_colour)?;
+        wtr.write_u8(0)?;
+        // only write the 2 MSBs of the speed mod
         let bytes = self.speed_mod.to_be_bytes();
-        wtr.write_u8(bytes[0])?;
-        wtr.write_u8(bytes[1])?;
+        wtr.write_array([bytes[0], bytes[1]])?;
         Ok(wtr)
     }
 }

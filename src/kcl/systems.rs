@@ -17,17 +17,17 @@ pub fn spawn_model(
             mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertex_group.vertices.clone());
             mesh.compute_flat_normals();
 
-            let color: Color = vertex_group.color.into();
+            let colour: Color = vertex_group.colour.into();
 
             commands.spawn((
                 KCLModelSection(i),
                 PbrBundle {
                     mesh: meshes.add(mesh),
                     material: materials.add(StandardMaterial {
-                        base_color: color,
+                        base_color: colour,
                         cull_mode: None,
                         double_sided: true,
-                        alpha_mode: if color.a() < 1. {
+                        alpha_mode: if colour.a() < 1. {
                             AlphaMode::Add
                         } else {
                             AlphaMode::Opaque
@@ -66,7 +66,7 @@ pub fn update_kcl_model(
             Visibility::Hidden
         };
         let material = materials.get_mut(&standard_material).unwrap();
-        material.base_color = kcl.vertex_groups[i].color.into();
+        material.base_color = kcl.vertex_groups[i].colour.into();
         material.alpha_mode = if material.base_color.a() < 1. {
             AlphaMode::Add
         } else {
