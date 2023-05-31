@@ -1,7 +1,6 @@
+use bevy::{math::vec3, prelude::*};
 use byteorder::{ReadBytesExt, BE};
 use std::io::{self, Read, Seek, SeekFrom};
-
-use bevy::{math::vec3, prelude::*, render::mesh::PrimitiveTopology};
 
 pub const KCL_COLORS: [[f32; 4]; 32] = [
     [1.0, 1.0, 1.0, 1.0], // road
@@ -38,11 +37,19 @@ pub const KCL_COLORS: [[f32; 4]; 32] = [
     [0.6, 0.6, 0.6, 1.0], // wall
 ];
 
-pub struct KCL {
-    pub vertex_groups: Vec<Vec<Vec3>>,
+#[derive(Resource)]
+pub struct Kcl {
+    pub vertex_groups: Vec<VertexGroup>,
 }
 
-impl KCL {
+#[derive(Clone)]
+pub struct VertexGroup {
+    pub visible: bool,
+    pub vertices: Vec<Vec3>,
+    pub color: [f32; 4],
+}
+
+impl Kcl {
     pub fn read(mut rdr: impl Read + Seek) -> io::Result<Self> {
         // offsets of position data, normals data, triangular prims, spatial index
         let mut offsets = [0u32; 4];
@@ -56,7 +63,7 @@ impl KCL {
         let mut vertices = Vec::new();
 
         // while the current position of the cursor is still in the position data section
-        while rdr.seek(SeekFrom::Current(0))? < offsets[1] as u64 {
+        while rdr.stream_position()? < offsets[1] as u64 {
             let x = rdr.read_f32::<BE>()?;
             let y = rdr.read_f32::<BE>()?;
             let z = rdr.read_f32::<BE>()?;
@@ -70,7 +77,7 @@ impl KCL {
 
         // while the current position is still in the normal data section
         // + 0x10 because the triangular prisms section starts 0x10 further along than it says it is
-        while rdr.seek(SeekFrom::Current(0))? < (offsets[2] + 0x10) as u64 {
+        while rdr.stream_position()? < (offsets[2] + 0x10) as u64 {
             let x = rdr.read_f32::<BE>()?;
             let y = rdr.read_f32::<BE>()?;
             let z = rdr.read_f32::<BE>()?;
@@ -80,13 +87,17 @@ impl KCL {
         // go to the start of the triangular prisms section
         rdr.seek(SeekFrom::Start(offsets[2] as u64 + 0x10))?;
 
-        let mut vertex_groups: Vec<Vec<Vec3>> = Vec::new();
+        let mut vertex_groups: Vec<VertexGroup> = Vec::new();
 
-        for _ in 0..KCL_COLORS.len() {
-            vertex_groups.push(Vec::new());
+        for color in KCL_COLORS.iter() {
+            vertex_groups.push(VertexGroup {
+                visible: true,
+                vertices: Vec::new(),
+                color: *color,
+            });
         }
 
-        while rdr.seek(SeekFrom::Current(0))? < offsets[3] as u64 {
+        while rdr.stream_position()? < offsets[3] as u64 {
             let length = rdr.read_f32::<BE>()?;
             let pos_index = rdr.read_u16::<BE>()? as usize;
             let face_nrm_index = rdr.read_u16::<BE>()? as usize;
@@ -122,43 +133,8 @@ impl KCL {
             let v2 = *vertex + (cross_b * (length / cross_b.dot(*nrm_c)));
             let v3 = *vertex + (cross_a * (length / cross_a.dot(*nrm_c)));
 
-            vertex_groups[kcl_type].extend([v1, v2, v3]);
+            vertex_groups[kcl_type].vertices.extend([v1, v2, v3]);
         }
-        Ok(KCL { vertex_groups })
-    }
-
-    pub fn build_model(
-        &self,
-        commands: &mut Commands,
-        meshes: &mut ResMut<Assets<Mesh>>,
-        materials: &mut ResMut<Assets<StandardMaterial>>,
-    ) {
-        for (i, vertex_group) in self.vertex_groups.iter().enumerate() {
-            let vertex_group = vertex_group.clone();
-
-            let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
-
-            mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertex_group);
-
-            mesh.compute_flat_normals();
-
-            let color: Color = KCL_COLORS[i].into();
-
-            commands.spawn(PbrBundle {
-                mesh: meshes.add(mesh),
-                material: materials.add(StandardMaterial {
-                    base_color: color,
-                    cull_mode: None,
-                    double_sided: true,
-                    alpha_mode: if color.a() < 1. {
-                        AlphaMode::Add
-                    } else {
-                        AlphaMode::Opaque
-                    },
-                    ..default()
-                }),
-                ..default()
-            });
-        }
+        Ok(Kcl { vertex_groups })
     }
 }

@@ -1,81 +1,104 @@
-use bevy::prelude::*;
-use bevy_mod_picking::{prelude::RaycastPickTarget, *};
+use bevy::{math::Vec3, prelude::*};
+use bytemuck::{cast_slice_mut, Pod};
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
+use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
-use std::io::{self, Read, Write};
+use std::io::{self, Read, Seek, Write};
+
+// add extra functions to the Read and Write traits to make it easier to read and write vec3s and arrays
+trait ReadArrays: Read {
+    fn read_vec3(&mut self) -> io::Result<Vec3> {
+        let mut result = [0f32; 3];
+        for x in result.iter_mut() {
+            *x = self.read_f32::<BE>()?;
+        }
+        Ok(result.into())
+    }
+    // takes in T (the numeric type of the array) and N (number of elements) and reads an array of that size and type
+    fn read_array<T, const N: usize>(&mut self) -> io::Result<[T; N]>
+    where
+        T: Default + Pod + PrimInt,
+    {
+        let mut result = [T::default(); N];
+        // read the exact number of bytes required to fill result
+        self.read_exact(cast_slice_mut(&mut result))?;
+        // convert each element of result to big endian
+        result.iter_mut().for_each(|x| *x = x.to_be());
+        Ok(result)
+    }
+}
+impl<R: Read> ReadArrays for R {}
+trait WriteArrays: Write {
+    fn write_vec3(&mut self, vec3: Vec3) -> io::Result<()> {
+        self.write_f32::<BE>(vec3.x)?;
+        self.write_f32::<BE>(vec3.y)?;
+        self.write_f32::<BE>(vec3.z)?;
+        Ok(())
+    }
+    fn write_array<T, const N: usize>(&mut self, mut array: [T; N]) -> io::Result<()>
+    where
+        T: Pod + PrimInt,
+    {
+        array.iter_mut().for_each(|x| *x = x.to_be());
+        let result: &[u8] = cast_slice_mut(&mut array);
+        self.write_all(result)?;
+        Ok(())
+    }
+}
+impl<W: Write> WriteArrays for W {}
 
 // every struct here should have a read() function that takes a reader and returns a read struct, and a write() function that writes itself as bytes to the writer
 pub trait KMPData {
     fn read(rdr: impl Read) -> io::Result<Self>
     where
         Self: Sized;
-
     fn write<T>(&self, wtr: T) -> io::Result<T>
     where
-        T: Write;
-
-    fn read_vec3(rdr: &mut impl Read) -> io::Result<Vec3> {
-        let mut vec = [0f32; 3];
-        for i in 0..3 {
-            let byte = rdr.read_f32::<BE>()?;
-            vec[i] = byte;
-        }
-        Ok(vec.into())
-    }
-
-    fn write_vec3<T>(mut wtr: T, vec3: Vec3) -> io::Result<T>
-    where
-        T: Write,
-    {
-        wtr.write_f32::<BE>(vec3.x)?;
-        wtr.write_f32::<BE>(vec3.y)?;
-        wtr.write_f32::<BE>(vec3.z)?;
-        Ok(wtr)
-    }
+        T: Write + Read + Seek;
 }
 
 /// stores all the data of the KMP file
-#[derive(Debug, Serialize, Deserialize)]
-pub struct KMP {
+#[derive(Debug, Serialize, Deserialize, Resource)]
+pub struct Kmp {
     pub header: Header,
-    pub ktpt: Section<KTPT>,
-    pub enpt: Section<ENPT>,
+    pub ktpt: Section<Ktpt>,
+    pub enpt: Section<Enpt>,
     pub enph: Section<Path>,
-    pub itpt: Section<ITPT>,
+    pub itpt: Section<Itpt>,
     pub itph: Section<Path>,
-    pub ckpt: Section<CKPT>,
+    pub ckpt: Section<Ckpt>,
     pub ckph: Section<Path>,
-    pub gobj: Section<GOBJ>,
-    pub poti: Section<POTI>,
-    pub area: Section<AREA>,
-    pub came: Section<CAME>,
-    pub jgpt: Section<JGPT>,
-    pub cnpt: Section<CNPT>,
-    pub mspt: Section<MSPT>,
-    pub stgi: Section<STGI>,
+    pub gobj: Section<Gobj>,
+    pub poti: Section<Poti>,
+    pub area: Section<Area>,
+    pub came: Section<Came>,
+    pub jgpt: Section<Jgpt>,
+    pub cnpt: Section<Cnpt>,
+    pub mspt: Section<Mspt>,
+    pub stgi: Section<Stgi>,
 }
-impl KMPData for KMP {
+impl Kmp {
     /// Read a KMP from an object that implements Read, returning either a KMP object or an error.
-    fn read(mut rdr: impl Read) -> io::Result<Self> {
+    pub fn read(mut rdr: impl Read) -> io::Result<Self> {
         let header = Header::read(&mut rdr)?;
 
-        let ktpt = Section::<KTPT>::read(&mut rdr)?;
-        let enpt = Section::<ENPT>::read(&mut rdr)?;
+        let ktpt = Section::<Ktpt>::read(&mut rdr)?;
+        let enpt = Section::<Enpt>::read(&mut rdr)?;
         let enph = Section::<Path>::read(&mut rdr)?;
-        let itpt = Section::<ITPT>::read(&mut rdr)?;
+        let itpt = Section::<Itpt>::read(&mut rdr)?;
         let itph = Section::<Path>::read(&mut rdr)?;
-        let ckpt = Section::<CKPT>::read(&mut rdr)?;
+        let ckpt = Section::<Ckpt>::read(&mut rdr)?;
         let ckph = Section::<Path>::read(&mut rdr)?;
-        let gobj = Section::<GOBJ>::read(&mut rdr)?;
-        let poti = Section::<POTI>::read(&mut rdr)?;
-        let area = Section::<AREA>::read(&mut rdr)?;
-        let came = Section::<CAME>::read(&mut rdr)?;
-        let jgpt = Section::<JGPT>::read(&mut rdr)?;
-        let cnpt = Section::<CNPT>::read(&mut rdr)?;
-        let mspt = Section::<MSPT>::read(&mut rdr)?;
-        let stgi = Section::<STGI>::read(&mut rdr)?;
+        let gobj = Section::<Gobj>::read(&mut rdr)?;
+        let poti = Section::<Poti>::read(&mut rdr)?;
+        let area = Section::<Area>::read(&mut rdr)?;
+        let came = Section::<Came>::read(&mut rdr)?;
+        let jgpt = Section::<Jgpt>::read(&mut rdr)?;
+        let cnpt = Section::<Cnpt>::read(&mut rdr)?;
+        let mspt = Section::<Mspt>::read(&mut rdr)?;
+        let stgi = Section::<Stgi>::read(&mut rdr)?;
 
-        Ok(KMP {
+        Ok(Kmp {
             header,
             ktpt,
             enpt,
@@ -95,69 +118,49 @@ impl KMPData for KMP {
         })
     }
     /// Write the KMP object to an object that implements Write.
-    fn write<T>(&self, wtr: T) -> io::Result<T>
+    pub fn write<T>(&mut self, mut wtr: T) -> io::Result<T>
     where
-        T: Write,
+        T: Write + Read + Seek,
     {
-        let mut wtr = self.header.write(wtr)?;
-        wtr = self.ktpt.write(wtr)?;
-        wtr = self.enpt.write(wtr)?;
-        wtr = self.enph.write(wtr)?;
-        wtr = self.itpt.write(wtr)?;
-        wtr = self.itph.write(wtr)?;
-        wtr = self.ckpt.write(wtr)?;
-        wtr = self.ckph.write(wtr)?;
-        wtr = self.gobj.write(wtr)?;
-        wtr = self.poti.write(wtr)?;
-        wtr = self.area.write(wtr)?;
-        wtr = self.came.write(wtr)?;
-        wtr = self.jgpt.write(wtr)?;
-        wtr = self.cnpt.write(wtr)?;
-        wtr = self.mspt.write(wtr)?;
-        wtr = self.stgi.write(wtr)?;
-        Ok(wtr)
-    }
-}
+        let header_len: u32 = 0x4C;
 
-impl KMP {
-    pub fn build_model(
-        &self,
-        commands: &mut Commands,
-        meshes: &mut ResMut<Assets<Mesh>>,
-        materials: &mut ResMut<Assets<StandardMaterial>>,
-    ) {
-        for point in self.gobj.entries.iter() {
-            let material: Handle<StandardMaterial>;
-            if point.object_id == 0x65 {
-                // itembox
-                material = materials.add(Color::rgb(0., 0., 1.).into());
-            } else {
-                material = materials.add(Color::rgb(1., 0., 0.).into());
-            }
-
-            let mesh = meshes.add(
-                shape::UVSphere {
-                    radius: 100.,
-                    ..default()
-                }
-                .into(),
-            );
-
-            commands.spawn((
-                PbrBundle {
-                    mesh,
-                    material,
-                    transform: Transform::from_xyz(
-                        point.position[0],
-                        point.position[1],
-                        point.position[2],
-                    ),
-                    ..default()
-                },
-                PickableBundle::default(),
-                RaycastPickTarget::default(),
-            ));
+        // write temporary padding which will later be replaced by the header once we know the file size and section offsets
+        for _ in 0..header_len {
+            wtr.write_u8(0)?;
         }
+
+        // for each section, we set the section offset in the header to its position relative to the end of the header
+        // then we write the section to the writer
+        macro_rules! section {
+            ($section:ident, $i:expr) => {
+                self.header.section_offsets[$i] = wtr.stream_position()? as u32 - header_len;
+                wtr = self.$section.write(wtr)?;
+            };
+        }
+        section!(ktpt, 0);
+        section!(enpt, 1);
+        section!(enph, 2);
+        section!(itpt, 3);
+        section!(itph, 4);
+        section!(ckpt, 5);
+        section!(ckph, 6);
+        section!(gobj, 7);
+        section!(poti, 8);
+        section!(area, 9);
+        section!(came, 10);
+        section!(jgpt, 11);
+        section!(cnpt, 12);
+        section!(mspt, 13);
+        section!(stgi, 14);
+
+        // set the header file length to where we currently are (which is the end of the file)
+        self.header.file_len = wtr.stream_position()? as u32;
+
+        // go back to the beginning and write the file header
+        wtr.rewind()?;
+        wtr = self.header.write(wtr)?;
+
+        Ok(wtr)
     }
 }
 
@@ -174,19 +177,15 @@ pub struct Header {
 impl KMPData for Header {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         // get the first 4 bytes of the file for file magic
-        let mut file_magic = [0u8; 4];
-        for i in 0..4 {
-            let byte = rdr.read_u8()?;
-            file_magic[i] = byte;
-            if file_magic[i] != b"RKMD"[i] {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Invalid file magic",
-                ));
-            }
+        let file_magic = rdr.read_array::<u8, 4>()?;
+        if &file_magic != b"RKMD" {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid file magic",
+            ));
         }
         let file_magic = String::from_utf8(file_magic.to_vec());
-        if let Err(_) = file_magic {
+        if file_magic.is_err() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Invalid file magic",
@@ -204,11 +203,7 @@ impl KMPData for Header {
         }
         let header_len = rdr.read_u16::<BE>()?;
         let version_num = rdr.read_u32::<BE>()?;
-        let mut section_offsets = [0u32; 15];
-        for i in 0..15 {
-            let byte = rdr.read_u32::<BE>()?;
-            section_offsets[i] = byte;
-        }
+        let section_offsets = rdr.read_array::<u32, 15>()?;
         Ok(Header {
             file_magic,
             file_len,
@@ -222,14 +217,18 @@ impl KMPData for Header {
     where
         T: Write,
     {
-        wtr.write(self.file_magic.as_bytes())?;
+        let bytes_written = wtr.write(self.file_magic.as_bytes())?;
+        if bytes_written != self.file_magic.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Could not write file magic",
+            ));
+        }
         wtr.write_u32::<BE>(self.file_len)?;
         wtr.write_u16::<BE>(self.num_sections)?;
         wtr.write_u16::<BE>(self.header_len)?;
         wtr.write_u32::<BE>(self.version_num)?;
-        for e in self.section_offsets {
-            wtr.write_u32::<BE>(e)?;
-        }
+        wtr.write_array(self.section_offsets)?;
         Ok(wtr)
     }
 }
@@ -244,13 +243,9 @@ struct SectionHeader {
 }
 impl KMPData for SectionHeader {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let mut section_name = [0u8; 4];
-        for i in 0..4 {
-            let byte = rdr.read_u8()?;
-            section_name[i] = byte;
-        }
+        let section_name = rdr.read_array::<u8, 4>()?;
         let section_name = String::from_utf8(section_name.to_vec());
-        if let Err(_) = section_name {
+        if section_name.is_err() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Invalid section name",
@@ -269,7 +264,7 @@ impl KMPData for SectionHeader {
     where
         T: Write,
     {
-        wtr.write(self.section_name.as_bytes())?;
+        wtr.write_all(self.section_name.as_bytes())?;
         wtr.write_u16::<BE>(self.num_entries)?;
         wtr.write_u16::<BE>(self.additional_value)?;
         Ok(wtr)
@@ -306,7 +301,7 @@ where
     }
     fn write<U>(&self, wtr: U) -> io::Result<U>
     where
-        U: Write,
+        U: Write + Read + Seek,
     {
         let mut wtr = self.section_header.write(wtr)?;
         for e in &self.entries {
@@ -328,16 +323,8 @@ impl KMPData for Path {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let start = rdr.read_u8()?;
         let group_length = rdr.read_u8()?;
-        let mut prev_group = [0u8; 6];
-        for i in 0..6 {
-            let byte = rdr.read_u8()?;
-            prev_group[i] = byte;
-        }
-        let mut next_group = [0u8; 6];
-        for i in 0..6 {
-            let byte = rdr.read_u8()?;
-            next_group[i] = byte;
-        }
+        let prev_group = rdr.read_array::<u8, 6>()?;
+        let next_group = rdr.read_array::<u8, 6>()?;
         // padding
         rdr.read_u16::<BE>()?;
         Ok(Path {
@@ -356,26 +343,26 @@ impl KMPData for Path {
         wtr.write_all(self.prev_group.as_slice())?;
         wtr.write_all(self.next_group.as_slice())?;
         // padding
-        wtr.write(0u16.to_be_bytes().as_slice())?;
+        wtr.write_all(0u16.to_be_bytes().as_slice())?;
         Ok(wtr)
     }
 }
 
 /// The KTPT (kart point) section describes kart points; the starting position for racers.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct KTPT {
+pub struct Ktpt {
     position: Vec3,
     rotation: Vec3,
     player_index: i16,
 }
-impl KMPData for KTPT {
+impl KMPData for Ktpt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let position = Self::read_vec3(&mut rdr)?;
-        let rotation = Self::read_vec3(&mut rdr)?;
+        let position = rdr.read_vec3()?;
+        let rotation = rdr.read_vec3()?;
         let player_index = rdr.read_i16::<BE>()?;
         // padding
         rdr.read_u16::<BE>()?;
-        Ok(KTPT {
+        Ok(Ktpt {
             position,
             rotation,
             player_index,
@@ -385,8 +372,8 @@ impl KMPData for KTPT {
     where
         T: Write,
     {
-        wtr = Self::write_vec3(wtr, self.position)?;
-        wtr = Self::write_vec3(wtr, self.rotation)?;
+        wtr.write_vec3(self.position)?;
+        wtr.write_vec3(self.rotation)?;
         wtr.write_i16::<BE>(self.player_index)?;
         // padding
         wtr.write_u16::<BE>(0)?;
@@ -396,21 +383,21 @@ impl KMPData for KTPT {
 
 /// The ENPT (enemy point) section describes enemy points; the routes of CPU racers. The CPU racers attempt to follow the path described by each group of points (as determined by ENPH). More than 0xFF (255) entries will force a console freeze while loading the track.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ENPT {
+pub struct Enpt {
     pub position: Vec3,
     leniency: f32,
     setting_1: u16,
     setting_2: u8,
     setting_3: u8,
 }
-impl KMPData for ENPT {
+impl KMPData for Enpt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let position = Self::read_vec3(&mut rdr)?;
+        let position = rdr.read_vec3()?;
         let leniency = rdr.read_f32::<BE>()?;
         let setting_1 = rdr.read_u16::<BE>()?;
         let setting_2 = rdr.read_u8()?;
         let setting_3 = rdr.read_u8()?;
-        Ok(ENPT {
+        Ok(Enpt {
             position,
             leniency,
             setting_1,
@@ -422,7 +409,7 @@ impl KMPData for ENPT {
     where
         T: Write,
     {
-        wtr = Self::write_vec3(wtr, self.position)?;
+        wtr.write_vec3(self.position)?;
         wtr.write_f32::<BE>(self.leniency)?;
         wtr.write_u16::<BE>(self.setting_1)?;
         wtr.write_u8(self.setting_2)?;
@@ -433,19 +420,19 @@ impl KMPData for ENPT {
 
 /// The ITPT (item point) section describes item points; the Red Shell and Bullet Bill routes. The items attempt to follow the path described by each group of points (as determined by ITPH). More than 0xFF (255) entries will force a console freeze while loading the track.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ITPT {
+pub struct Itpt {
     position: Vec3,
     bullet_bill_control: f32,
     setting_1: u16,
     setting_2: u16,
 }
-impl KMPData for ITPT {
+impl KMPData for Itpt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let position = Self::read_vec3(&mut rdr)?;
+        let position = rdr.read_vec3()?;
         let bullet_bill_control = rdr.read_f32::<BE>()?;
         let setting_1 = rdr.read_u16::<BE>()?;
         let setting_2 = rdr.read_u16::<BE>()?;
-        Ok(ITPT {
+        Ok(Itpt {
             position,
             bullet_bill_control,
             setting_1,
@@ -456,7 +443,7 @@ impl KMPData for ITPT {
     where
         T: Write,
     {
-        wtr = Self::write_vec3(wtr, self.position)?;
+        wtr.write_vec3(self.position)?;
         wtr.write_f32::<BE>(self.bullet_bill_control)?;
         wtr.write_u16::<BE>(self.setting_1)?;
         wtr.write_u16::<BE>(self.setting_2)?;
@@ -466,7 +453,7 @@ impl KMPData for ITPT {
 
 /// The CKPT (checkpoint) section describes checkpoints; the routes players must follow to count laps. The racers must follow the path described by each group of points (as determined by CKPH). More than 0xFF (255) entries are possible if the last group begins at index ≤254. This is not recommended because Lakitu will always appear on-screen.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct CKPT {
+pub struct Ckpt {
     cp_left: [f32; 2],
     cp_right: [f32; 2],
     respawn_pos: u8,
@@ -474,7 +461,7 @@ pub struct CKPT {
     prev_cp: u8,
     next_cp: u8,
 }
-impl KMPData for CKPT {
+impl KMPData for Ckpt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let cp_left = [rdr.read_f32::<BE>()?, rdr.read_f32::<BE>()?];
         let cp_right = [rdr.read_f32::<BE>()?, rdr.read_f32::<BE>()?];
@@ -482,7 +469,7 @@ impl KMPData for CKPT {
         let cp_type = rdr.read_u8()?;
         let prev_cp = rdr.read_u8()?;
         let next_cp = rdr.read_u8()?;
-        Ok(CKPT {
+        Ok(Ckpt {
             cp_left,
             cp_right,
             respawn_pos,
@@ -509,7 +496,7 @@ impl KMPData for CKPT {
 
 /// The GOBJ (geo object) section describes objects; things such as item boxes, pipes and also controlled objects such as sound triggers.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct GOBJ {
+pub struct Gobj {
     pub object_id: u16,
     /// this is part of the extended presence flags, but the value must be 0 if the object does not use this extension
     padding: u16,
@@ -520,21 +507,17 @@ pub struct GOBJ {
     settings: [u16; 8],
     presence_flags: u16,
 }
-impl KMPData for GOBJ {
+impl KMPData for Gobj {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let object_id = rdr.read_u16::<BE>()?;
         let padding = rdr.read_u16::<BE>()?;
-        let position = Self::read_vec3(&mut rdr)?;
-        let rotation = Self::read_vec3(&mut rdr)?;
-        let scale = Self::read_vec3(&mut rdr)?;
+        let position = rdr.read_vec3()?;
+        let rotation = rdr.read_vec3()?;
+        let scale = rdr.read_vec3()?;
         let route = rdr.read_u16::<BE>()?;
-        let mut settings = [0u16; 8];
-        for i in 0..8 {
-            let byte = rdr.read_u16::<BE>()?;
-            settings[i] = byte;
-        }
+        let settings = rdr.read_array::<u16, 8>()?;
         let presence_flags = rdr.read_u16::<BE>()?;
-        Ok(GOBJ {
+        Ok(Gobj {
             object_id,
             padding,
             position,
@@ -551,13 +534,11 @@ impl KMPData for GOBJ {
     {
         wtr.write_u16::<BE>(self.object_id)?;
         wtr.write_u16::<BE>(self.padding)?;
-        wtr = Self::write_vec3(wtr, self.position)?;
-        wtr = Self::write_vec3(wtr, self.rotation)?;
-        wtr = Self::write_vec3(wtr, self.scale)?;
+        wtr.write_vec3(self.position)?;
+        wtr.write_vec3(self.rotation)?;
+        wtr.write_vec3(self.scale)?;
         wtr.write_u16::<BE>(self.route)?;
-        for e in self.settings {
-            wtr.write_u16::<BE>(e)?;
-        }
+        wtr.write_array(self.settings)?;
         wtr.write_u16::<BE>(self.presence_flags)?;
         Ok(wtr)
     }
@@ -565,17 +546,17 @@ impl KMPData for GOBJ {
 
 /// Each POTI entry can contain a number of POTI entries/points.
 #[derive(Debug, Serialize, Deserialize)]
-struct POTIPoint {
+struct PotiPoint {
     position: Vec3,
     setting_1: u16,
     setting_2: u16,
 }
-impl KMPData for POTIPoint {
+impl KMPData for PotiPoint {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let position = Self::read_vec3(&mut rdr)?;
+        let position = rdr.read_vec3()?;
         let setting_1 = rdr.read_u16::<BE>()?;
         let setting_2 = rdr.read_u16::<BE>()?;
-        Ok(POTIPoint {
+        Ok(PotiPoint {
             position,
             setting_1,
             setting_2,
@@ -585,7 +566,7 @@ impl KMPData for POTIPoint {
     where
         T: Write,
     {
-        wtr = Self::write_vec3(wtr, self.position)?;
+        wtr.write_vec3(self.position)?;
         wtr.write_u16::<BE>(self.setting_1)?;
         wtr.write_u16::<BE>(self.setting_2)?;
         Ok(wtr)
@@ -594,22 +575,22 @@ impl KMPData for POTIPoint {
 
 /// The POTI (point information) section describes routes; these are routes for many things including cameras and objects.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct POTI {
+pub struct Poti {
     num_points: u16,
     setting_1: u8,
     setting_2: u8,
-    routes: Vec<POTIPoint>,
+    routes: Vec<PotiPoint>,
 }
-impl KMPData for POTI {
+impl KMPData for Poti {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let num_points = rdr.read_u16::<BE>()?;
         let setting_1 = rdr.read_u8()?;
         let setting_2 = rdr.read_u8()?;
         let mut routes = Vec::new();
         for _ in 0..num_points {
-            routes.push(POTIPoint::read(&mut rdr)?);
+            routes.push(PotiPoint::read(&mut rdr)?);
         }
-        Ok(POTI {
+        Ok(Poti {
             num_points,
             setting_1,
             setting_2,
@@ -618,7 +599,7 @@ impl KMPData for POTI {
     }
     fn write<T>(&self, mut wtr: T) -> io::Result<T>
     where
-        T: Write,
+        T: Write + Read + Seek,
     {
         wtr.write_u16::<BE>(self.num_points)?;
         wtr.write_u8(self.setting_1)?;
@@ -632,7 +613,7 @@ impl KMPData for POTI {
 
 /// The AREA (area) section describes areas; used to determine which camera to use, for example. The size is 5000 for both the positive and negative sides of the X and Z-axes, and 10000 for only the positive side of the Y-axis.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct AREA {
+pub struct Area {
     shape: u8,
     kind: u8,
     came_index: u8,
@@ -645,22 +626,22 @@ pub struct AREA {
     route: u8,
     enpt_id: u8,
 }
-impl KMPData for AREA {
+impl KMPData for Area {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let shape = rdr.read_u8()?;
         let kind = rdr.read_u8()?;
         let came_index = rdr.read_u8()?;
         let priority = rdr.read_u8()?;
-        let position = Self::read_vec3(&mut rdr)?;
-        let rotation = Self::read_vec3(&mut rdr)?;
-        let scale = Self::read_vec3(&mut rdr)?;
+        let position = rdr.read_vec3()?;
+        let rotation = rdr.read_vec3()?;
+        let scale = rdr.read_vec3()?;
         let setting_1 = rdr.read_u16::<BE>()?;
         let setting_2 = rdr.read_u16::<BE>()?;
         let route = rdr.read_u8()?;
         let enpt_id = rdr.read_u8()?;
         // padding
         rdr.read_u16::<BE>()?;
-        Ok(AREA {
+        Ok(Area {
             shape,
             kind,
             came_index,
@@ -682,9 +663,9 @@ impl KMPData for AREA {
         wtr.write_u8(self.kind)?;
         wtr.write_u8(self.came_index)?;
         wtr.write_u8(self.priority)?;
-        wtr = Self::write_vec3(wtr, self.position)?;
-        wtr = Self::write_vec3(wtr, self.rotation)?;
-        wtr = Self::write_vec3(wtr, self.scale)?;
+        wtr.write_vec3(self.position)?;
+        wtr.write_vec3(self.rotation)?;
+        wtr.write_vec3(self.scale)?;
         wtr.write_u16::<BE>(self.setting_1)?;
         wtr.write_u16::<BE>(self.setting_2)?;
         wtr.write_u8(self.route)?;
@@ -697,7 +678,7 @@ impl KMPData for AREA {
 
 /// The CAME (camera) section describes cameras; used to determine cameras for starting routes, Time Trial pans, etc.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct CAME {
+pub struct Came {
     kind: u8,
     next_index: u8,
     shake: u8,
@@ -715,7 +696,7 @@ pub struct CAME {
     view_end: Vec3,
     time: f32,
 }
-impl KMPData for CAME {
+impl KMPData for Came {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let kind = rdr.read_u8()?;
         let next_index = rdr.read_u8()?;
@@ -726,14 +707,14 @@ impl KMPData for CAME {
         let view_velocity = rdr.read_u16::<BE>()?;
         let start = rdr.read_u8()?;
         let movie = rdr.read_u8()?;
-        let position = Self::read_vec3(&mut rdr)?;
-        let rotation = Self::read_vec3(&mut rdr)?;
+        let position = rdr.read_vec3()?;
+        let rotation = rdr.read_vec3()?;
         let zoom_start = rdr.read_f32::<BE>()?;
         let zoom_end = rdr.read_f32::<BE>()?;
-        let view_start = Self::read_vec3(&mut rdr)?;
-        let view_end = Self::read_vec3(&mut rdr)?;
+        let view_start = rdr.read_vec3()?;
+        let view_end = rdr.read_vec3()?;
         let time = rdr.read_f32::<BE>()?;
-        Ok(CAME {
+        Ok(Came {
             kind,
             next_index,
             shake,
@@ -765,10 +746,12 @@ impl KMPData for CAME {
         wtr.write_u16::<BE>(self.view_velocity)?;
         wtr.write_u8(self.start)?;
         wtr.write_u8(self.movie)?;
-        wtr = Self::write_vec3(wtr, self.position)?;
-        wtr = Self::write_vec3(wtr, self.rotation)?;
-        wtr = Self::write_vec3(wtr, self.view_start)?;
-        wtr = Self::write_vec3(wtr, self.view_end)?;
+        wtr.write_vec3(self.position)?;
+        wtr.write_vec3(self.rotation)?;
+        wtr.write_f32::<BE>(self.zoom_start)?;
+        wtr.write_f32::<BE>(self.zoom_end)?;
+        wtr.write_vec3(self.view_start)?;
+        wtr.write_vec3(self.view_end)?;
         wtr.write_f32::<BE>(self.time)?;
         Ok(wtr)
     }
@@ -776,19 +759,19 @@ impl KMPData for CAME {
 
 /// The JGPT (jugem point) section describes "Jugem" points; the respawn positions. The index is relevant for the link of the CKPT section.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct JGPT {
+pub struct Jgpt {
     position: Vec3,
     rotation: Vec3,
     respawn_id: u16,
     extra_data: i16,
 }
-impl KMPData for JGPT {
+impl KMPData for Jgpt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let position = Self::read_vec3(&mut rdr)?;
-        let rotation = Self::read_vec3(&mut rdr)?;
+        let position = rdr.read_vec3()?;
+        let rotation = rdr.read_vec3()?;
         let respawn_id = rdr.read_u16::<BE>()?;
         let extra_data = rdr.read_i16::<BE>()?;
-        Ok(JGPT {
+        Ok(Jgpt {
             position,
             rotation,
             respawn_id,
@@ -799,8 +782,8 @@ impl KMPData for JGPT {
     where
         T: Write,
     {
-        wtr = Self::write_vec3(wtr, self.position)?;
-        wtr = Self::write_vec3(wtr, self.rotation)?;
+        wtr.write_vec3(self.position)?;
+        wtr.write_vec3(self.rotation)?;
         wtr.write_u16::<BE>(self.respawn_id)?;
         wtr.write_i16::<BE>(self.extra_data)?;
         Ok(wtr)
@@ -809,19 +792,19 @@ impl KMPData for JGPT {
 
 /// The CNPT (cannon point) section describes cannon points; the cannon target positions.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct CNPT {
+pub struct Cnpt {
     position: Vec3,
     angle: Vec3,
     id: u16,
     shoot_effect: i16,
 }
-impl KMPData for CNPT {
+impl KMPData for Cnpt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let position = Self::read_vec3(&mut rdr)?;
-        let angle = Self::read_vec3(&mut rdr)?;
+        let position = rdr.read_vec3()?;
+        let angle = rdr.read_vec3()?;
         let id = rdr.read_u16::<BE>()?;
         let shoot_effect = rdr.read_i16::<BE>()?;
-        Ok(CNPT {
+        Ok(Cnpt {
             position,
             angle,
             id,
@@ -832,8 +815,8 @@ impl KMPData for CNPT {
     where
         T: Write,
     {
-        wtr = Self::write_vec3(wtr, self.position)?;
-        wtr = Self::write_vec3(wtr, self.angle)?;
+        wtr.write_vec3(self.position)?;
+        wtr.write_vec3(self.angle)?;
         wtr.write_u16::<BE>(self.id)?;
         wtr.write_i16::<BE>(self.shoot_effect)?;
         Ok(wtr)
@@ -842,19 +825,19 @@ impl KMPData for CNPT {
 
 /// The MSPT (mission success point) section describes end positions. After battles and tournaments have ended, the players are placed on this point(s).
 #[derive(Debug, Serialize, Deserialize)]
-pub struct MSPT {
+pub struct Mspt {
     position: Vec3,
     angle: Vec3,
     id: u16,
     unknown: u16,
 }
-impl KMPData for MSPT {
+impl KMPData for Mspt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let position = Self::read_vec3(&mut rdr)?;
-        let angle = Self::read_vec3(&mut rdr)?;
+        let position = rdr.read_vec3()?;
+        let angle = rdr.read_vec3()?;
         let id = rdr.read_u16::<BE>()?;
         let unknown = rdr.read_u16::<BE>()?;
-        Ok(MSPT {
+        Ok(Mspt {
             position,
             angle,
             id,
@@ -865,8 +848,8 @@ impl KMPData for MSPT {
     where
         T: Write,
     {
-        wtr = Self::write_vec3(wtr, self.position)?;
-        wtr = Self::write_vec3(wtr, self.angle)?;
+        wtr.write_vec3(self.position)?;
+        wtr.write_vec3(self.angle)?;
         wtr.write_u16::<BE>(self.id)?;
         wtr.write_u16::<BE>(self.unknown)?;
         Ok(wtr)
@@ -875,7 +858,7 @@ impl KMPData for MSPT {
 
 /// The STGI (stage info) section describes stage information; information about a track.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct STGI {
+pub struct Stgi {
     lap_count: u8,
     pole_pos: u8,
     driver_distance: u8,
@@ -885,7 +868,7 @@ pub struct STGI {
     /// Always 0 in Nintendo tracks. This is for the speed modifier cheat code.
     speed_mod: f32,
 }
-impl KMPData for STGI {
+impl KMPData for Stgi {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let lap_count = rdr.read_u8()?;
         let pole_pos = rdr.read_u8()?;
@@ -896,11 +879,11 @@ impl KMPData for STGI {
         // padding
         rdr.read_u8()?;
         let mut speed_mod = [0u8; 4];
-        for i in 0..2 {
-            speed_mod[i] = rdr.read_u8()?;
-        }
+        speed_mod[0] = rdr.read_u8()?;
+        speed_mod[1] = rdr.read_u8()?;
         let speed_mod = f32::from_be_bytes(speed_mod);
-        Ok(STGI {
+
+        Ok(Stgi {
             lap_count,
             pole_pos,
             driver_distance,

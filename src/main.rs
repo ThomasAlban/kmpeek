@@ -1,86 +1,57 @@
-mod camera_input;
+mod camera;
 mod kcl;
 mod kmp;
+mod ui;
 
-use camera_input::*;
+use camera::*;
 use kcl::*;
 use kmp::*;
+use ui::*;
 
 use bevy::{
     prelude::*,
-    render::{
-        settings::{Backends, WgpuSettings},
-        RenderPlugin,
-    },
+    winit::{UpdateMode, WinitSettings},
 };
-use bevy_mod_picking::{prelude::RaycastPickCamera, DefaultPickingPlugins};
-use smooth_bevy_cameras::{
-    controllers::fps::{FpsCameraBundle, FpsCameraController, FpsCameraPlugin},
-    LookTransformPlugin,
-};
-use std::fs::File;
+
+use std::{fs::File, time::Duration};
 
 fn main() {
     App::new()
         .insert_resource(Msaa::Sample4)
-        .add_plugins(
-            DefaultPlugins
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        title: "KMPeek".into(),
-                        ..default()
-                    }),
-                    ..default()
-                })
-                .set(RenderPlugin {
-                    wgpu_settings: WgpuSettings {
-                        backends: Some(Backends::DX12),
-                        ..default()
-                    },
-                }),
-        )
-        .add_plugin(LookTransformPlugin)
-        .add_plugin(FpsCameraPlugin {
-            override_input_system: true,
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "KMPeek".into(),
+                ..default()
+            }),
+            ..default()
+        }))
+        .insert_resource(WinitSettings {
+            focused_mode: UpdateMode::Continuous,
+            unfocused_mode: UpdateMode::ReactiveLowPower {
+                max_wait: Duration::MAX,
+            },
+            ..default()
         })
-        .add_plugins(DefaultPickingPlugins)
-        .add_system(camera_input)
-        .add_startup_system(setup)
+        .add_plugin(UIPlugin)
+        .add_plugin(CameraPlugin)
+        .add_plugin(KCLPlugin)
+        .add_plugin(KMPPlugin)
+        // make sure this startup system runs before spawning the models
+        .add_startup_system(setup.in_base_set(StartupSet::PreStartup))
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    let name = "maple_treeway";
+fn setup(mut commands: Commands) {
+    let name = "dry_dry_ruins";
 
     let kcl_file = File::open(format!("{name}.kcl")).unwrap();
-    let kcl = KCL::read(kcl_file).unwrap();
+    commands.insert_resource(Kcl::read(kcl_file).unwrap());
 
     let kmp_file = File::open(format!("{name}.kmp")).unwrap();
-    let kmp = KMP::read(kmp_file).unwrap();
-
-    kcl.build_model(&mut commands, &mut meshes, &mut materials);
-
-    kmp.build_model(&mut commands, &mut meshes, &mut materials);
+    commands.insert_resource(Kmp::read(kmp_file).unwrap());
 
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
         brightness: 0.5,
     });
-
-    commands
-        .spawn((Camera3dBundle::default(), RaycastPickCamera::default()))
-        .insert(FpsCameraBundle::new(
-            FpsCameraController {
-                smoothing_weight: 0.7,
-                translate_sensitivity: 10000.,
-                ..default()
-            },
-            Vec3::new(-2.0, 5.0, 5.0),
-            Vec3::new(0., 0., 0.),
-            Vec3::Y,
-        ));
 }
