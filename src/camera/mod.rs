@@ -1,23 +1,22 @@
-// this camera control is a modified version of the one from bevy_flycam
-// https://github.com/sburris0/bevy_flycam
-
 mod components;
 mod resources;
 mod systems;
 
 use bevy::prelude::*;
 use bevy_mod_picking::DefaultPickingPlugins;
+pub use components::*;
+pub use resources::{CameraMode, CameraSettings};
+use systems::*;
 
 pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<resources::InputState>()
-            .init_resource::<resources::MovementSettings>()
-            .init_resource::<resources::KeyBindings>()
+        app.init_resource::<CameraSettings>()
             .add_plugins(DefaultPickingPlugins)
-            .add_startup_system(systems::camera_setup)
-            .add_system(systems::camera_move)
-            .add_system(systems::camera_look)
-            .add_system(systems::cursor_grab);
+            .add_startup_system(camera_setup)
+            .add_system(cursor_grab)
+            .add_system(fly_cam_look)
+            .add_system(fly_cam_move)
+            .add_system(orbit_cam);
     }
 }

@@ -19,6 +19,7 @@ trait ReadArrays: Read {
     where
         T: Default + Pod + PrimInt,
     {
+        // create an array of the default value of T with length N
         let mut result = [T::default(); N];
         // read the exact number of bytes required to fill result
         self.read_exact(cast_slice_mut(&mut result))?;
