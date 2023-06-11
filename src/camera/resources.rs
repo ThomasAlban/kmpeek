@@ -1,6 +1,6 @@
-use bevy::prelude::*;
+use bevy::{math::vec3, prelude::*};
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum CameraMode {
     Fly,
     Orbit,
@@ -17,11 +17,12 @@ pub struct CameraSettings {
     pub mode: CameraMode,
     pub fly: FlySettings,
     pub orbit: OrbitSettings,
-    pub topdown: TopDownSettings,
+    pub top_down: TopDownSettings,
 }
 
 pub struct FlySettings {
-    pub sensitivity: f32,
+    pub start_pos: Vec3,
+    pub look_sensitivity: f32,
     pub speed: f32,
     pub speed_boost: f32,
     pub key_bindings: FlyKeyBindings,
@@ -29,8 +30,9 @@ pub struct FlySettings {
 impl Default for FlySettings {
     fn default() -> Self {
         Self {
-            sensitivity: 0.00012,
-            speed: 10000.,
+            start_pos: vec3(50000., 50000., 0.),
+            look_sensitivity: 1.,
+            speed: 1.,
             speed_boost: 3.,
             key_bindings: FlyKeyBindings::default(),
         }
@@ -60,9 +62,24 @@ impl Default for FlyKeyBindings {
         }
     }
 }
-#[derive(Default)]
+
 pub struct OrbitSettings {
+    pub start_pos: Vec3,
+    pub rotate_sensitivity: f32,
+    pub pan_sensitivity: f32,
+    pub scroll_sensitivity: f32,
     pub key_bindings: OrbitKeyBindings,
+}
+impl Default for OrbitSettings {
+    fn default() -> Self {
+        Self {
+            start_pos: vec3(50000., 50000., 0.),
+            rotate_sensitivity: 1.,
+            pan_sensitivity: 1.,
+            scroll_sensitivity: 1.,
+            key_bindings: OrbitKeyBindings::default(),
+        }
+    }
 }
 
 pub struct OrbitKeyBindings {
@@ -78,9 +95,23 @@ impl Default for OrbitKeyBindings {
     }
 }
 
-#[derive(Default)]
 pub struct TopDownSettings {
+    pub start_pos: Vec2,
+    pub y_pos: f32,
+    pub move_sensitivity: f32,
+    pub scroll_sensitivity: f32,
     pub key_bindings: TopDownKeyBindings,
+}
+impl Default for TopDownSettings {
+    fn default() -> Self {
+        Self {
+            start_pos: Vec2::ZERO,
+            y_pos: 10000.,
+            move_sensitivity: 1.,
+            scroll_sensitivity: 1.,
+            key_bindings: TopDownKeyBindings::default(),
+        }
+    }
 }
 pub struct TopDownKeyBindings {
     pub mouse_button: MouseButton,

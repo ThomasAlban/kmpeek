@@ -1,90 +1,43 @@
 use super::resources::AppState;
 use crate::{
-    camera::{CameraMode, CameraSettings, FlyCam, OrbitCam},
+    camera::{
+        CameraMode, CameraSettings, FlyCam, FlySettings, OrbitCam, OrbitSettings, TopDownCam,
+        TopDownSettings,
+    },
     kcl::*,
     kmp::*,
 };
-use bevy::prelude::*;
+use bevy::{math::vec3, prelude::*};
 use bevy_egui::{egui, EguiContexts};
-use num_traits::{Float, PrimInt};
-
-// annoyingly egui doesn't have a number input widget, so we have to make our own
-fn float_input<T>(ui: &mut egui::Ui, num: &mut T, default: T, buf: &mut String)
-where
-    T: Float + std::str::FromStr + std::fmt::Display + Default,
-{
-    // save what was previously in the buffer
-    let buf_before = buf.clone();
-    ui.add(
-        egui::TextEdit::singleline(buf)
-            .desired_width(40.0f32)
-            .hint_text(default.to_string()),
-    );
-    // if the buffer has changed, try to parse it
-    if *buf != buf_before {
-        match buf.parse() {
-            // if the buf is still valid, set the actual number to the parsed number
-            Ok(parsed) => *num = parsed,
-            Err(_) => {
-                if buf.is_empty() {
-                    // this allows the user to delete the number without the default suddely appearing in the field
-                    *num = default;
-                } else {
-                    // if the buf is invalid, set it back to what it was before
-                    // this stops them from typing anything that doesn't parse to a number into the field
-                    *buf = buf_before;
-                }
-            }
-        }
-        return;
-    }
-    // if num has been changed externally, update the buffer so that the displayed value doesn't get out
-    // of sync with the actual number
-    if *num != buf.parse().unwrap_or(default) {
-        *buf = num.to_string();
-    }
-    // the reason why we have all this shite rather than just having a local buf variable, using that in the
-    // textedit and then parsing it, is because let's say the user types in "1" and wants to add a decimal
-    // to it, every time they try to add a "." it would be removed because "1." parses to 1
-}
-fn int_input<T>(ui: &mut egui::Ui, num: &mut T, default: T, buf: &mut String)
-where
-    T: PrimInt + std::str::FromStr + std::fmt::Display + Default,
-{
-    let buf_before = buf.clone();
-    ui.add(
-        egui::TextEdit::singleline(buf)
-            .desired_width(40.0f32)
-            .hint_text(default.to_string()),
-    );
-    if *buf != buf_before {
-        match buf.parse() {
-            Ok(parsed) => *num = parsed,
-            Err(_) => {
-                if buf.is_empty() {
-                    *num = default;
-                } else {
-                    *buf = buf_before;
-                }
-            }
-        }
-        return;
-    }
-    if *num != buf.parse().unwrap_or(default) {
-        *buf = num.to_string();
-    }
-}
 
 pub fn update_ui(
     mut contexts: EguiContexts,
     mut kcl: ResMut<Kcl>,
-    mut kmp: ResMut<Kmp>,
     mut app_state: ResMut<AppState>,
     mut camera_settings: ResMut<CameraSettings>,
-    mut fly_cam: Query<&mut Camera, (With<FlyCam>, Without<OrbitCam>)>,
-    mut orbit_cam: Query<&mut Camera, (With<OrbitCam>, Without<FlyCam>)>,
+    mut fly_cam_transform: Query<
+        &mut Transform,
+        (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>),
+    >,
+    mut orbit_cam_transform: Query<
+        &mut Transform,
+        (Without<FlyCam>, With<OrbitCam>, Without<TopDownCam>),
+    >,
+    mut topdown_cam: Query<
+        (&mut Transform, &mut Projection),
+        (Without<FlyCam>, Without<OrbitCam>, With<TopDownCam>),
+    >,
 ) {
     let ctx = contexts.ctx_mut();
+    let mut fly_cam_transform = fly_cam_transform
+        .get_single_mut()
+        .expect("Could not get single fly cam");
+    let mut orbit_cam_transform = orbit_cam_transform
+        .get_single_mut()
+        .expect("Could not get single orbit cam");
+    let (mut topdown_cam_transform, mut topdown_cam_projection) = topdown_cam
+        .get_single_mut()
+        .expect("Could not get single topdown cam");
 
     egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
         egui::menu::bar(ui, |ui| {
@@ -104,8 +57,9 @@ pub fn update_ui(
         });
     });
 
+    let mut customise_kcl_open = app_state.customise_kcl_open;
     egui::Window::new("Customise Collision Model")
-        .open(&mut app_state.customise_kcl_open)
+        .open(&mut customise_kcl_open)
         .collapsible(false)
         .min_width(300.)
         .show(ctx, |ui| {
@@ -182,6 +136,105 @@ pub fn update_ui(
                 kcl_type_options!("InvisibleWall2", 31);
             });
         });
+    if customise_kcl_open != app_state.customise_kcl_open {
+        app_state.customise_kcl_open = customise_kcl_open;
+    }
+
+    let mut camera_settings_open = app_state.camera_settings_open;
+    egui::Window::new("Camera Settings")
+        .open(&mut camera_settings_open)
+        .collapsible(false)
+        .min_width(300.)
+        .show(ctx, |ui| {
+            if ui.button("Reset Positions").clicked() {
+                *fly_cam_transform = Transform::from_translation(FlySettings::default().start_pos)
+                    .looking_at(Vec3::ZERO, Vec3::Y);
+                *orbit_cam_transform =
+                    Transform::from_translation(OrbitSettings::default().start_pos)
+                        .looking_at(Vec3::ZERO, Vec3::Y);
+                *topdown_cam_transform = Transform::from_translation(vec3(
+                    TopDownSettings::default().start_pos.x,
+                    TopDownSettings::default().y_pos,
+                    TopDownSettings::default().start_pos.y,
+                ))
+                .looking_at(Vec3::ZERO, Vec3::Z);
+                *topdown_cam_projection = Projection::Orthographic(OrthographicProjection {
+                    near: 0.00001,
+                    far: 100000.,
+                    scale: 100.,
+                    ..default()
+                });
+            }
+            if ui.button("Reset Settings").clicked() {
+                *camera_settings = CameraSettings::default();
+            }
+            ui.collapsing("Fly Camera", |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Look Sensitivity")
+                        .on_hover_text("How sensitive the camera rotation is to mouse movements");
+                    ui.add(
+                        egui::DragValue::new(&mut camera_settings.fly.look_sensitivity).speed(0.1),
+                    );
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Speed").on_hover_text("How fast the camera moves");
+                    ui.add(egui::DragValue::new(&mut camera_settings.fly.speed).speed(0.1));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Speed Boost").on_hover_text(
+                        "How much faster the camera moves when holding the speed boost button",
+                    );
+                    ui.add(egui::DragValue::new(&mut camera_settings.fly.speed_boost).speed(0.1));
+                });
+            });
+            ui.collapsing("Orbit Camera", |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Rotate Sensitivity")
+                        .on_hover_text("How sensitive the camera rotation is to mouse movements");
+                    ui.add(
+                        egui::DragValue::new(&mut camera_settings.orbit.rotate_sensitivity)
+                            .speed(0.1),
+                    );
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Pan Sensitivity:")
+                        .on_hover_text("How sensitive the camera panning is to mouse movements");
+                    ui.add(
+                        egui::DragValue::new(&mut camera_settings.orbit.pan_sensitivity).speed(0.1),
+                    );
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Scroll Sensitivity")
+                        .on_hover_text("How sensitive the camera zoom is to scrolling");
+                    ui.add(
+                        egui::DragValue::new(&mut camera_settings.orbit.scroll_sensitivity)
+                            .speed(0.1),
+                    );
+                });
+            });
+            ui.collapsing("Top Down Camera", |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Move Sensitivity")
+                        .on_hover_text("How sensitive the camera movement is to mouse movements");
+                    ui.add(
+                        egui::DragValue::new(&mut camera_settings.top_down.move_sensitivity)
+                            .speed(0.1),
+                    );
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Scroll Sensitivity")
+                        .on_hover_text("How sensitive the camera zoom is to scrolling");
+                    ui.add(
+                        egui::DragValue::new(&mut camera_settings.top_down.scroll_sensitivity)
+                            .speed(0.1),
+                    );
+                });
+            });
+        });
+    if camera_settings_open != app_state.camera_settings_open {
+        app_state.camera_settings_open = camera_settings_open;
+    }
 
     egui::SidePanel::left("side_panel")
         .resizable(true)
@@ -244,93 +297,20 @@ pub fn update_ui(
 
                     ui.collapsing("Camera", |ui| {
                         ui.horizontal(|ui| {
-                            ui.label("Mode:");
-                            if ui.button("Fly").clicked() {
-                                camera_settings.mode = CameraMode::Fly;
-                                if let Ok(mut fly_cam) = fly_cam.get_single_mut() {
-                                    fly_cam.is_active = true;
-                                }
-                                if let Ok(mut orbit_cam) = orbit_cam.get_single_mut() {
-                                    orbit_cam.is_active = false;
-                                }
-                            }
-                            if ui.button("Orbit").clicked() {
-                                camera_settings.mode = CameraMode::Orbit;
-                                if let Ok(mut fly_cam) = fly_cam.get_single_mut() {
-                                    fly_cam.is_active = false;
-                                }
-                                if let Ok(mut orbit_cam) = orbit_cam.get_single_mut() {
-                                    orbit_cam.is_active = true;
-                                }
+                            let mut mode = camera_settings.mode;
+                            ui.selectable_value(&mut mode, CameraMode::Fly, "Fly");
+                            ui.selectable_value(&mut mode, CameraMode::Orbit, "Orbit");
+                            ui.selectable_value(&mut mode, CameraMode::TopDown, "Top Down");
+                            if camera_settings.mode != mode {
+                                camera_settings.mode = mode;
                             }
                         });
+                        if ui.button("Camera Settings...").clicked() {
+                            app_state.camera_settings_open = true;
+                        }
                     });
                 });
 
             ui.separator();
-
-            // ui.collapsing("STGI - Stage Info", |ui| {
-            //     ui.reset_style();
-            //     ui.horizontal(|ui| {
-            //         let mut buf = kmp.stgi.entries[0].lap_count.to_string();
-            //         ui.label("Lap Count: ");
-            //         int_input(
-            //             ui,
-            //             &mut kmp.stgi.entries[0].lap_count,
-            //             3,
-            //             &mut app_state.lap_count_buf,
-            //         );
-            //         ui.add(egui::TextEdit::singleline(&mut buf).desired_width(40.0f32));
-            //         sanitize_string(&mut buf, 1);
-            //         if buf != kmp.stgi.entries[0].lap_count.to_string() {
-            //             kmp.stgi.entries[0].lap_count = buf.parse().unwrap_or(3);
-            //         }
-            //     });
-
-            //     ui.horizontal(|ui| {
-            //         ui.label("Pole Position: ");
-            //         let mut pole_pos = kmp.stgi.entries[0].pole_pos;
-            //         ui.selectable_value(&mut pole_pos, 0, "Left");
-            //         ui.selectable_value(&mut pole_pos, 1, "Right");
-            //         if pole_pos != kmp.stgi.entries[0].pole_pos {
-            //             kmp.stgi.entries[0].pole_pos = pole_pos;
-            //         }
-            //     });
-
-            //     ui.horizontal(|ui| {
-            //         ui.label("Driver Distance: ");
-            //         let mut driver_distance = kmp.stgi.entries[0].driver_distance;
-            //         ui.selectable_value(&mut driver_distance, 0, "Normal");
-            //         ui.selectable_value(&mut driver_distance, 1, "Narrow");
-            //         if driver_distance != kmp.stgi.entries[0].driver_distance {
-            //             kmp.stgi.entries[0].driver_distance = driver_distance;
-            //         }
-            //     });
-
-            //     let mut lens_flare_flashing = kmp.stgi.entries[0].lens_flare_flashing != 0;
-            //     ui.checkbox(&mut lens_flare_flashing, "Lens Flare Flashing");
-            //     if (kmp.stgi.entries[0].lens_flare_flashing != 0) != lens_flare_flashing {
-            //         kmp.stgi.entries[0].lens_flare_flashing =
-            //             if lens_flare_flashing { 1 } else { 0 };
-            //     }
-
-            //     ui.horizontal(|ui| {
-            //         let mut rgba = kmp.stgi.entries[0].flare_colour;
-            //         ui.label("Flare Colour: ");
-            //         ui.color_edit_button_srgba_unmultiplied(&mut rgba);
-            //         if rgba != kmp.stgi.entries[0].flare_colour {
-            //             kmp.stgi.entries[0].flare_colour = rgba
-            //         }
-            //     });
-            //     ui.horizontal(|ui| {
-            //         ui.label("Speed Mod: ");
-            //         float_input(
-            //             ui,
-            //             &mut kmp.stgi.entries[0].speed_mod,
-            //             0.,
-            //             &mut app_state.speed_mod_buf,
-            //         );
-            //     });
-            // });
         });
 }

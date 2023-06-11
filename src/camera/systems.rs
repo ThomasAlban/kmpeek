@@ -2,17 +2,17 @@ use super::{components::*, resources::*};
 
 use bevy::{
     input::mouse::{MouseMotion, MouseWheel},
+    math::vec3,
     prelude::*,
     window::{CursorGrabMode, PrimaryWindow},
 };
 use bevy_mod_picking::prelude::*;
 
 pub fn camera_setup(mut commands: Commands) {
-    let start_position = Vec3::new(50000., 50000., 0.);
-    let transform = Transform::from_translation(start_position).looking_at(Vec3::ZERO, Vec3::Y);
     commands.spawn((
         Camera3dBundle {
-            transform,
+            transform: Transform::from_translation(FlySettings::default().start_pos)
+                .looking_at(Vec3::ZERO, Vec3::Y),
             ..default()
         },
         FlyCam,
@@ -20,7 +20,8 @@ pub fn camera_setup(mut commands: Commands) {
     ));
     commands.spawn((
         Camera3dBundle {
-            transform,
+            transform: Transform::from_translation(OrbitSettings::default().start_pos)
+                .looking_at(Vec3::ZERO, Vec3::Y),
             camera: Camera {
                 is_active: false,
                 ..default()
@@ -28,9 +29,32 @@ pub fn camera_setup(mut commands: Commands) {
             ..default()
         },
         OrbitCam {
-            radius: start_position.length(),
+            radius: OrbitSettings::default().start_pos.length(),
             ..default()
         },
+        RaycastPickCamera::default(),
+    ));
+    commands.spawn((
+        Camera3dBundle {
+            projection: Projection::Orthographic(OrthographicProjection {
+                near: 0.00001,
+                far: 100000.,
+                scale: 100.,
+                ..default()
+            }),
+            camera: Camera {
+                is_active: false,
+                ..default()
+            },
+            transform: Transform::from_translation(vec3(
+                TopDownSettings::default().start_pos.x,
+                TopDownSettings::default().y_pos,
+                TopDownSettings::default().start_pos.y,
+            ))
+            .looking_at(Vec3::ZERO, Vec3::Z),
+            ..default()
+        },
+        TopDownCam,
         RaycastPickCamera::default(),
     ));
 }
@@ -45,6 +69,8 @@ pub fn cursor_grab(
             && !mouse_buttons.pressed(settings.fly.key_bindings.mouse_button))
             || (settings.mode == CameraMode::Orbit
                 && !mouse_buttons.pressed(settings.orbit.key_bindings.mouse_button))
+            || (settings.mode == CameraMode::TopDown
+                && !mouse_buttons.pressed(settings.top_down.key_bindings.mouse_button))
         {
             window.cursor.visible = true;
             window.cursor.grab_mode = CursorGrabMode::None;
@@ -54,7 +80,39 @@ pub fn cursor_grab(
         window.cursor.visible = false;
         window.cursor.grab_mode = CursorGrabMode::Locked;
     } else {
-        warn!("Primary window not found for `cursor_grab`!");
+        warn!("Primary window not found for cursor grab");
+    }
+}
+
+#[allow(clippy::type_complexity)]
+pub fn update_active_camera(
+    settings: Res<CameraSettings>,
+    mut fly_cam: Query<&mut Camera, (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>)>,
+    mut orbit_cam: Query<&mut Camera, (With<OrbitCam>, Without<FlyCam>, Without<TopDownCam>)>,
+    mut topdown_cam: Query<&mut Camera, (With<TopDownCam>, Without<FlyCam>, Without<OrbitCam>)>,
+) {
+    if !settings.is_changed() {
+        return;
+    }
+    let mut fly_cam = fly_cam.get_single_mut().unwrap();
+    let mut orbit_cam = orbit_cam.get_single_mut().unwrap();
+    let mut topdown_cam = topdown_cam.get_single_mut().unwrap();
+    match settings.mode {
+        CameraMode::Fly => {
+            fly_cam.is_active = true;
+            orbit_cam.is_active = false;
+            topdown_cam.is_active = false;
+        }
+        CameraMode::Orbit => {
+            fly_cam.is_active = false;
+            orbit_cam.is_active = true;
+            topdown_cam.is_active = false;
+        }
+        CameraMode::TopDown => {
+            fly_cam.is_active = false;
+            orbit_cam.is_active = false;
+            topdown_cam.is_active = true;
+        }
     }
 }
 
@@ -99,7 +157,7 @@ pub fn fly_cam_move(
                 velocity *= settings.fly.speed_boost;
             }
 
-            transform.translation += velocity * time.delta_seconds() * settings.fly.speed;
+            transform.translation += velocity * time.delta_seconds() * 10000. * settings.fly.speed;
         }
     } else {
         warn!("Primary window not found for camera controller");
@@ -121,8 +179,11 @@ pub fn fly_cam_look(
                         // Using smallest of height or width ensures equal vertical and horizontal sensitivity
                         let window_scale = window.height().min(window.width());
                         pitch -=
-                            (settings.fly.sensitivity * ev.delta.y * window_scale).to_radians();
-                        yaw -= (settings.fly.sensitivity * ev.delta.x * window_scale).to_radians();
+                            (settings.fly.look_sensitivity * 0.00012 * ev.delta.y * window_scale)
+                                .to_radians();
+                        yaw -=
+                            (settings.fly.look_sensitivity * 0.00012 * ev.delta.x * window_scale)
+                                .to_radians();
                     }
                 }
 
@@ -173,11 +234,11 @@ pub fn orbit_cam(
         }
         if rotate {
             for ev in mouse_motion.iter() {
-                rotation_move += ev.delta;
+                rotation_move += ev.delta * settings.orbit.rotate_sensitivity;
             }
         } else {
             for ev in mouse_motion.iter() {
-                pan += ev.delta;
+                pan += ev.delta * settings.orbit.pan_sensitivity;
             }
         }
     }
@@ -192,12 +253,12 @@ pub fn orbit_cam(
         orbit_button_changed = true;
     }
 
-    for (mut pan_orbit, mut transform, projection) in query.iter_mut() {
+    for (mut orbit_cam, mut transform, projection) in query.iter_mut() {
         if orbit_button_changed {
             // only check for upside down when orbiting started or ended this frame
             // if the camera is "upside" down, panning horizontally would be inverted, so invert the input to make it correct
             let up = transform.rotation * Vec3::Y;
-            pan_orbit.upside_down = up.y <= 0.0;
+            orbit_cam.upside_down = up.y <= 0.0;
         }
 
         let window_size = Vec2::new(window.width(), window.height());
@@ -207,7 +268,7 @@ pub fn orbit_cam(
             any = true;
             let delta_x = {
                 let delta = rotation_move.x / window_size.x * std::f32::consts::PI * 2.0;
-                if pan_orbit.upside_down {
+                if orbit_cam.upside_down {
                     -delta
                 } else {
                     delta
@@ -230,14 +291,14 @@ pub fn orbit_cam(
             let right = transform.rotation * Vec3::X * -pan.x;
             let up = transform.rotation * Vec3::Y * pan.y;
             // make panning proportional to distance away from focus point
-            let translation = (right + up) * pan_orbit.radius;
-            pan_orbit.focus += translation;
+            let translation = (right + up) * orbit_cam.radius;
+            orbit_cam.focus += translation;
         } else if scroll.abs() > 0.0 {
             any = true;
-            // scroll currently not working
-            pan_orbit.radius -= scroll * pan_orbit.radius * 0.002;
+            orbit_cam.radius -=
+                scroll * orbit_cam.radius * 0.002 * settings.orbit.scroll_sensitivity;
             // dont allow zoom to reach zero or you get stuck
-            pan_orbit.radius = f32::max(pan_orbit.radius, 0.05);
+            orbit_cam.radius = f32::max(orbit_cam.radius, 0.05);
         }
 
         if any {
@@ -246,10 +307,59 @@ pub fn orbit_cam(
             // child = z-offset
             let rot_matrix = Mat3::from_quat(transform.rotation);
             transform.translation =
-                pan_orbit.focus + rot_matrix.mul_vec3(Vec3::new(0.0, 0.0, pan_orbit.radius));
+                orbit_cam.focus + rot_matrix.mul_vec3(Vec3::new(0.0, 0.0, orbit_cam.radius));
         }
     }
     // consume any remaining events, so they don't pile up if we don't need them
     // (and also to avoid Bevy warning us about not checking events every frame update)
     mouse_motion.clear();
+}
+
+pub fn top_down_cam(
+    primary_window: Query<&mut Window, With<PrimaryWindow>>,
+    mut mouse_motion: EventReader<MouseMotion>,
+    mut mouse_scroll: EventReader<MouseWheel>,
+    mouse_buttons: Res<Input<MouseButton>>,
+    mut query: Query<(&TopDownCam, &mut Transform, &mut Projection)>,
+    settings: Res<CameraSettings>,
+) {
+    if settings.mode != CameraMode::TopDown {
+        return;
+    }
+
+    let window = primary_window.get_single();
+    if window.is_err() {
+        warn!("Primary window not found for camera controller");
+        return;
+    }
+    let window = window.unwrap();
+
+    let mut pan = Vec2::ZERO;
+    let mut scroll = 0.;
+
+    if mouse_buttons.pressed(settings.orbit.key_bindings.mouse_button) {
+        for ev in mouse_motion.iter() {
+            pan += ev.delta;
+        }
+    }
+    for ev in mouse_scroll.iter() {
+        scroll += ev.y;
+    }
+
+    let window_size = Vec2::new(window.width(), window.height());
+
+    for (_, mut transform, mut projection) in query.iter_mut() {
+        if let Projection::Orthographic(projection) = &*projection {
+            pan *= Vec2::new(projection.area.width(), projection.area.height()) / window_size;
+        }
+        transform.translation += vec3(pan.x, 0., pan.y) * settings.top_down.move_sensitivity;
+
+        if scroll.abs() > 0. {
+            if let Projection::Orthographic(projection) = &mut *projection {
+                projection.scale -=
+                    (scroll * projection.scale) * 0.001 * settings.top_down.scroll_sensitivity;
+                projection.scale = projection.scale.clamp(1., 1000.);
+            }
+        }
+    }
 }
