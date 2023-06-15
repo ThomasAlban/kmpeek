@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use super::resources::AppState;
 use crate::{
     camera::{
@@ -5,34 +7,58 @@ use crate::{
         TopDownSettings,
     },
     kcl::*,
-    kmp::*,
 };
-use bevy::{math::vec3, prelude::*};
+use bevy::{
+    prelude::*,
+    tasks::{AsyncComputeTaskPool, Task},
+};
 use bevy_egui::{egui, EguiContexts};
+use futures_lite::future;
+use rfd::FileDialog;
 
+// this component stores the selected file task - when the select file window is currently open
+#[derive(Component)]
+pub struct SelectedFileTask(Task<Option<PathBuf>>);
+// this event is triggered when a file is chosen
+pub struct FileSelected(pub PathBuf);
+// this system polls to see if we have picked a file, and if so sends out an event with the path
+pub fn file_dialogue(
+    mut commands: Commands,
+    mut tasks: Query<(Entity, &mut SelectedFileTask)>,
+    mut ev_file_selected: EventWriter<FileSelected>,
+) {
+    for (entity, mut selected_file) in tasks.iter_mut() {
+        if let Some(result) = future::block_on(future::poll_once(&mut selected_file.0)) {
+            if let Some(path) = result {
+                // send a file selected event
+                ev_file_selected.send(FileSelected(path));
+            }
+            // whatever happens, remove the SelectedFileTask - the user may have cancelled the window
+            commands.entity(entity).remove::<SelectedFileTask>();
+        }
+    }
+}
+
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn update_ui(
     mut contexts: EguiContexts,
     mut kcl: ResMut<Kcl>,
     mut app_state: ResMut<AppState>,
     mut camera_settings: ResMut<CameraSettings>,
-    mut fly_cam_transform: Query<
-        &mut Transform,
-        (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>),
-    >,
-    mut orbit_cam_transform: Query<
-        &mut Transform,
-        (Without<FlyCam>, With<OrbitCam>, Without<TopDownCam>),
-    >,
+    mut commands: Commands,
+
+    mut fly_cam: Query<&mut Transform, (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>)>,
+    mut orbit_cam: Query<&mut Transform, (Without<FlyCam>, With<OrbitCam>, Without<TopDownCam>)>,
     mut topdown_cam: Query<
         (&mut Transform, &mut Projection),
         (Without<FlyCam>, Without<OrbitCam>, With<TopDownCam>),
     >,
 ) {
     let ctx = contexts.ctx_mut();
-    let mut fly_cam_transform = fly_cam_transform
+    let mut fly_cam_transform = fly_cam
         .get_single_mut()
         .expect("Could not get single fly cam");
-    let mut orbit_cam_transform = orbit_cam_transform
+    let mut orbit_cam_transform = orbit_cam
         .get_single_mut()
         .expect("Could not get single orbit cam");
     let (mut topdown_cam_transform, mut topdown_cam_projection) = topdown_cam
@@ -43,15 +69,19 @@ pub fn update_ui(
         egui::menu::bar(ui, |ui| {
             ui.menu_button("File", |ui| {
                 if ui.button("Open").clicked() {
-                    // …
+                    // open a file dialogue on a seperate thread
+                    let task = AsyncComputeTaskPool::get().spawn(async move {
+                        FileDialog::new().add_filter("KCL", &["kcl"]).pick_file()
+                    });
+                    commands.spawn(SelectedFileTask(task));
                 }
             });
             ui.menu_button("Edit", |ui| {
                 if ui.button("Undo").clicked() {
-                    // …
+                    // ...
                 }
                 if ui.button("Redo").clicked() {
-                    // …
+                    // ...
                 }
             });
         });
@@ -147,21 +177,19 @@ pub fn update_ui(
         .min_width(300.)
         .show(ctx, |ui| {
             if ui.button("Reset Positions").clicked() {
-                *fly_cam_transform = Transform::from_translation(FlySettings::default().start_pos)
+                let fly_default = FlySettings::default();
+                let orbit_default = OrbitSettings::default();
+                let topdown_default = TopDownSettings::default();
+                *fly_cam_transform = Transform::from_translation(fly_default.start_pos)
                     .looking_at(Vec3::ZERO, Vec3::Y);
-                *orbit_cam_transform =
-                    Transform::from_translation(OrbitSettings::default().start_pos)
-                        .looking_at(Vec3::ZERO, Vec3::Y);
-                *topdown_cam_transform = Transform::from_translation(vec3(
-                    TopDownSettings::default().start_pos.x,
-                    TopDownSettings::default().y_pos,
-                    TopDownSettings::default().start_pos.y,
-                ))
-                .looking_at(Vec3::ZERO, Vec3::Z);
+                *orbit_cam_transform = Transform::from_translation(orbit_default.start_pos)
+                    .looking_at(Vec3::ZERO, Vec3::Y);
+                *topdown_cam_transform = Transform::from_translation(topdown_default.start_pos)
+                    .looking_at(Vec3::ZERO, Vec3::Z);
                 *topdown_cam_projection = Projection::Orthographic(OrthographicProjection {
-                    near: 0.00001,
-                    far: 100000.,
-                    scale: 100.,
+                    near: topdown_default.near,
+                    far: topdown_default.far,
+                    scale: topdown_default.scale,
                     ..default()
                 });
             }

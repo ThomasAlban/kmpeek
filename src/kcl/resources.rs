@@ -2,6 +2,7 @@ use bevy::{math::vec3, prelude::*};
 use byteorder::{ReadBytesExt, BE};
 use std::io::{self, Read, Seek, SeekFrom};
 
+#[allow(dead_code)]
 pub enum KclFlag {
     Road1,
     SlipperyRoad1,

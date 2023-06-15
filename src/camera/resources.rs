@@ -96,8 +96,10 @@ impl Default for OrbitKeyBindings {
 }
 
 pub struct TopDownSettings {
-    pub start_pos: Vec2,
-    pub y_pos: f32,
+    pub start_pos: Vec3,
+    pub near: f32,
+    pub far: f32,
+    pub scale: f32,
     pub move_sensitivity: f32,
     pub scroll_sensitivity: f32,
     pub key_bindings: TopDownKeyBindings,
@@ -105,8 +107,10 @@ pub struct TopDownSettings {
 impl Default for TopDownSettings {
     fn default() -> Self {
         Self {
-            start_pos: Vec2::ZERO,
-            y_pos: 10000.,
+            start_pos: vec3(0., 10000., 0.),
+            near: 0.00001,
+            far: 100000.,
+            scale: 100.,
             move_sensitivity: 1.,
             scroll_sensitivity: 1.,
             key_bindings: TopDownKeyBindings::default(),
