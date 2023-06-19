@@ -9,7 +9,6 @@ use bevy::{
     prelude::*,
     render::camera::Viewport,
     tasks::{AsyncComputeTaskPool, Task},
-    window::PrimaryWindow,
 };
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use futures_lite::future;
@@ -117,8 +116,6 @@ pub fn update_ui(
         (&mut Camera, &mut Transform, &mut Projection),
         (Without<FlyCam>, Without<OrbitCam>, With<TopDownCam>),
     >,
-
-    mut window: Query<&mut Window, With<PrimaryWindow>>,
 ) {
     let ctx = contexts.ctx_mut();
     let (mut fly_cam, mut fly_cam_transform) = fly_cam
@@ -130,10 +127,6 @@ pub fn update_ui(
     let (mut topdown_cam, mut topdown_cam_transform, mut topdown_cam_projection) = topdown_cam
         .get_single_mut()
         .expect("Could not get single topdown cam");
-
-    let mut window = window
-        .get_single_mut()
-        .expect("Primary window not found for update ui");
 
     egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
         egui::menu::bar(ui, |ui| {
@@ -289,6 +282,8 @@ pub fn update_ui(
                     );
                     ui.add(egui::DragValue::new(&mut camera_settings.fly.speed_boost).speed(0.1));
                 });
+                ui.checkbox(&mut camera_settings.fly.hold_mouse_to_move, "Hold Mouse To Move")
+                    .on_hover_text("Whether or not the mouse button needs to be pressed in order to move the camera");
             });
             ui.collapsing("Orbit Camera", |ui| {
                 ui.horizontal(|ui| {

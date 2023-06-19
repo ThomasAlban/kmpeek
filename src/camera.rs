@@ -66,6 +66,7 @@ pub struct CameraSettings {
 pub struct FlySettings {
     pub start_pos: Vec3,
     pub look_sensitivity: f32,
+    pub hold_mouse_to_move: bool,
     pub speed: f32,
     pub speed_boost: f32,
     pub key_bindings: FlyKeyBindings,
@@ -75,6 +76,7 @@ impl Default for FlySettings {
         Self {
             start_pos: vec3(50000., 50000., 0.),
             look_sensitivity: 1.,
+            hold_mouse_to_move: false,
             speed: 1.,
             speed_boost: 3.,
             key_bindings: FlyKeyBindings::default(),
@@ -308,7 +310,7 @@ pub fn fly_cam_move(
     let forward = -Vec3::new(local_z.x, 0., local_z.z);
     let right = Vec3::new(local_z.z, 0., -local_z.x);
 
-    if window.cursor.grab_mode == CursorGrabMode::None {
+    if settings.fly.hold_mouse_to_move && window.cursor.grab_mode == CursorGrabMode::None {
         return;
     }
     let mut speed_boost = false;
