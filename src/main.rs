@@ -34,6 +34,7 @@ fn main() {
             },
             ..default()
         })
+        // this is temporary and does nothing other than allow systems to run which take in a KCL object
         .insert_resource(Kcl::read(File::open("dry_dry_ruins.kcl").unwrap()).unwrap())
         .add_plugin(CameraPlugin)
         .add_plugin(UIPlugin)
