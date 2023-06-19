@@ -130,9 +130,14 @@ pub fn update_ui(
 
     egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
         egui::menu::bar(ui, |ui| {
+            let sc_btn = if cfg!(target_os = "macos") {
+                "Cmd"
+            } else {
+                "Ctrl"
+            };
             ui.menu_button("File", |ui| {
                 if ui
-                    .add(egui::Button::new("Open").shortcut_text("Ctrl+O"))
+                    .add(egui::Button::new("Open").shortcut_text(format!("{sc_btn}+O")))
                     .clicked()
                 {
                     open_file(commands);
@@ -140,13 +145,13 @@ pub fn update_ui(
             });
             ui.menu_button("Edit", |ui| {
                 if ui
-                    .add(egui::Button::new("Undo").shortcut_text("Ctrl+Z"))
+                    .add(egui::Button::new("Undo").shortcut_text(format!("{sc_btn}+Z")))
                     .clicked()
                 {
                     // ...
                 }
                 if ui
-                    .add(egui::Button::new("Redo").shortcut_text("Ctrl+Shift+Z"))
+                    .add(egui::Button::new("Redo").shortcut_text(format!("{sc_btn}+Shift+Z")))
                     .clicked()
                 {
                     // ...
