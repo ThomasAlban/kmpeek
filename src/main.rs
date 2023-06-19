@@ -1,19 +1,21 @@
 mod camera;
-mod kcl;
-mod kmp;
+mod kcl_file;
+mod kcl_model;
+mod kmp_file;
+mod kmp_model;
 mod ui;
 
+use std::fs::File;
+
 use camera::*;
-use kcl::*;
-use kmp::*;
+use kcl_file::Kcl;
+use kcl_model::*;
 use ui::*;
 
 use bevy::{
     prelude::*,
     winit::{UpdateMode, WinitSettings},
 };
-
-use std::{fs::File, time::Duration};
 
 fn main() {
     App::new()
@@ -28,30 +30,14 @@ fn main() {
         .insert_resource(WinitSettings {
             focused_mode: UpdateMode::Continuous,
             unfocused_mode: UpdateMode::ReactiveLowPower {
-                max_wait: Duration::MAX,
+                max_wait: std::time::Duration::MAX,
             },
             ..default()
         })
+        .insert_resource(Kcl::read(File::open("dry_dry_ruins.kcl").unwrap()).unwrap())
         .add_plugin(CameraPlugin)
         .add_plugin(UIPlugin)
         .add_plugin(KclPlugin)
-        //.add_plugin(KmpPlugin)
-        // make sure this startup system runs before spawning the models
-        .add_startup_system(setup.in_base_set(StartupSet::PreStartup))
+        // .add_plugin(KmpPlugin)
         .run();
-}
-
-fn setup(mut commands: Commands) {
-    let name = "dry_dry_ruins";
-
-    let kcl_file = File::open(format!("{name}.kcl")).unwrap();
-    commands.insert_resource(Kcl::read(kcl_file).unwrap());
-
-    let kmp_file = File::open(format!("{name}.kmp")).unwrap();
-    commands.insert_resource(Kmp::read(kmp_file).unwrap());
-
-    commands.insert_resource(AmbientLight {
-        color: Color::WHITE,
-        brightness: 0.5,
-    });
 }

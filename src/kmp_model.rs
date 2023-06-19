@@ -1,5 +1,13 @@
-use super::resources::Kmp;
+use crate::kmp_file::*;
 use bevy::prelude::*;
+
+pub struct KmpPlugin;
+
+impl Plugin for KmpPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_startup_system(spawn_model);
+    }
+}
 
 pub fn spawn_model(
     mut commands: Commands,

@@ -6,7 +6,8 @@ use crate::{
         CameraMode, CameraSettings, FlyCam, FlySettings, OrbitCam, OrbitSettings, TopDownCam,
         TopDownSettings,
     },
-    kcl::*,
+    kcl_file::*,
+    kcl_model::*,
 };
 use bevy::{
     prelude::*,
@@ -39,13 +40,20 @@ pub fn file_dialogue(
     }
 }
 
+fn open_file(mut commands: Commands) {
+    // open a file dialogue on a seperate thread
+    let task = AsyncComputeTaskPool::get()
+        .spawn(async move { FileDialog::new().add_filter("KCL", &["kcl"]).pick_file() });
+    commands.spawn(SelectedFileTask(task));
+}
+
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn update_ui(
     mut contexts: EguiContexts,
     mut kcl: ResMut<Kcl>,
     mut app_state: ResMut<AppState>,
     mut camera_settings: ResMut<CameraSettings>,
-    mut commands: Commands,
+    commands: Commands,
 
     mut fly_cam: Query<&mut Transform, (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>)>,
     mut orbit_cam: Query<&mut Transform, (Without<FlyCam>, With<OrbitCam>, Without<TopDownCam>)>,
@@ -68,19 +76,24 @@ pub fn update_ui(
     egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
         egui::menu::bar(ui, |ui| {
             ui.menu_button("File", |ui| {
-                if ui.button("Open").clicked() {
-                    // open a file dialogue on a seperate thread
-                    let task = AsyncComputeTaskPool::get().spawn(async move {
-                        FileDialog::new().add_filter("KCL", &["kcl"]).pick_file()
-                    });
-                    commands.spawn(SelectedFileTask(task));
+                if ui
+                    .add(egui::Button::new("Open").shortcut_text("Ctrl+O"))
+                    .clicked()
+                {
+                    open_file(commands);
                 }
             });
             ui.menu_button("Edit", |ui| {
-                if ui.button("Undo").clicked() {
+                if ui
+                    .add(egui::Button::new("Undo").shortcut_text("Ctrl+Z"))
+                    .clicked()
+                {
                     // ...
                 }
-                if ui.button("Redo").clicked() {
+                if ui
+                    .add(egui::Button::new("Redo").shortcut_text("Ctrl+Shift+Z"))
+                    .clicked()
+                {
                     // ...
                 }
             });

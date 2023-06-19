@@ -1,11 +1,18 @@
+use crate::{kcl_file::Kcl, ui::FileSelected};
+use bevy::{prelude::*, render::mesh::PrimitiveTopology};
 use std::fs::File;
 
-use crate::ui::FileSelected;
+pub struct KclPlugin;
 
-use super::{components::KCLModelSection, resources::Kcl};
-use bevy::prelude::*;
+impl Plugin for KclPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_system(spawn_model).add_system(update_kcl_model);
+    }
+}
 
-use bevy::render::mesh::PrimitiveTopology;
+// this is a component attached to every part of the KCL model so that we know which bit it is when querying
+#[derive(Component)]
+pub struct KCLModelSection(pub usize);
 
 pub fn spawn_model(
     mut commands: Commands,
