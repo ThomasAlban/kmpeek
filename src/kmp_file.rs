@@ -856,7 +856,7 @@ pub struct Stgi {
     pub pole_pos: u8,
     pub driver_distance: u8,
     pub lens_flare_flashing: u8,
-    pub flare_colour: [u8; 4],
+    pub flare_color: [u8; 4],
     /// Always 0 in Nintendo tracks. This is for the speed modifier cheat code.
     pub speed_mod: f32,
 }
@@ -866,9 +866,9 @@ impl KmpData for Stgi {
         let pole_pos = rdr.read_u8()?;
         let driver_distance = rdr.read_u8()?;
         let lens_flare_flashing = rdr.read_u8()?;
-        // first byte of flare colour not needed
+        // first byte of flare color not needed
         rdr.read_u8()?;
-        let flare_colour = rdr.read_array::<u8, 4>()?;
+        let flare_color = rdr.read_array::<u8, 4>()?;
         // padding
         rdr.read_u8()?;
         let mut speed_mod = [0u8; 4];
@@ -881,7 +881,7 @@ impl KmpData for Stgi {
             pole_pos,
             driver_distance,
             lens_flare_flashing,
-            flare_colour,
+            flare_color,
             speed_mod,
         })
     }
@@ -894,7 +894,7 @@ impl KmpData for Stgi {
         wtr.write_u8(self.driver_distance)?;
         wtr.write_u8(self.lens_flare_flashing)?;
         wtr.write_u8(0)?;
-        wtr.write_array(self.flare_colour)?;
+        wtr.write_array(self.flare_color)?;
         wtr.write_u8(0)?;
         // only write the 2 MSBs of the speed mod
         let bytes = self.speed_mod.to_be_bytes();

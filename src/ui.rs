@@ -3,17 +3,11 @@ use crate::{
         CameraMode, CameraSettings, FlyCam, FlySettings, OrbitCam, OrbitSettings, TopDownCam,
         TopDownSettings,
     },
+    file_dialog::*,
     kcl_file::*,
 };
-use bevy::{
-    prelude::*,
-    render::camera::Viewport,
-    tasks::{AsyncComputeTaskPool, Task},
-    window::PrimaryWindow,
-};
+use bevy::{prelude::*, render::camera::Viewport, window::PrimaryWindow};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
-use futures_lite::future;
-use rfd::FileDialog;
 use std::path::PathBuf;
 
 pub struct UIPlugin;
@@ -23,8 +17,8 @@ impl Plugin for UIPlugin {
         app.add_plugin(EguiPlugin)
             .init_resource::<AppState>()
             .add_event::<FileSelected>()
-            .add_system(update_ui)
-            .add_system(file_dialogue);
+            .add_system(update_ui);
+        // .add_system(file_dialogue);
     }
 }
 
@@ -44,6 +38,8 @@ pub struct AppState {
     pub look_sensitivity_buf: String,
     pub speed_buf: String,
     pub speed_boost_buf: String,
+
+    pub file_dialog: Option<FileDialog>,
 }
 
 impl Default for AppState {
@@ -63,48 +59,23 @@ impl Default for AppState {
             look_sensitivity_buf: String::from("1.0"),
             speed_buf: String::from("1.0"),
             speed_boost_buf: String::from("3.0"),
+
+            file_dialog: None,
         }
     }
 }
 
-// this component stores the selected file task - when the select file window is currently open
-#[derive(Component)]
-pub struct SelectedFileTask(Task<Option<PathBuf>>);
-// this event is triggered when a file is chosen
 pub struct FileSelected(pub PathBuf);
-// this system polls to see if we have picked a file, and if so sends out an event with the path
-pub fn file_dialogue(
-    mut commands: Commands,
-    mut tasks: Query<(Entity, &mut SelectedFileTask)>,
-    mut ev_file_selected: EventWriter<FileSelected>,
-) {
-    for (entity, mut selected_file) in tasks.iter_mut() {
-        if let Some(result) = future::block_on(future::poll_once(&mut selected_file.0)) {
-            if let Some(path) = result {
-                // send a file selected event
-                ev_file_selected.send(FileSelected(path));
-            }
-            // whatever happens, remove the SelectedFileTask - the user may have cancelled the window
-            commands.entity(entity).remove::<SelectedFileTask>();
-        }
-    }
-}
-
-fn open_file(mut commands: Commands) {
-    // open a file dialogue on a seperate thread
-    let task = AsyncComputeTaskPool::get()
-        .spawn(async move { FileDialog::new().add_filter("KCL", &["kcl"]).pick_file() });
-    commands.spawn(SelectedFileTask(task));
-}
 
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn update_ui(
+    keys: Res<Input<KeyCode>>,
     mut contexts: EguiContexts,
     mut kcl: ResMut<Kcl>,
     mut app_state: ResMut<AppState>,
     mut camera_settings: ResMut<CameraSettings>,
-    commands: Commands,
     window: Query<&Window, With<PrimaryWindow>>,
+    mut ev_file_selected: EventWriter<FileSelected>,
 
     mut fly_cam: Query<
         (&mut Camera, &mut Transform),
@@ -119,34 +90,88 @@ pub fn update_ui(
         (Without<FlyCam>, Without<OrbitCam>, With<TopDownCam>),
     >,
 ) {
+    // get variables for camera and window
     let ctx = contexts.ctx_mut();
     let (mut fly_cam, mut fly_cam_transform) = fly_cam
         .get_single_mut()
-        .expect("Could not get single fly cam");
+        .expect("Could not get single fly cam in update ui");
     let (mut orbit_cam, mut orbit_cam_transform) = orbit_cam
         .get_single_mut()
-        .expect("Could not get single orbit cam");
+        .expect("Could not get single orbit cam in update ui");
     let (mut topdown_cam, mut topdown_cam_transform, mut topdown_cam_projection) = topdown_cam
         .get_single_mut()
-        .expect("Could not get single topdown cam");
-
+        .expect("Could not get single topdown cam in update ui");
     let window = window
         .get_single()
-        .expect("Primary window not found for update ui");
+        .expect("Could not get single primary window in update ui");
+
+    // things which can be called from both the UI and keybinds (may restructure this later)
+    macro_rules! open_file {
+        () => {
+            let mut dialog = FileDialog::open_file(None)
+                .default_size((500., 250.))
+                .filter(Box::new(|path| {
+                    if let Some(os_str) = path.extension() {
+                        if let Some(str) = os_str.to_str() {
+                            return str == "kcl";
+                        }
+                    }
+                    false
+                }));
+            dialog.open();
+            app_state.file_dialog = Some(dialog);
+        };
+    }
+
+    macro_rules! undo {
+        () => {
+            println!("undo");
+        };
+    }
+    macro_rules! redo {
+        () => {
+            println!("redo");
+        };
+    }
+
+    // keybinds
+    if (!cfg!(target_os = "macos")
+        && (keys.pressed(KeyCode::LControl) || keys.pressed(KeyCode::RControl)))
+        || (cfg!(target_os = "macos")
+            // L/RWin maps to Command on Macos
+            && (keys.pressed(KeyCode::LWin) || keys.pressed(KeyCode::RWin)))
+    {
+        if keys.pressed(KeyCode::LShift) || keys.pressed(KeyCode::RShift) {
+            if keys.just_pressed(KeyCode::Z) {
+                redo!();
+            }
+        } else if keys.just_pressed(KeyCode::O) {
+            open_file!();
+        } else if keys.just_pressed(KeyCode::Z) {
+            undo!();
+        }
+    }
+
+    if let Some(dialog) = &mut app_state.file_dialog {
+        if dialog.show(ctx).selected() {
+            if let Some(file) = dialog.path() {
+                ev_file_selected.send(FileSelected(file));
+            }
+        }
+    }
 
     egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
         egui::menu::bar(ui, |ui| {
-            let sc_btn = if cfg!(target_os = "macos") {
-                "Cmd"
-            } else {
-                "Ctrl"
-            };
+            let mut sc_btn = "Ctrl";
+            if cfg!(target_os = "macos") {
+                sc_btn = "Cmd";
+            }
             ui.menu_button("File", |ui| {
                 if ui
                     .add(egui::Button::new("Open").shortcut_text(format!("{sc_btn}+O")))
                     .clicked()
                 {
-                    open_file(commands);
+                    open_file!();
                 }
             });
             ui.menu_button("Edit", |ui| {
@@ -154,13 +179,13 @@ pub fn update_ui(
                     .add(egui::Button::new("Undo").shortcut_text(format!("{sc_btn}+Z")))
                     .clicked()
                 {
-                    // ...
+                    undo!();
                 }
                 if ui
                     .add(egui::Button::new("Redo").shortcut_text(format!("{sc_btn}+Shift+Z")))
                     .clicked()
                 {
-                    // ...
+                    redo!();
                 }
             });
         });
@@ -187,7 +212,7 @@ pub fn update_ui(
                     if ui.button("Reset").clicked() {
                         for (i, vertex_group) in kcl.vertex_groups.iter_mut().enumerate() {
                             vertex_group.visible = true;
-                            vertex_group.colour = KCL_COLOURS[i];
+                            vertex_group.color = KCL_COLORS[i];
                         }
                     }
                 });
@@ -196,15 +221,15 @@ pub fn update_ui(
                 macro_rules! kcl_type_options {
                     ($name:expr, $i:expr) => {
                         ui.horizontal(|ui| {
-                            let (mut colour, mut visible) =
-                                (kcl.vertex_groups[$i].colour, kcl.vertex_groups[$i].visible);
-                            ui.color_edit_button_rgba_unmultiplied(&mut colour);
+                            let (mut color, mut visible) =
+                                (kcl.vertex_groups[$i].color, kcl.vertex_groups[$i].visible);
+                            ui.color_edit_button_rgba_unmultiplied(&mut color);
                             ui.checkbox(&mut visible, $name);
                             // only update the kcl if the variables have been changed in the UI
-                            if colour != kcl.vertex_groups[$i].colour
+                            if color != kcl.vertex_groups[$i].color
                                 || visible != kcl.vertex_groups[$i].visible
                             {
-                                kcl.vertex_groups[$i].colour = colour;
+                                kcl.vertex_groups[$i].color = color;
                                 kcl.vertex_groups[$i].visible = visible;
                             }
                         });

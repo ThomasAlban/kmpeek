@@ -1,4 +1,5 @@
 mod camera;
+mod file_dialog;
 mod kcl_file;
 mod kcl_model;
 mod kmp_file;

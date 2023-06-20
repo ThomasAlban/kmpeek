@@ -100,8 +100,8 @@ impl Default for FlyKeyBindings {
             move_backward: vec![KeyCode::S, KeyCode::Down],
             move_left: vec![KeyCode::A, KeyCode::Left],
             move_right: vec![KeyCode::D, KeyCode::Right],
-            move_ascend: vec![KeyCode::Space, KeyCode::E, KeyCode::PageUp],
-            move_descend: vec![KeyCode::LControl, KeyCode::Q, KeyCode::PageDown],
+            move_ascend: vec![KeyCode::E, KeyCode::PageUp],
+            move_descend: vec![KeyCode::Q, KeyCode::PageDown],
             speed_boost: vec![KeyCode::LShift, KeyCode::RShift],
             mouse_button: MouseButton::Right,
         }

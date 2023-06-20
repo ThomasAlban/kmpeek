@@ -38,7 +38,7 @@ pub enum KclFlag {
     InvisibleWall2,
 }
 
-pub const KCL_COLOURS: [[f32; 4]; 32] = [
+pub const KCL_COLORS: [[f32; 4]; 32] = [
     [1.0, 1.0, 1.0, 1.0], // road
     [1.0, 0.9, 0.8, 1.0], // slippery road (sand/dirt)
     [0.0, 0.8, 0.0, 1.0], // weak off-road
@@ -82,7 +82,7 @@ pub struct Kcl {
 pub struct VertexGroup {
     pub visible: bool,
     pub vertices: Vec<Vec3>,
-    pub colour: [f32; 4],
+    pub color: [f32; 4],
 }
 
 impl Kcl {
@@ -125,11 +125,11 @@ impl Kcl {
 
         let mut vertex_groups: Vec<VertexGroup> = Vec::new();
 
-        for colour in KCL_COLOURS {
+        for color in KCL_COLORS {
             vertex_groups.push(VertexGroup {
                 visible: true,
                 vertices: Vec::new(),
-                colour,
+                color,
             });
         }
 
