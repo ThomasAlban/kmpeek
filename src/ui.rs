@@ -9,6 +9,7 @@ use bevy::{
     prelude::*,
     render::camera::Viewport,
     tasks::{AsyncComputeTaskPool, Task},
+    window::PrimaryWindow,
 };
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use futures_lite::future;
@@ -103,6 +104,7 @@ pub fn update_ui(
     mut app_state: ResMut<AppState>,
     mut camera_settings: ResMut<CameraSettings>,
     commands: Commands,
+    window: Query<&Window, With<PrimaryWindow>>,
 
     mut fly_cam: Query<
         (&mut Camera, &mut Transform),
@@ -127,6 +129,10 @@ pub fn update_ui(
     let (mut topdown_cam, mut topdown_cam_transform, mut topdown_cam_projection) = topdown_cam
         .get_single_mut()
         .expect("Could not get single topdown cam");
+
+    let window = window
+        .get_single()
+        .expect("Primary window not found for update ui");
 
     egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
         egui::menu::bar(ui, |ui| {
@@ -421,14 +427,13 @@ pub fn update_ui(
     // has to check if the width and height are > 0 otherwise it will crash
     if ctx.available_rect().width() as u32 > 0 && ctx.available_rect().height() as u32 > 0 {
         let viewport = Viewport {
-            // if I'm being honest I don't know why they all have to be multipled by 2
             physical_size: UVec2 {
-                x: ctx.available_rect().width() as u32 * 2,
-                y: ctx.available_rect().height() as u32 * 2,
+                x: (ctx.available_rect().width() * window.scale_factor() as f32) as u32,
+                y: (ctx.available_rect().height() * window.scale_factor() as f32) as u32,
             },
             physical_position: UVec2 {
-                x: ctx.available_rect().min.x as u32 * 2,
-                y: ctx.available_rect().min.y as u32 * 2,
+                x: (ctx.available_rect().min.x * window.scale_factor() as f32) as u32,
+                y: (ctx.available_rect().min.y * window.scale_factor() as f32) as u32,
             },
             ..default()
         };
