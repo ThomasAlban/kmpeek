@@ -38,41 +38,6 @@ pub enum KclFlag {
     InvisibleWall2,
 }
 
-pub const KCL_COLORS: [[f32; 4]; 32] = [
-    [1.0, 1.0, 1.0, 1.0], // road
-    [1.0, 0.9, 0.8, 1.0], // slippery road (sand/dirt)
-    [0.0, 0.8, 0.0, 1.0], // weak off-road
-    [0.0, 0.6, 0.0, 1.0], // off-road
-    [0.0, 0.4, 0.0, 1.0], // heavy off-road
-    [0.8, 0.9, 1.0, 1.0], // slippery road (ice)
-    [1.0, 0.5, 0.0, 1.0], // boost panel
-    [1.0, 0.6, 0.0, 1.0], // boost ramp
-    [1.0, 0.8, 0.0, 1.0], // slow ramp
-    [0.9, 0.9, 1.0, 0.5], // item road
-    [0.7, 0.1, 0.1, 1.0], // solid fall
-    [0.0, 0.5, 1.0, 1.0], // moving water
-    [0.6, 0.6, 0.6, 1.0], // wall
-    [0.0, 0.0, 0.6, 0.8], // invisible wall
-    [0.6, 0.6, 0.7, 0.5], // item wall
-    [0.6, 0.6, 0.6, 1.0], // wall
-    [0.8, 0.0, 0.0, 0.8], // fall boundary
-    [1.0, 0.0, 0.5, 0.8], // cannon activator
-    [0.5, 0.0, 1.0, 0.5], // force recalculation
-    [0.0, 0.3, 1.0, 1.0], // half-pipe ramp
-    [0.6, 0.6, 0.6, 1.0], // wall (items pass through)
-    [0.9, 0.9, 1.0, 1.0], // moving road
-    [0.9, 0.7, 1.0, 1.0], // sticky road
-    [1.0, 1.0, 1.0, 1.0], // road (alt sfx)
-    [1.0, 0.0, 1.0, 0.8], // sound trigger
-    [0.4, 0.6, 0.4, 0.8], // weak wall
-    [0.8, 0.0, 1.0, 0.8], // effect trigger
-    [1.0, 0.0, 1.0, 0.5], // item state modifier
-    [0.0, 0.6, 0.0, 0.8], // half-pipe invis wall
-    [0.9, 0.9, 1.0, 1.0], // rotating road
-    [0.8, 0.7, 0.8, 1.0], // special wall
-    [0.6, 0.6, 0.6, 1.0], // invisible wall 2
-];
-
 #[derive(Resource)]
 pub struct Kcl {
     pub vertex_groups: Vec<VertexGroup>,
@@ -80,9 +45,7 @@ pub struct Kcl {
 
 #[derive(Clone)]
 pub struct VertexGroup {
-    pub visible: bool,
     pub vertices: Vec<Vec3>,
-    pub color: [f32; 4],
 }
 
 impl Kcl {
@@ -123,14 +86,11 @@ impl Kcl {
         // go to the start of the triangular prisms section
         rdr.seek(SeekFrom::Start(offsets[2] as u64 + 0x10))?;
 
-        let mut vertex_groups: Vec<VertexGroup> = Vec::new();
-
-        for color in KCL_COLORS {
+        let mut vertex_groups: Vec<VertexGroup> = Vec::with_capacity(32);
+        for _ in 0..32 {
             vertex_groups.push(VertexGroup {
-                visible: true,
                 vertices: Vec::new(),
-                color,
-            });
+            })
         }
 
         while rdr.stream_position()? < offsets[3] as u64 {

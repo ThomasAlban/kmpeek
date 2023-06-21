@@ -5,6 +5,7 @@ use crate::{
     },
     file_dialog::*,
     kcl_file::*,
+    kcl_model::KclModelSettings,
 };
 use bevy::{prelude::*, render::camera::Viewport, window::PrimaryWindow};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
@@ -16,9 +17,9 @@ impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugin(EguiPlugin)
             .init_resource::<AppState>()
-            .add_event::<FileSelected>()
+            .add_event::<KmpFileSelected>()
+            .add_event::<KclFileSelected>()
             .add_system(update_ui);
-        // .add_system(file_dialogue);
     }
 }
 
@@ -32,14 +33,7 @@ pub struct AppState {
     pub show_death_barriers: bool,
     pub show_effects_triggers: bool,
 
-    pub lap_count_buf: String,
-    pub speed_mod_buf: String,
-
-    pub look_sensitivity_buf: String,
-    pub speed_buf: String,
-    pub speed_boost_buf: String,
-
-    pub file_dialog: Option<FileDialog>,
+    pub file_dialog: Option<(FileDialog, String)>,
 }
 
 impl Default for AppState {
@@ -53,29 +47,24 @@ impl Default for AppState {
             show_death_barriers: true,
             show_effects_triggers: true,
 
-            lap_count_buf: String::from("3"),
-            speed_mod_buf: String::from("0.0"),
-
-            look_sensitivity_buf: String::from("1.0"),
-            speed_buf: String::from("1.0"),
-            speed_boost_buf: String::from("3.0"),
-
             file_dialog: None,
         }
     }
 }
 
-pub struct FileSelected(pub PathBuf);
+pub struct KmpFileSelected(pub PathBuf);
+pub struct KclFileSelected(pub PathBuf);
 
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn update_ui(
     keys: Res<Input<KeyCode>>,
     mut contexts: EguiContexts,
-    mut kcl: ResMut<Kcl>,
     mut app_state: ResMut<AppState>,
     mut camera_settings: ResMut<CameraSettings>,
     window: Query<&Window, With<PrimaryWindow>>,
-    mut ev_file_selected: EventWriter<FileSelected>,
+    mut ev_kmp_file_selected: EventWriter<KmpFileSelected>,
+    mut ev_kcl_file_selected: EventWriter<KclFileSelected>,
+    mut kcl_model_settings: ResMut<KclModelSettings>,
 
     mut fly_cam: Query<
         (&mut Camera, &mut Transform),
@@ -107,22 +96,21 @@ pub fn update_ui(
 
     // things which can be called from both the UI and keybinds (may restructure this later)
     macro_rules! open_file {
-        () => {
+        ($type:literal) => {
             let mut dialog = FileDialog::open_file(None)
                 .default_size((500., 250.))
                 .filter(Box::new(|path| {
                     if let Some(os_str) = path.extension() {
                         if let Some(str) = os_str.to_str() {
-                            return str == "kcl";
+                            return str == $type;
                         }
                     }
                     false
                 }));
             dialog.open();
-            app_state.file_dialog = Some(dialog);
+            app_state.file_dialog = Some((dialog, $type.to_owned()));
         };
     }
-
     macro_rules! undo {
         () => {
             println!("undo");
@@ -142,20 +130,28 @@ pub fn update_ui(
             && (keys.pressed(KeyCode::LWin) || keys.pressed(KeyCode::RWin)))
     {
         if keys.pressed(KeyCode::LShift) || keys.pressed(KeyCode::RShift) {
+            // keybinds with shift held
             if keys.just_pressed(KeyCode::Z) {
                 redo!();
+            } else if keys.just_pressed(KeyCode::O) {
+                open_file!("kcl");
             }
+        // keybinds without shift held
         } else if keys.just_pressed(KeyCode::O) {
-            open_file!();
+            open_file!("kmp");
         } else if keys.just_pressed(KeyCode::Z) {
             undo!();
         }
     }
 
     if let Some(dialog) = &mut app_state.file_dialog {
-        if dialog.show(ctx).selected() {
-            if let Some(file) = dialog.path() {
-                ev_file_selected.send(FileSelected(file));
+        if dialog.0.show(ctx).selected() {
+            if let Some(file) = dialog.0.path() {
+                if dialog.1 == "kmp" {
+                    ev_kmp_file_selected.send(KmpFileSelected(file));
+                } else if dialog.1 == "kcl" {
+                    ev_kcl_file_selected.send(KclFileSelected(file));
+                }
             }
         }
     }
@@ -168,10 +164,16 @@ pub fn update_ui(
             }
             ui.menu_button("File", |ui| {
                 if ui
-                    .add(egui::Button::new("Open").shortcut_text(format!("{sc_btn}+O")))
+                    .add(egui::Button::new("Open KMP").shortcut_text(format!("{sc_btn}+O")))
                     .clicked()
                 {
-                    open_file!();
+                    open_file!("kmp");
+                }
+                if ui
+                    .add(egui::Button::new("Open KCL").shortcut_text(format!("{sc_btn}+Shift+O")))
+                    .clicked()
+                {
+                    open_file!("kcl");
                 }
             });
             ui.menu_button("Edit", |ui| {
@@ -200,20 +202,13 @@ pub fn update_ui(
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.horizontal(|ui| {
                     if ui.button("Check All").clicked() {
-                        for vertex_group in kcl.vertex_groups.iter_mut() {
-                            vertex_group.visible = true;
-                        }
+                        kcl_model_settings.visible = [true; 32];
                     }
                     if ui.button("Uncheck All").clicked() {
-                        for vertex_group in kcl.vertex_groups.iter_mut() {
-                            vertex_group.visible = false;
-                        }
+                        kcl_model_settings.visible = [false; 32];
                     }
                     if ui.button("Reset").clicked() {
-                        for (i, vertex_group) in kcl.vertex_groups.iter_mut().enumerate() {
-                            vertex_group.visible = true;
-                            vertex_group.color = KCL_COLORS[i];
-                        }
+                        *kcl_model_settings = Default::default();
                     }
                 });
                 ui.separator();
@@ -221,17 +216,10 @@ pub fn update_ui(
                 macro_rules! kcl_type_options {
                     ($name:expr, $i:expr) => {
                         ui.horizontal(|ui| {
-                            let (mut color, mut visible) =
-                                (kcl.vertex_groups[$i].color, kcl.vertex_groups[$i].visible);
-                            ui.color_edit_button_rgba_unmultiplied(&mut color);
-                            ui.checkbox(&mut visible, $name);
-                            // only update the kcl if the variables have been changed in the UI
-                            if color != kcl.vertex_groups[$i].color
-                                || visible != kcl.vertex_groups[$i].visible
-                            {
-                                kcl.vertex_groups[$i].color = color;
-                                kcl.vertex_groups[$i].visible = visible;
-                            }
+                            ui.color_edit_button_rgba_unmultiplied(
+                                &mut kcl_model_settings.color[$i],
+                            );
+                            ui.checkbox(&mut kcl_model_settings.visible[$i], $name);
                         });
                         ui.separator();
                     };
@@ -395,33 +383,33 @@ pub fn update_ui(
                         ui.checkbox(&mut show_effects_triggers, "Show Effects & Triggers");
                         if show_walls != app_state.show_walls {
                             app_state.show_walls = show_walls;
-                            kcl.vertex_groups[KclFlag::Wall1 as usize].visible = show_walls;
-                            kcl.vertex_groups[KclFlag::Wall2 as usize].visible = show_walls;
-                            kcl.vertex_groups[KclFlag::WeakWall as usize].visible = show_walls;
+                            kcl_model_settings.visible[KclFlag::Wall1 as usize] = show_walls;
+                            kcl_model_settings.visible[KclFlag::Wall2 as usize] = show_walls;
+                            kcl_model_settings.visible[KclFlag::WeakWall as usize] = show_walls;
                         }
                         if show_invisible_walls != app_state.show_invisible_walls {
                             app_state.show_invisible_walls = show_invisible_walls;
-                            kcl.vertex_groups[KclFlag::InvisibleWall1 as usize].visible =
+                            kcl_model_settings.visible[KclFlag::InvisibleWall1 as usize] =
                                 show_invisible_walls;
-                            kcl.vertex_groups[KclFlag::InvisibleWall2 as usize].visible =
+                            kcl_model_settings.visible[KclFlag::InvisibleWall2 as usize] =
                                 show_invisible_walls;
                         }
                         if show_death_barriers != app_state.show_death_barriers {
                             app_state.show_death_barriers = show_death_barriers;
-                            kcl.vertex_groups[KclFlag::SolidFall as usize].visible =
+                            kcl_model_settings.visible[KclFlag::SolidFall as usize] =
                                 show_death_barriers;
-                            kcl.vertex_groups[KclFlag::FallBoundary as usize].visible =
+                            kcl_model_settings.visible[KclFlag::FallBoundary as usize] =
                                 show_death_barriers;
                         }
                         if show_effects_triggers != app_state.show_effects_triggers {
                             app_state.show_effects_triggers = show_effects_triggers;
-                            kcl.vertex_groups[KclFlag::ItemStateModifier as usize].visible =
+                            kcl_model_settings.visible[KclFlag::ItemStateModifier as usize] =
                                 show_effects_triggers;
-                            kcl.vertex_groups[KclFlag::EffectTrigger as usize].visible =
+                            kcl_model_settings.visible[KclFlag::EffectTrigger as usize] =
                                 show_effects_triggers;
-                            kcl.vertex_groups[KclFlag::SoundTrigger as usize].visible =
+                            kcl_model_settings.visible[KclFlag::SoundTrigger as usize] =
                                 show_effects_triggers;
-                            kcl.vertex_groups[KclFlag::CannonTrigger as usize].visible =
+                            kcl_model_settings.visible[KclFlag::CannonTrigger as usize] =
                                 show_effects_triggers;
                         }
                         if ui.button("Customise...").clicked() {

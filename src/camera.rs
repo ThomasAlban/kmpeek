@@ -472,7 +472,7 @@ pub fn orbit_cam(
             orbit_cam.radius -=
                 scroll * orbit_cam.radius * 0.002 * settings.orbit.scroll_sensitivity;
             // dont allow zoom to reach zero or you get stuck
-            orbit_cam.radius = f32::max(orbit_cam.radius, 0.05);
+            orbit_cam.radius = orbit_cam.radius.clamp(1., 1000000.);
         }
 
         if any {

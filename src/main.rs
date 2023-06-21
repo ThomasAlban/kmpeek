@@ -6,11 +6,9 @@ mod kmp_file;
 mod kmp_model;
 mod ui;
 
-use std::fs::File;
-
 use camera::*;
-use kcl_file::Kcl;
 use kcl_model::*;
+use kmp_model::*;
 use ui::*;
 
 use bevy::{
@@ -35,11 +33,9 @@ fn main() {
             },
             ..default()
         })
-        // this is temporary and does nothing other than allow systems to run which take in a KCL object
-        .insert_resource(Kcl::read(File::open("dry_dry_ruins.kcl").unwrap()).unwrap())
         .add_plugin(CameraPlugin)
         .add_plugin(UIPlugin)
         .add_plugin(KclPlugin)
-        // .add_plugin(KmpPlugin)
+        .add_plugin(KmpPlugin)
         .run();
 }

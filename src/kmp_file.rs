@@ -313,10 +313,10 @@ where
 /// Sections of the KMP such as ENPH (enemy paths), ITPH (item paths) all have the same data structure, so all use this Path struct.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Path {
-    start: u8,
-    group_length: u8,
-    prev_group: [u8; 6],
-    next_group: [u8; 6],
+    pub start: u8,
+    pub group_length: u8,
+    pub prev_group: [u8; 6],
+    pub next_group: [u8; 6],
 }
 impl KmpData for Path {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
@@ -414,12 +414,12 @@ impl KmpData for Enpt {
 }
 
 /// The ITPT (item point) section describes item points; the Red Shell and Bullet Bill routes. The items attempt to follow the path described by each group of points (as determined by ITPH). More than 0xFF (255) entries will force a console freeze while loading the track.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 pub struct Itpt {
-    position: Vec3,
-    bullet_bill_control: f32,
-    setting_1: u16,
-    setting_2: u16,
+    pub position: Vec3,
+    pub bullet_bill_control: f32,
+    pub setting_1: u16,
+    pub setting_2: u16,
 }
 impl KmpData for Itpt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
