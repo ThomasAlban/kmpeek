@@ -683,6 +683,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_more_shapes"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3f9aa69ca8eeb9d6e8591bf1947bf00fac70a0aeba67981af72fd375eed76d1"
+dependencies = [
+ "bevy",
+ "triangulate",
+]
+
+[[package]]
 name = "bevy_pbr"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2042,6 +2052,7 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "bevy_infinite_grid",
+ "bevy_more_shapes",
  "bytemuck",
  "byteorder",
  "num-traits",
@@ -2551,6 +2562,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ordered-float"
+version = "2.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7940cf2ca942593318d07fcf2596cdca60a85c9e7fab408a5e21a4f9dcd40d87"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "overload"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2657,6 +2677,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ppv-lite86"
+version = "0.2.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
+
+[[package]]
 name = "proc-macro-crate"
 version = "1.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2695,6 +2721,36 @@ name = "radsort"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "17fd96390ed3feda12e1dfe2645ed587e0bea749e319333f104a33ff62f77a0b"
+
+[[package]]
+name = "rand"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
+dependencies = [
+ "libc",
+ "rand_chacha",
+ "rand_core",
+]
+
+[[package]]
+name = "rand_chacha"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
+dependencies = [
+ "ppv-lite86",
+ "rand_core",
+]
+
+[[package]]
+name = "rand_core"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
+dependencies = [
+ "getrandom",
+]
 
 [[package]]
 name = "range-alloc"
@@ -3141,6 +3197,20 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "triangulate"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f737ed9bcc496b67fd1e24f63c14eace0cb9216d14bca000fd5934fddc6af7f6"
+dependencies = [
+ "backtrace",
+ "num-traits",
+ "ordered-float",
+ "rand",
+ "smallvec",
+ "zot",
 ]
 
 [[package]]
@@ -3781,3 +3851,9 @@ name = "xml-rs"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1690519550bfa95525229b9ca2350c63043a4857b3b0013811b2ccf4a2420b01"
+
+[[package]]
+name = "zot"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12a5c04eac01d1f630aa1b7375984fbbc6c3b28b0975fc90bfa3e2c58caaa727"

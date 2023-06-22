@@ -6,6 +6,7 @@ use crate::{
     file_dialog::*,
     kcl_file::*,
     kcl_model::KclModelSettings,
+    kmp_model::NormalizeScale,
 };
 use bevy::{prelude::*, render::camera::Viewport, window::PrimaryWindow};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
@@ -34,6 +35,8 @@ pub struct AppState {
     pub show_effects_triggers: bool,
 
     pub file_dialog: Option<(FileDialog, String)>,
+
+    pub point_scale: f32,
 }
 
 impl Default for AppState {
@@ -48,6 +51,8 @@ impl Default for AppState {
             show_effects_triggers: true,
 
             file_dialog: None,
+
+            point_scale: 1.,
         }
     }
 }
@@ -65,6 +70,7 @@ pub fn update_ui(
     mut ev_kmp_file_selected: EventWriter<KmpFileSelected>,
     mut ev_kcl_file_selected: EventWriter<KclFileSelected>,
     mut kcl_model_settings: ResMut<KclModelSettings>,
+    mut normalize: Query<&mut NormalizeScale>,
 
     mut fly_cam: Query<
         (&mut Camera, &mut Transform),
@@ -365,6 +371,14 @@ pub fn update_ui(
                 .default_open(true)
                 .show_background(true)
                 .show(ui, |ui| {
+                    ui.add(
+                        egui::Slider::new(&mut app_state.point_scale, 0.01..=2.)
+                            .text("Point Scale"),
+                    );
+                    for mut normalize in normalize.iter_mut() {
+                        normalize.multiplier = app_state.point_scale;
+                    }
+
                     ui.collapsing("Collision Model", |ui| {
                         let (
                             mut show_walls,

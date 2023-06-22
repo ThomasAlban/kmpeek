@@ -152,9 +152,9 @@ pub struct TopDownSettings {
 impl Default for TopDownSettings {
     fn default() -> Self {
         Self {
-            start_pos: vec3(0., 10000., 0.),
-            near: 0.00001,
-            far: 100000.,
+            start_pos: vec3(0., 100000., 0.),
+            near: 0.000001,
+            far: 1000000.,
             scale: 100.,
             move_sensitivity: 1.,
             scroll_sensitivity: 1.,
