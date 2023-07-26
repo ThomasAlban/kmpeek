@@ -16,11 +16,11 @@ pub struct UIPlugin;
 
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(EguiPlugin)
+        app.add_plugins(EguiPlugin)
             .init_resource::<AppState>()
             .add_event::<KmpFileSelected>()
             .add_event::<KclFileSelected>()
-            .add_system(update_ui);
+            .add_systems(Update, update_ui);
     }
 }
 
@@ -57,7 +57,10 @@ impl Default for AppState {
     }
 }
 
+#[derive(Event)]
 pub struct KmpFileSelected(pub PathBuf);
+
+#[derive(Event)]
 pub struct KclFileSelected(pub PathBuf);
 
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
@@ -130,12 +133,12 @@ pub fn update_ui(
 
     // keybinds
     if (!cfg!(target_os = "macos")
-        && (keys.pressed(KeyCode::LControl) || keys.pressed(KeyCode::RControl)))
+        && (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight)))
         || (cfg!(target_os = "macos")
             // L/RWin maps to Command on Macos
-            && (keys.pressed(KeyCode::LWin) || keys.pressed(KeyCode::RWin)))
+            && (keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight)))
     {
-        if keys.pressed(KeyCode::LShift) || keys.pressed(KeyCode::RShift) {
+        if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
             // keybinds with shift held
             if keys.just_pressed(KeyCode::Z) {
                 redo!();

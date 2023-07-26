@@ -33,9 +33,6 @@ fn main() {
             },
             ..default()
         })
-        .add_plugin(CameraPlugin)
-        .add_plugin(UIPlugin)
-        .add_plugin(KclPlugin)
-        .add_plugin(KmpPlugin)
+        .add_plugins((CameraPlugin, UIPlugin, KclPlugin, KmpPlugin))
         .run();
 }

@@ -7,8 +7,7 @@ pub struct KclPlugin;
 impl Plugin for KclPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<KclModelSettings>()
-            .add_system(spawn_model)
-            .add_system(update_kcl_model);
+            .add_systems(Update, (spawn_model, update_kcl_model));
     }
 }
 
