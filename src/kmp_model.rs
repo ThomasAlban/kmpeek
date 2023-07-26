@@ -11,7 +11,7 @@ pub struct KmpPlugin;
 
 impl Plugin for KmpPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system(spawn_model).add_system(normalize_scale);
+        app.add_systems(Update, (spawn_model, normalize_scale));
     }
 }
 

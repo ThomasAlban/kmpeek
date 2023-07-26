@@ -10,14 +10,19 @@ pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CameraSettings>()
-            .add_startup_system(camera_setup)
-            .add_plugin(InfiniteGridPlugin)
-            .add_system(cursor_grab)
-            .add_system(update_active_camera)
-            .add_system(fly_cam_look)
-            .add_system(fly_cam_move)
-            .add_system(orbit_cam)
-            .add_system(top_down_cam);
+            .add_systems(Startup, camera_setup)
+            .add_plugins(InfiniteGridPlugin)
+            .add_systems(
+                Update,
+                (
+                    cursor_grab,
+                    update_active_camera,
+                    fly_cam_look,
+                    fly_cam_move,
+                    orbit_cam,
+                    top_down_cam,
+                ),
+            );
     }
 }
 
@@ -102,7 +107,7 @@ impl Default for FlyKeyBindings {
             move_right: vec![KeyCode::D, KeyCode::Right],
             move_ascend: vec![KeyCode::E, KeyCode::PageUp],
             move_descend: vec![KeyCode::Q, KeyCode::PageDown],
-            speed_boost: vec![KeyCode::LShift, KeyCode::RShift],
+            speed_boost: vec![KeyCode::ShiftLeft, KeyCode::ShiftRight],
             mouse_button: MouseButton::Right,
         }
     }
@@ -135,7 +140,7 @@ impl Default for OrbitKeyBindings {
     fn default() -> Self {
         Self {
             mouse_button: MouseButton::Right,
-            pan: vec![KeyCode::LShift, KeyCode::RShift],
+            pan: vec![KeyCode::ShiftLeft, KeyCode::ShiftRight],
         }
     }
 }
