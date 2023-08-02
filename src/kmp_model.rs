@@ -41,6 +41,8 @@ pub fn spawn_model(
         let kmp_file = File::open(ev.0.clone()).unwrap();
         let kmp = Kmp::read(kmp_file).unwrap();
 
+        commands.insert_resource(kmp.clone());
+
         let mut path = ev.0.clone();
         path.pop();
         path.push("course.kcl");
@@ -48,6 +50,7 @@ pub fn spawn_model(
             ev_kcl_file_selected.send(KclFileSelected(path));
         }
 
+        // meshes for the kmp model
         let sphere = meshes.add(
             shape::UVSphere {
                 radius: 100.,
@@ -55,7 +58,7 @@ pub fn spawn_model(
             }
             .into(),
         );
-        let cylinder = meshes.add(
+        let cylinder_mesh = meshes.add(
             shape::Cylinder {
                 radius: 100.,
                 height: 1.,
@@ -63,12 +66,13 @@ pub fn spawn_model(
             }
             .into(),
         );
-        let cone = meshes.add(Mesh::from(Cone {
+        let cone_mesh = meshes.add(Mesh::from(Cone {
             radius: 100.,
             height: 200.,
             segments: 32,
         }));
 
+        // materials
         let sphere_material = materials.add(StandardMaterial {
             base_color: Color::RED,
             unlit: true,
@@ -91,11 +95,13 @@ pub fn spawn_model(
         });
 
         for group in kmp.itph.entries.iter() {
+            // this contains the points of the current group
             let mut points = Vec::new();
             for i in group.start..(group.start + group.group_length) {
-                points.push(kmp.itpt.entries[i as usize]);
+                points.push(kmp.itpt.entries[i as usize].clone());
             }
             for (i, point) in points.iter().enumerate() {
+                // spawn the spheres where each point is
                 commands.spawn((
                     PbrBundle {
                         mesh: sphere.clone(),
@@ -106,83 +112,81 @@ pub fn spawn_model(
                     NormalizeScale::new(200., 12., Vec3::ONE),
                     KmpModelSection,
                 ));
-
+                // if we are not at the end of the group
                 if i < points.len() - 1 {
-                    let p1 = point.position;
-                    let p2 = points[i + 1].position;
-                    let len = p1.distance(p2);
-                    let mut line_transform =
-                        Transform::from_translation((p1 + p2) / 2.).looking_at(p2, Vec3::Y);
-                    line_transform.scale.y = len;
-                    line_transform.rotate_local_x(f32::to_radians(90.));
-                    commands.spawn((
-                        PbrBundle {
-                            mesh: cylinder.clone(),
-                            material: group_line_material.clone(),
-                            transform: line_transform,
-                            ..default()
-                        },
-                        NormalizeScale::new(200., 8., Vec3::X + Vec3::Z),
-                        KmpModelSection,
-                    ));
-
-                    let mut arrowhead_transform =
-                        Transform::from_translation(p1.lerp(p2, 0.5)).looking_at(p2, Vec3::Y);
-                    arrowhead_transform.rotate_local_x(f32::to_radians(-90.));
-                    commands.spawn((
-                        PbrBundle {
-                            mesh: cone.clone(),
-                            material: cone_material.clone(),
-                            transform: arrowhead_transform,
-                            ..default()
-                        },
-                        NormalizeScale::new(200., 20., Vec3::ONE),
-                        KmpModelSection,
-                    ));
+                    spawn_arrow_line(
+                        &mut commands,
+                        cylinder_mesh.clone(),
+                        group_line_material.clone(),
+                        cone_mesh.clone(),
+                        cone_material.clone(),
+                        point.position,
+                        points[i + 1].position,
+                    );
                 } else if i == points.len() - 1 {
+                    // draw a join line
                     for next_group_index in group.next_group {
                         if next_group_index as usize > kmp.itph.entries.len() {
                             continue;
                         }
                         let start_index = kmp.itph.entries[next_group_index as usize].start;
 
-                        let p1 = point.position;
-                        let p2 = kmp.itpt.entries[start_index as usize].position;
-                        let len = p1.distance(p2);
-                        let mut transform =
-                            Transform::from_translation((p1 + p2) / 2.).looking_at(p2, Vec3::Y);
-                        transform.scale.y = len;
-                        transform.rotate_local_x(f32::to_radians(90.));
-                        commands.spawn((
-                            PbrBundle {
-                                mesh: cylinder.clone(),
-                                material: join_line_material.clone(),
-                                transform,
-                                ..default()
-                            },
-                            NormalizeScale::new(200., 8., Vec3::X + Vec3::Z),
-                            KmpModelSection,
-                        ));
-
-                        let mut arrowhead_transform =
-                            Transform::from_translation(p1.lerp(p2, 0.5)).looking_at(p2, Vec3::Y);
-                        arrowhead_transform.rotate_local_x(f32::to_radians(-90.));
-                        commands.spawn((
-                            PbrBundle {
-                                mesh: cone.clone(),
-                                material: cone_material.clone(),
-                                transform: arrowhead_transform,
-                                ..default()
-                            },
-                            NormalizeScale::new(200., 20., Vec3::ONE),
-                            KmpModelSection,
-                        ));
+                        spawn_arrow_line(
+                            &mut commands,
+                            cylinder_mesh.clone(),
+                            join_line_material.clone(),
+                            cone_mesh.clone(),
+                            cone_material.clone(),
+                            point.position,
+                            kmp.itpt.entries[start_index as usize].position,
+                        );
                     }
                 }
             }
         }
         commands.insert_resource(kmp);
     }
+}
+
+fn spawn_arrow_line(
+    commands: &mut Commands,
+    cylinder_mesh: Handle<Mesh>,
+    cylinder_material: Handle<StandardMaterial>,
+    cone_mesh: Handle<Mesh>,
+    cone_material: Handle<StandardMaterial>,
+
+    p1: Vec3,
+    p2: Vec3,
+) {
+    let len = p1.distance(p2);
+    let mut line_transform = Transform::from_translation((p1 + p2) / 2.).looking_at(p2, Vec3::Y);
+    line_transform.scale.y = len;
+    line_transform.rotate_local_x(f32::to_radians(90.));
+    // spawn the line (cylinder)
+    commands.spawn((
+        PbrBundle {
+            mesh: cylinder_mesh,
+            material: cylinder_material,
+            transform: line_transform,
+            ..default()
+        },
+        NormalizeScale::new(200., 8., Vec3::X + Vec3::Z),
+        KmpModelSection,
+    ));
+
+    let mut arrowhead_transform =
+        Transform::from_translation(p1.lerp(p2, 0.5)).looking_at(p2, Vec3::Y);
+    arrowhead_transform.rotate_local_x(f32::to_radians(-90.));
+    commands.spawn((
+        PbrBundle {
+            mesh: cone_mesh,
+            material: cone_material,
+            transform: arrowhead_transform,
+            ..default()
+        },
+        NormalizeScale::new(200., 20., Vec3::ONE),
+        KmpModelSection,
+    ));
 }
 
 /// Marker struct that marks entities with meshes that should be scaled relative to the camera.

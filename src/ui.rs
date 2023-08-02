@@ -6,6 +6,7 @@ use crate::{
     file_dialog::*,
     kcl_file::*,
     kcl_model::KclModelSettings,
+    kmp_file::Kmp,
     kmp_model::NormalizeScale,
 };
 use bevy::{prelude::*, render::camera::Viewport, window::PrimaryWindow};
@@ -37,6 +38,8 @@ pub struct AppState {
     pub file_dialog: Option<(FileDialog, String)>,
 
     pub point_scale: f32,
+
+    pub position_test: Vec3,
 }
 
 impl Default for AppState {
@@ -53,6 +56,8 @@ impl Default for AppState {
             file_dialog: None,
 
             point_scale: 1.,
+
+            position_test: Vec3::ZERO,
         }
     }
 }
@@ -74,6 +79,8 @@ pub fn update_ui(
     mut ev_kcl_file_selected: EventWriter<KclFileSelected>,
     mut kcl_model_settings: ResMut<KclModelSettings>,
     mut normalize: Query<&mut NormalizeScale>,
+
+    mut kmp: Option<ResMut<Kmp>>,
 
     mut fly_cam: Query<
         (&mut Camera, &mut Transform),
@@ -448,6 +455,18 @@ pub fn update_ui(
                             app_state.camera_settings_open = true;
                         }
                     });
+
+                    if let Some(mut kmp) = kmp {
+                        ui.add(
+                            egui::DragValue::new(&mut kmp.itpt.entries[0].position.x).speed(20.),
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut kmp.itpt.entries[0].position.y).speed(20.),
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut kmp.itpt.entries[0].position.z).speed(20.),
+                        );
+                    }
                 });
 
             ui.separator();

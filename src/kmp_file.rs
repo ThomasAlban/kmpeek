@@ -59,7 +59,7 @@ pub trait KmpData {
 }
 
 /// stores all the data of the KMP file
-#[derive(Debug, Serialize, Deserialize, Resource)]
+#[derive(Debug, Serialize, Deserialize, Resource, Clone)]
 pub struct Kmp {
     pub header: Header,
     pub ktpt: Section<Ktpt>,
@@ -164,7 +164,7 @@ impl Kmp {
 }
 
 /// The header, which contains general information about the KMP
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Header {
     file_magic: String,
     file_len: u32,
@@ -233,7 +233,7 @@ impl KmpData for Header {
 }
 
 /// Each section has a header containing its info (like the name and number of entries)
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct SectionHeader {
     section_name: String,
     num_entries: u16,
@@ -271,7 +271,7 @@ impl KmpData for SectionHeader {
 }
 
 /// A generic type for a section of a KMP - each section contains a header, and a number of entries.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Section<T>
 where
     T: KmpData,
@@ -311,7 +311,7 @@ where
 }
 
 /// Sections of the KMP such as ENPH (enemy paths), ITPH (item paths) all have the same data structure, so all use this Path struct.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Path {
     pub start: u8,
     pub group_length: u8,
@@ -346,7 +346,7 @@ impl KmpData for Path {
 }
 
 /// The KTPT (kart point) section describes kart points; the starting position for racers.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Ktpt {
     position: Vec3,
     rotation: Vec3,
@@ -377,7 +377,7 @@ impl KmpData for Ktpt {
 }
 
 /// The ENPT (enemy point) section describes enemy points; the routes of CPU racers. The CPU racers attempt to follow the path described by each group of points (as determined by ENPH). More than 0xFF (255) entries will force a console freeze while loading the track.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Enpt {
     pub position: Vec3,
     leniency: f32,
@@ -414,7 +414,7 @@ impl KmpData for Enpt {
 }
 
 /// The ITPT (item point) section describes item points; the Red Shell and Bullet Bill routes. The items attempt to follow the path described by each group of points (as determined by ITPH). More than 0xFF (255) entries will force a console freeze while loading the track.
-#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Component)]
 pub struct Itpt {
     pub position: Vec3,
     pub bullet_bill_control: f32,
@@ -447,7 +447,7 @@ impl KmpData for Itpt {
 }
 
 /// The CKPT (checkpoint) section describes checkpoints; the routes players must follow to count laps. The racers must follow the path described by each group of points (as determined by CKPH). More than 0xFF (255) entries are possible if the last group begins at index ≤254. This is not recommended because Lakitu will always appear on-screen.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Ckpt {
     cp_left: [f32; 2],
     cp_right: [f32; 2],
@@ -490,7 +490,7 @@ impl KmpData for Ckpt {
 }
 
 /// The GOBJ (geo object) section describes objects; things such as item boxes, pipes and also controlled objects such as sound triggers.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Gobj {
     pub object_id: u16,
     /// this is part of the extended presence flags, but the value must be 0 if the object does not use this extension
@@ -540,7 +540,7 @@ impl KmpData for Gobj {
 }
 
 /// Each POTI entry can contain a number of POTI entries/points.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct PotiPoint {
     position: Vec3,
     setting_1: u16,
@@ -569,7 +569,7 @@ impl KmpData for PotiPoint {
 }
 
 /// The POTI (point information) section describes routes; these are routes for many things including cameras and objects.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Poti {
     num_points: u16,
     setting_1: u8,
@@ -607,7 +607,7 @@ impl KmpData for Poti {
 }
 
 /// The AREA (area) section describes areas; used to determine which camera to use, for example. The size is 5000 for both the positive and negative sides of the X and Z-axes, and 10000 for only the positive side of the Y-axis.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Area {
     shape: u8,
     kind: u8,
@@ -670,7 +670,7 @@ impl KmpData for Area {
 }
 
 /// The CAME (camera) section describes cameras; used to determine cameras for starting routes, Time Trial pans, etc.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Came {
     kind: u8,
     next_index: u8,
@@ -751,7 +751,7 @@ impl KmpData for Came {
 }
 
 /// The JGPT (jugem point) section describes "Jugem" points; the respawn positions. The index is relevant for the link of the CKPT section.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Jgpt {
     position: Vec3,
     rotation: Vec3,
@@ -784,7 +784,7 @@ impl KmpData for Jgpt {
 }
 
 /// The CNPT (cannon point) section describes cannon points; the cannon target positions.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Cnpt {
     position: Vec3,
     angle: Vec3,
@@ -817,7 +817,7 @@ impl KmpData for Cnpt {
 }
 
 /// The MSPT (mission success point) section describes end positions. After battles and tournaments have ended, the players are placed on this point(s).
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Mspt {
     position: Vec3,
     angle: Vec3,
@@ -850,7 +850,7 @@ impl KmpData for Mspt {
 }
 
 /// The STGI (stage info) section describes stage information; information about a track.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Stgi {
     pub lap_count: u8,
     pub pole_pos: u8,
