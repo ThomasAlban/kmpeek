@@ -7,11 +7,11 @@ use crate::{
     kcl_file::*,
     kcl_model::KclModelSettings,
     kmp_file::Kmp,
-    kmp_model::NormalizeScale,
+    kmp_model::{ItptModel, NormalizeScale},
 };
 use bevy::{prelude::*, render::camera::Viewport, window::PrimaryWindow};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
-use std::path::PathBuf;
+use std::{fs::File, path::PathBuf};
 
 pub struct UIPlugin;
 
@@ -36,6 +36,7 @@ pub struct AppState {
     pub show_effects_triggers: bool,
 
     pub file_dialog: Option<(FileDialog, String)>,
+    pub kmp_file_path: Option<PathBuf>,
 
     pub point_scale: f32,
 
@@ -54,6 +55,7 @@ impl Default for AppState {
             show_effects_triggers: true,
 
             file_dialog: None,
+            kmp_file_path: None,
 
             point_scale: 1.,
 
@@ -79,6 +81,16 @@ pub fn update_ui(
     mut ev_kcl_file_selected: EventWriter<KclFileSelected>,
     mut kcl_model_settings: ResMut<KclModelSettings>,
     mut normalize: Query<&mut NormalizeScale>,
+
+    mut itpt: Query<
+        (&mut Transform, &ItptModel),
+        (
+            With<ItptModel>,
+            Without<FlyCam>,
+            Without<OrbitCam>,
+            Without<TopDownCam>,
+        ),
+    >,
 
     mut kmp: Option<ResMut<Kmp>>,
 
@@ -137,6 +149,14 @@ pub fn update_ui(
             println!("redo");
         };
     }
+    macro_rules! save {
+        () => {
+            if let (Some(kmp_file_path), Some(ref mut kmp)) = (&app_state.kmp_file_path, &mut kmp) {
+                let kmp_file = File::create(kmp_file_path).unwrap();
+                kmp.write(kmp_file).unwrap();
+            }
+        };
+    }
 
     // keybinds
     if (!cfg!(target_os = "macos")
@@ -145,6 +165,7 @@ pub fn update_ui(
             // L/RWin maps to Command on Macos
             && (keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight)))
     {
+        // ^ if the control/command key is pressed:
         if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
             // keybinds with shift held
             if keys.just_pressed(KeyCode::Z) {
@@ -155,6 +176,8 @@ pub fn update_ui(
         // keybinds without shift held
         } else if keys.just_pressed(KeyCode::O) {
             open_file!("kmp");
+        } else if keys.just_pressed(KeyCode::S) {
+            save!();
         } else if keys.just_pressed(KeyCode::Z) {
             undo!();
         }
@@ -164,6 +187,7 @@ pub fn update_ui(
         if dialog.0.show(ctx).selected() {
             if let Some(file) = dialog.0.path() {
                 if dialog.1 == "kmp" {
+                    app_state.kmp_file_path = Some(file.clone());
                     ev_kmp_file_selected.send(KmpFileSelected(file));
                 } else if dialog.1 == "kcl" {
                     ev_kcl_file_selected.send(KclFileSelected(file));
@@ -190,6 +214,12 @@ pub fn update_ui(
                     .clicked()
                 {
                     open_file!("kcl");
+                }
+                if ui
+                    .add(egui::Button::new("Save").shortcut_text(format!("{sc_btn}+S")))
+                    .clicked()
+                {
+                    save!();
                 }
             });
             ui.menu_button("Edit", |ui| {
@@ -456,16 +486,13 @@ pub fn update_ui(
                         }
                     });
 
-                    if let Some(mut kmp) = kmp {
-                        ui.add(
-                            egui::DragValue::new(&mut kmp.itpt.entries[0].position.x).speed(20.),
-                        );
-                        ui.add(
-                            egui::DragValue::new(&mut kmp.itpt.entries[0].position.y).speed(20.),
-                        );
-                        ui.add(
-                            egui::DragValue::new(&mut kmp.itpt.entries[0].position.z).speed(20.),
-                        );
+                    for mut point in itpt.iter_mut() {
+                        ui.horizontal(|ui| {
+                            ui.label(point.1.to_string());
+                            ui.add(egui::DragValue::new(&mut point.0.translation.x).speed(20.));
+                            ui.add(egui::DragValue::new(&mut point.0.translation.y).speed(20.));
+                            ui.add(egui::DragValue::new(&mut point.0.translation.z).speed(20.));
+                        });
                     }
                 });
 

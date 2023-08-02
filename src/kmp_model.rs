@@ -11,12 +11,15 @@ pub struct KmpPlugin;
 
 impl Plugin for KmpPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (spawn_model, normalize_scale));
+        app.add_systems(Update, (spawn_model, normalize_scale, update_itpt));
     }
 }
 
 #[derive(Component)]
 pub struct KmpModelSection;
+
+#[derive(Component, Deref)]
+pub struct ItptModel(pub usize);
 
 #[allow(clippy::comparison_chain)]
 pub fn spawn_model(
@@ -98,7 +101,7 @@ pub fn spawn_model(
             // this contains the points of the current group
             let mut points = Vec::new();
             for i in group.start..(group.start + group.group_length) {
-                points.push(kmp.itpt.entries[i as usize].clone());
+                points.push((kmp.itpt.entries[i as usize].clone(), i as usize));
             }
             for (i, point) in points.iter().enumerate() {
                 // spawn the spheres where each point is
@@ -106,11 +109,12 @@ pub fn spawn_model(
                     PbrBundle {
                         mesh: sphere.clone(),
                         material: sphere_material.clone(),
-                        transform: Transform::from_translation(point.position),
+                        transform: Transform::from_translation(point.0.position),
                         ..default()
                     },
                     NormalizeScale::new(200., 12., Vec3::ONE),
                     KmpModelSection,
+                    ItptModel(point.1),
                 ));
                 // if we are not at the end of the group
                 if i < points.len() - 1 {
@@ -120,8 +124,8 @@ pub fn spawn_model(
                         group_line_material.clone(),
                         cone_mesh.clone(),
                         cone_material.clone(),
-                        point.position,
-                        points[i + 1].position,
+                        point.0.position,
+                        points[i + 1].0.position,
                     );
                 } else if i == points.len() - 1 {
                     // draw a join line
@@ -137,7 +141,7 @@ pub fn spawn_model(
                             join_line_material.clone(),
                             cone_mesh.clone(),
                             cone_material.clone(),
-                            point.position,
+                            point.0.position,
                             kmp.itpt.entries[start_index as usize].position,
                         );
                     }
@@ -187,6 +191,14 @@ fn spawn_arrow_line(
         NormalizeScale::new(200., 20., Vec3::ONE),
         KmpModelSection,
     ));
+}
+
+fn update_itpt(query: Query<(&Transform, &ItptModel), With<ItptModel>>, kmp: Option<ResMut<Kmp>>) {
+    if let Some(mut kmp) = kmp {
+        for point in query.iter() {
+            kmp.itpt.entries[point.1 .0].position = point.0.translation;
+        }
+    }
 }
 
 /// Marker struct that marks entities with meshes that should be scaled relative to the camera.
