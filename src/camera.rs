@@ -2,15 +2,18 @@ use bevy::{
     input::mouse::{MouseMotion, MouseWheel},
     math::vec3,
     prelude::*,
+    render::camera::RenderTarget,
     window::{CursorGrabMode, PrimaryWindow},
 };
 use bevy_infinite_grid::{GridShadowCamera, InfiniteGrid, InfiniteGridBundle, InfiniteGridPlugin};
+
+use crate::ui::{SetupAppStateSet, ViewportImage};
 
 pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CameraSettings>()
-            .add_systems(Startup, camera_setup)
+            .add_systems(Startup, camera_setup.after(SetupAppStateSet))
             .add_plugins(InfiniteGridPlugin)
             .add_systems(
                 Update,
@@ -178,7 +181,7 @@ impl Default for TopDownKeyBindings {
     }
 }
 
-pub fn camera_setup(mut commands: Commands) {
+pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
     commands.spawn(InfiniteGridBundle {
         transform: Transform::from_scale(Vec3::ONE * 0.001),
         grid: InfiniteGrid {
@@ -196,13 +199,14 @@ pub fn camera_setup(mut commands: Commands) {
     let orbit_default = OrbitSettings::default();
     let topdown_default = TopDownSettings::default();
 
-    let inactive = Camera {
-        is_active: false,
-        ..default()
-    };
     commands
         .spawn((
             Camera3dBundle {
+                camera: Camera {
+                    // render to the image
+                    target: RenderTarget::Image(viewport.clone()),
+                    ..default()
+                },
                 transform: Transform::from_translation(fly_default.start_pos)
                     .looking_at(Vec3::ZERO, Vec3::Y),
                 ..default()
@@ -212,9 +216,14 @@ pub fn camera_setup(mut commands: Commands) {
         .insert(GridShadowCamera);
     commands.spawn((
         Camera3dBundle {
+            camera: Camera {
+                // render to the image
+                target: RenderTarget::Image(viewport.clone()),
+                is_active: false,
+                ..default()
+            },
             transform: Transform::from_translation(orbit_default.start_pos)
                 .looking_at(Vec3::ZERO, Vec3::Y),
-            camera: inactive.clone(),
             ..default()
         },
         OrbitCam {
@@ -224,13 +233,18 @@ pub fn camera_setup(mut commands: Commands) {
     ));
     commands.spawn((
         Camera3dBundle {
+            camera: Camera {
+                // render to the image
+                target: RenderTarget::Image(viewport.clone()),
+                is_active: false,
+                ..default()
+            },
             projection: Projection::Orthographic(OrthographicProjection {
                 near: topdown_default.near,
                 far: topdown_default.far,
                 scale: topdown_default.scale,
                 ..default()
             }),
-            camera: inactive,
             transform: Transform::from_translation(topdown_default.start_pos)
                 .looking_at(Vec3::ZERO, Vec3::Z),
             ..default()

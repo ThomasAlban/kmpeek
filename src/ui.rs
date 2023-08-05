@@ -7,20 +7,39 @@ use crate::{
     kcl_file::*,
     kcl_model::KclModelSettings,
     kmp_file::Kmp,
-    kmp_model::{ItptModel, NormalizeScale},
+    kmp_model::NormalizeScale,
 };
-use bevy::{prelude::*, render::camera::Viewport, window::PrimaryWindow};
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
+use bevy::{
+    math::vec2,
+    prelude::*,
+    render::render_resource::{
+        Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
+    },
+    window::PrimaryWindow,
+};
+use bevy_egui::{
+    egui::{self, TextureId},
+    EguiContexts, EguiPlugin, EguiUserTextures,
+};
+use egui_dock::{DockArea, NodeIndex, Style, Tree};
 use std::{fs::File, path::PathBuf};
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
+pub struct SetupAppStateSet;
 
 pub struct UIPlugin;
 
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(EguiPlugin)
-            .init_resource::<AppState>()
             .add_event::<KmpFileSelected>()
             .add_event::<KclFileSelected>()
+            .add_systems(
+                Startup,
+                (setup_app_state, apply_deferred)
+                    .chain()
+                    .in_set(SetupAppStateSet),
+            )
             .add_systems(Update, update_ui);
     }
 }
@@ -39,29 +58,74 @@ pub struct AppState {
     pub kmp_file_path: Option<PathBuf>,
 
     pub point_scale: f32,
-
-    pub position_test: Vec3,
 }
 
-impl Default for AppState {
-    fn default() -> Self {
-        Self {
-            customise_kcl_open: false,
-            camera_settings_open: false,
+#[derive(Deref, DerefMut, Resource)]
+pub struct DockTree(Tree<String>);
 
-            show_walls: true,
-            show_invisible_walls: true,
-            show_death_barriers: true,
-            show_effects_triggers: true,
+// stores the image which the camera renders to, so that we can display a viewport inside a tab
+#[derive(Deref, Resource)]
+pub struct ViewportImage(Handle<Image>);
 
-            file_dialog: None,
-            kmp_file_path: None,
+pub fn setup_app_state(
+    mut commands: Commands,
+    mut egui_user_textures: ResMut<EguiUserTextures>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    // default size (will be immediately overwritten)
+    let size = Extent3d {
+        width: 512,
+        height: 512,
+        ..default()
+    };
 
-            point_scale: 1.,
+    // this is the texture that will be rendered to
+    let mut image: Image = Image {
+        texture_descriptor: TextureDescriptor {
+            label: None,
+            size,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Bgra8UnormSrgb,
+            mip_level_count: 1,
+            sample_count: 1,
+            usage: TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_DST
+                | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        },
+        ..default()
+    };
 
-            position_test: Vec3::ZERO,
-        }
-    }
+    // fill image.data with zeroes
+    image.resize(size);
+
+    // create a handle to the image
+    let image_handle = images.add(image);
+    egui_user_textures.add_image(image_handle.clone());
+
+    commands.insert_resource(ViewportImage(image_handle));
+
+    // create the docktree
+    let mut tree = Tree::new(vec!["Viewport".to_owned()]);
+    tree.split_left(NodeIndex::root(), 0.2, vec!["Edit".to_owned()]);
+    commands.insert_resource(DockTree(tree));
+
+    let app_state = AppState {
+        customise_kcl_open: false,
+        camera_settings_open: false,
+
+        show_walls: true,
+        show_invisible_walls: true,
+        show_death_barriers: true,
+        show_effects_triggers: true,
+
+        file_dialog: None,
+        kmp_file_path: None,
+
+        point_scale: 1.,
+    };
+
+    commands.insert_resource(app_state);
 }
 
 #[derive(Event)]
@@ -69,6 +133,125 @@ pub struct KmpFileSelected(pub PathBuf);
 
 #[derive(Event)]
 pub struct KclFileSelected(pub PathBuf);
+
+// this tells egui how to render each tab
+#[allow(clippy::type_complexity)]
+struct TabViewer<'a> {
+    // add into here any data that needs to be passed into any tabs
+    viewport_image: &'a mut Image,
+    viewport_tex_id: TextureId,
+    window_scale_factor: f64,
+
+    app_state: &'a mut AppState,
+    kcl_model_settings: &'a mut KclModelSettings,
+    camera_settings: &'a mut CameraSettings,
+}
+impl egui_dock::TabViewer for TabViewer<'_> {
+    // each tab will be distinguished by a string - its name
+    type Tab = String;
+    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
+        // we can do different things inside the tab depending on its name
+        match tab.as_str() {
+            "Viewport" => {
+                let viewport_size = vec2(ui.available_width(), ui.available_height());
+                // resize the viewport if needed
+                if self.viewport_image.size().as_uvec2() != viewport_size.as_uvec2() {
+                    let size = Extent3d {
+                        width: viewport_size.x as u32 * self.window_scale_factor as u32,
+                        height: viewport_size.y as u32 * self.window_scale_factor as u32,
+                        ..default()
+                    };
+                    self.viewport_image.resize(size);
+                }
+                // show the viewport image
+                ui.image(self.viewport_tex_id, viewport_size.to_array());
+            }
+            "Edit" => {
+                ui.add(
+                    egui::Slider::new(&mut self.app_state.point_scale, 0.01..=2.)
+                        .text("Point Scale"),
+                );
+
+                ui.collapsing("Collision Model", |ui| {
+                    let (
+                        mut show_walls,
+                        mut show_invisible_walls,
+                        mut show_death_barriers,
+                        mut show_effects_triggers,
+                    ) = (
+                        self.app_state.show_walls,
+                        self.app_state.show_invisible_walls,
+                        self.app_state.show_death_barriers,
+                        self.app_state.show_effects_triggers,
+                    );
+                    ui.checkbox(&mut show_walls, "Show Walls");
+                    ui.checkbox(&mut show_invisible_walls, "Show Invisible Walls");
+                    ui.checkbox(&mut show_death_barriers, "Show Death Barriers");
+                    ui.checkbox(&mut show_effects_triggers, "Show Effects & Triggers");
+                    if show_walls != self.app_state.show_walls {
+                        self.app_state.show_walls = show_walls;
+                        self.kcl_model_settings.visible[KclFlag::Wall1 as usize] = show_walls;
+                        self.kcl_model_settings.visible[KclFlag::Wall2 as usize] = show_walls;
+                        self.kcl_model_settings.visible[KclFlag::WeakWall as usize] = show_walls;
+                    }
+                    if show_invisible_walls != self.app_state.show_invisible_walls {
+                        self.app_state.show_invisible_walls = show_invisible_walls;
+                        self.kcl_model_settings.visible[KclFlag::InvisibleWall1 as usize] =
+                            show_invisible_walls;
+                        self.kcl_model_settings.visible[KclFlag::InvisibleWall2 as usize] =
+                            show_invisible_walls;
+                    }
+                    if show_death_barriers != self.app_state.show_death_barriers {
+                        self.app_state.show_death_barriers = show_death_barriers;
+                        self.kcl_model_settings.visible[KclFlag::SolidFall as usize] =
+                            show_death_barriers;
+                        self.kcl_model_settings.visible[KclFlag::FallBoundary as usize] =
+                            show_death_barriers;
+                    }
+                    if show_effects_triggers != self.app_state.show_effects_triggers {
+                        self.app_state.show_effects_triggers = show_effects_triggers;
+                        self.kcl_model_settings.visible[KclFlag::ItemStateModifier as usize] =
+                            show_effects_triggers;
+                        self.kcl_model_settings.visible[KclFlag::EffectTrigger as usize] =
+                            show_effects_triggers;
+                        self.kcl_model_settings.visible[KclFlag::SoundTrigger as usize] =
+                            show_effects_triggers;
+                        self.kcl_model_settings.visible[KclFlag::CannonTrigger as usize] =
+                            show_effects_triggers;
+                    }
+                    if ui.button("Customise...").clicked() {
+                        self.app_state.customise_kcl_open = true;
+                    }
+                });
+
+                ui.collapsing("Camera", |ui| {
+                    ui.horizontal(|ui| {
+                        let mut mode = self.camera_settings.mode;
+                        ui.selectable_value(&mut mode, CameraMode::Fly, "Fly");
+                        ui.selectable_value(&mut mode, CameraMode::Orbit, "Orbit");
+                        ui.selectable_value(&mut mode, CameraMode::TopDown, "Top Down");
+                        if self.camera_settings.mode != mode {
+                            self.camera_settings.mode = mode;
+                        }
+                    });
+                    if ui.button("Camera Settings...").clicked() {
+                        self.app_state.camera_settings_open = true;
+                    }
+                });
+
+                ui.separator();
+            }
+            // any other tab will just show this basic default UI
+            _ => {
+                ui.label(format!("Content of {tab}"));
+            }
+        };
+    }
+    // show the title of the tab - the 'Tab' type already stores its title anyway
+    fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
+        (&*tab).into()
+    }
+}
 
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn update_ui(
@@ -80,47 +263,52 @@ pub fn update_ui(
     mut ev_kmp_file_selected: EventWriter<KmpFileSelected>,
     mut ev_kcl_file_selected: EventWriter<KclFileSelected>,
     mut kcl_model_settings: ResMut<KclModelSettings>,
-    mut normalize: Query<&mut NormalizeScale>,
 
-    mut itpt: Query<
-        (&mut Transform, &ItptModel),
-        (
-            With<ItptModel>,
-            Without<FlyCam>,
-            Without<OrbitCam>,
-            Without<TopDownCam>,
-        ),
-    >,
+    mut normalize: Query<&mut NormalizeScale>,
 
     mut kmp: Option<ResMut<Kmp>>,
 
-    mut fly_cam: Query<
-        (&mut Camera, &mut Transform),
-        (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>),
-    >,
-    mut orbit_cam: Query<
-        (&mut Camera, &mut Transform),
-        (Without<FlyCam>, With<OrbitCam>, Without<TopDownCam>),
-    >,
-    mut topdown_cam: Query<
-        (&mut Camera, &mut Transform, &mut Projection),
-        (Without<FlyCam>, Without<OrbitCam>, With<TopDownCam>),
-    >,
+    mut cams: (
+        // fly cam
+        Query<&mut Transform, (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>)>,
+        // orbit cam
+        Query<&mut Transform, (Without<FlyCam>, With<OrbitCam>, Without<TopDownCam>)>,
+        // topdown cam
+        Query<
+            (&mut Transform, &mut Projection),
+            (Without<FlyCam>, Without<OrbitCam>, With<TopDownCam>),
+        >,
+    ),
+
+    mut image_assets: ResMut<Assets<Image>>,
+    mut tree: ResMut<DockTree>,
+    viewport: ResMut<ViewportImage>,
 ) {
     // get variables for camera and window
-    let ctx = contexts.ctx_mut();
-    let (mut fly_cam, mut fly_cam_transform) = fly_cam
+    let mut fly_cam_transform = cams
+        .0
         .get_single_mut()
         .expect("Could not get single fly cam in update ui");
-    let (mut orbit_cam, mut orbit_cam_transform) = orbit_cam
+    let mut orbit_cam_transform = cams
+        .1
         .get_single_mut()
         .expect("Could not get single orbit cam in update ui");
-    let (mut topdown_cam, mut topdown_cam_transform, mut topdown_cam_projection) = topdown_cam
+    let (mut topdown_cam_transform, mut topdown_cam_projection) = cams
+        .2
         .get_single_mut()
         .expect("Could not get single topdown cam in update ui");
     let window = window
         .get_single()
         .expect("Could not get single primary window in update ui");
+    let viewport_image = image_assets
+        .get_mut(&viewport)
+        .expect("Could not get viewport image in update ui");
+
+    let viewport_tex_id = contexts
+        .image_id(&viewport)
+        .expect("Could not get viewport texture ID in update ui");
+
+    let ctx = contexts.ctx_mut();
 
     // things which can be called from both the UI and keybinds (may restructure this later)
     macro_rules! open_file {
@@ -404,120 +592,22 @@ pub fn update_ui(
         app_state.camera_settings_open = camera_settings_open;
     }
 
-    egui::SidePanel::left("side_panel")
-        .resizable(true)
-        .show(ctx, |ui| {
-            egui::CollapsingHeader::new("View Options")
-                .default_open(true)
-                .show_background(true)
-                .show(ui, |ui| {
-                    ui.add(
-                        egui::Slider::new(&mut app_state.point_scale, 0.01..=2.)
-                            .text("Point Scale"),
-                    );
-                    for mut normalize in normalize.iter_mut() {
-                        normalize.multiplier = app_state.point_scale;
-                    }
-
-                    ui.collapsing("Collision Model", |ui| {
-                        let (
-                            mut show_walls,
-                            mut show_invisible_walls,
-                            mut show_death_barriers,
-                            mut show_effects_triggers,
-                        ) = (
-                            app_state.show_walls,
-                            app_state.show_invisible_walls,
-                            app_state.show_death_barriers,
-                            app_state.show_effects_triggers,
-                        );
-                        ui.checkbox(&mut show_walls, "Show Walls");
-                        ui.checkbox(&mut show_invisible_walls, "Show Invisible Walls");
-                        ui.checkbox(&mut show_death_barriers, "Show Death Barriers");
-                        ui.checkbox(&mut show_effects_triggers, "Show Effects & Triggers");
-                        if show_walls != app_state.show_walls {
-                            app_state.show_walls = show_walls;
-                            kcl_model_settings.visible[KclFlag::Wall1 as usize] = show_walls;
-                            kcl_model_settings.visible[KclFlag::Wall2 as usize] = show_walls;
-                            kcl_model_settings.visible[KclFlag::WeakWall as usize] = show_walls;
-                        }
-                        if show_invisible_walls != app_state.show_invisible_walls {
-                            app_state.show_invisible_walls = show_invisible_walls;
-                            kcl_model_settings.visible[KclFlag::InvisibleWall1 as usize] =
-                                show_invisible_walls;
-                            kcl_model_settings.visible[KclFlag::InvisibleWall2 as usize] =
-                                show_invisible_walls;
-                        }
-                        if show_death_barriers != app_state.show_death_barriers {
-                            app_state.show_death_barriers = show_death_barriers;
-                            kcl_model_settings.visible[KclFlag::SolidFall as usize] =
-                                show_death_barriers;
-                            kcl_model_settings.visible[KclFlag::FallBoundary as usize] =
-                                show_death_barriers;
-                        }
-                        if show_effects_triggers != app_state.show_effects_triggers {
-                            app_state.show_effects_triggers = show_effects_triggers;
-                            kcl_model_settings.visible[KclFlag::ItemStateModifier as usize] =
-                                show_effects_triggers;
-                            kcl_model_settings.visible[KclFlag::EffectTrigger as usize] =
-                                show_effects_triggers;
-                            kcl_model_settings.visible[KclFlag::SoundTrigger as usize] =
-                                show_effects_triggers;
-                            kcl_model_settings.visible[KclFlag::CannonTrigger as usize] =
-                                show_effects_triggers;
-                        }
-                        if ui.button("Customise...").clicked() {
-                            app_state.customise_kcl_open = true;
-                        }
-                    });
-
-                    ui.collapsing("Camera", |ui| {
-                        ui.horizontal(|ui| {
-                            let mut mode = camera_settings.mode;
-                            ui.selectable_value(&mut mode, CameraMode::Fly, "Fly");
-                            ui.selectable_value(&mut mode, CameraMode::Orbit, "Orbit");
-                            ui.selectable_value(&mut mode, CameraMode::TopDown, "Top Down");
-                            if camera_settings.mode != mode {
-                                camera_settings.mode = mode;
-                            }
-                        });
-                        if ui.button("Camera Settings...").clicked() {
-                            app_state.camera_settings_open = true;
-                        }
-                    });
-
-                    for mut point in itpt.iter_mut() {
-                        ui.horizontal(|ui| {
-                            ui.label(point.1.to_string());
-                            ui.add(egui::DragValue::new(&mut point.0.translation.x).speed(20.));
-                            ui.add(egui::DragValue::new(&mut point.0.translation.y).speed(20.));
-                            ui.add(egui::DragValue::new(&mut point.0.translation.z).speed(20.));
-                        });
-                    }
-                });
-
-            ui.separator();
-        });
-
-    // this resizes the viewport to the remaining space after we're done drawing all the UI stuff
-    // has to check if the width and height are > 0 otherwise it will crash
-    if ctx.available_rect().width() as u32 > 0 && ctx.available_rect().height() as u32 > 0 {
-        let viewport = Viewport {
-            physical_size: UVec2 {
-                x: (ctx.available_rect().width() * window.scale_factor() as f32) as u32,
-                y: (ctx.available_rect().height() * window.scale_factor() as f32) as u32,
+    // show the actual dock area
+    DockArea::new(&mut tree)
+        .style(Style::from_egui(ctx.style().as_ref()))
+        .show(
+            ctx,
+            &mut TabViewer {
+                viewport_image,
+                viewport_tex_id,
+                window_scale_factor: window.scale_factor(),
+                app_state: app_state.as_mut(),
+                kcl_model_settings: kcl_model_settings.as_mut(),
+                camera_settings: camera_settings.as_mut(),
             },
-            physical_position: UVec2 {
-                x: (ctx.available_rect().min.x * window.scale_factor() as f32) as u32,
-                y: (ctx.available_rect().min.y * window.scale_factor() as f32) as u32,
-            },
-            ..default()
-        };
-
-        (fly_cam.viewport, orbit_cam.viewport, topdown_cam.viewport) = (
-            Some(viewport.clone()),
-            Some(viewport.clone()),
-            Some(viewport),
         );
+
+    for mut normalize in normalize.iter_mut() {
+        normalize.multiplier = app_state.point_scale;
     }
 }

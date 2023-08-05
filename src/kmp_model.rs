@@ -4,7 +4,7 @@ use crate::{
     kmp_file::*,
     ui::{KclFileSelected, KmpFileSelected},
 };
-use bevy::{math::vec3, prelude::*};
+use bevy::prelude::*;
 use bevy_more_shapes::Cone;
 
 pub struct KmpPlugin;
