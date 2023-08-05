@@ -7,7 +7,7 @@ use crate::{
     kcl_file::*,
     kcl_model::KclModelSettings,
     kmp_file::Kmp,
-    kmp_model::NormalizeScale,
+    kmp_model::{ItptModel, NormalizeScale},
 };
 use bevy::{
     math::vec2,
@@ -23,6 +23,8 @@ use bevy_egui::{
 };
 use egui_dock::{DockArea, NodeIndex, Style, Tree};
 use std::{fs::File, path::PathBuf};
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 pub struct SetupAppStateSet;
@@ -60,8 +62,15 @@ pub struct AppState {
     pub point_scale: f32,
 }
 
+#[derive(Debug, PartialEq, EnumIter)]
+pub enum Tab {
+    Viewport,
+    Edit,
+    Settings,
+}
+
 #[derive(Deref, DerefMut, Resource)]
-pub struct DockTree(Tree<String>);
+pub struct DockTree(Tree<Tab>);
 
 // stores the image which the camera renders to, so that we can display a viewport inside a tab
 #[derive(Deref, Resource)]
@@ -106,8 +115,8 @@ pub fn setup_app_state(
     commands.insert_resource(ViewportImage(image_handle));
 
     // create the docktree
-    let mut tree = Tree::new(vec!["Viewport".to_owned()]);
-    tree.split_left(NodeIndex::root(), 0.2, vec!["Edit".to_owned()]);
+    let mut tree = Tree::new(vec![Tab::Viewport]);
+    tree.split_left(NodeIndex::root(), 0.2, vec![Tab::Edit, Tab::Settings]);
     commands.insert_resource(DockTree(tree));
 
     let app_state = AppState {
@@ -145,14 +154,16 @@ struct TabViewer<'a> {
     app_state: &'a mut AppState,
     kcl_model_settings: &'a mut KclModelSettings,
     camera_settings: &'a mut CameraSettings,
+
+    itpt: Vec<&'a mut Transform>,
 }
 impl egui_dock::TabViewer for TabViewer<'_> {
     // each tab will be distinguished by a string - its name
-    type Tab = String;
+    type Tab = Tab;
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
         // we can do different things inside the tab depending on its name
-        match tab.as_str() {
-            "Viewport" => {
+        match tab {
+            Tab::Viewport => {
                 let viewport_size = vec2(ui.available_width(), ui.available_height());
                 // resize the viewport if needed
                 if self.viewport_image.size().as_uvec2() != viewport_size.as_uvec2() {
@@ -166,7 +177,16 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                 // show the viewport image
                 ui.image(self.viewport_tex_id, viewport_size.to_array());
             }
-            "Edit" => {
+            Tab::Edit => {
+                for point in self.itpt.iter_mut() {
+                    ui.horizontal(|ui| {
+                        ui.add(egui::DragValue::new(&mut point.translation.x).speed(20.));
+                        ui.add(egui::DragValue::new(&mut point.translation.y).speed(20.));
+                        ui.add(egui::DragValue::new(&mut point.translation.z).speed(20.));
+                    });
+                }
+            }
+            Tab::Settings => {
                 ui.add(
                     egui::Slider::new(&mut self.app_state.point_scale, 0.01..=2.)
                         .text("Point Scale"),
@@ -241,15 +261,11 @@ impl egui_dock::TabViewer for TabViewer<'_> {
 
                 ui.separator();
             }
-            // any other tab will just show this basic default UI
-            _ => {
-                ui.label(format!("Content of {tab}"));
-            }
         };
     }
     // show the title of the tab - the 'Tab' type already stores its title anyway
     fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
-        (&*tab).into()
+        format!("{tab:?}").into()
     }
 }
 
@@ -279,6 +295,16 @@ pub fn update_ui(
             (Without<FlyCam>, Without<OrbitCam>, With<TopDownCam>),
         >,
     ),
+
+    mut itpt: Query<
+        (&mut Transform, &ItptModel),
+        (
+            With<ItptModel>,
+            Without<FlyCam>,
+            Without<OrbitCam>,
+            Without<TopDownCam>,
+        ),
+    >,
 
     mut image_assets: ResMut<Assets<Image>>,
     mut tree: ResMut<DockTree>,
@@ -396,18 +422,21 @@ pub fn update_ui(
                     .clicked()
                 {
                     open_file!("kmp");
+                    ui.close_menu();
                 }
                 if ui
                     .add(egui::Button::new("Open KCL").shortcut_text(format!("{sc_btn}+Shift+O")))
                     .clicked()
                 {
                     open_file!("kcl");
+                    ui.close_menu();
                 }
                 if ui
                     .add(egui::Button::new("Save").shortcut_text(format!("{sc_btn}+S")))
                     .clicked()
                 {
                     save!();
+                    ui.close_menu();
                 }
             });
             ui.menu_button("Edit", |ui| {
@@ -422,6 +451,25 @@ pub fn update_ui(
                     .clicked()
                 {
                     redo!();
+                }
+            });
+
+            ui.menu_button("Window", |ui| {
+                // toggle each tab on or off
+                for tab in Tab::iter() {
+                    // search for the tab and see if it currently exists
+                    let tab_in_tree = tree.find_tab(&tab);
+                    if ui
+                        .selectable_label(tab_in_tree.is_some(), format!("{tab:?}"))
+                        .clicked()
+                    {
+                        // remove if it exists, else create it
+                        if let Some(index) = tab_in_tree {
+                            tree.remove_tab(index);
+                        } else {
+                            tree.push_to_focused_leaf(tab);
+                        }
+                    }
                 }
             });
         });
@@ -592,6 +640,9 @@ pub fn update_ui(
         app_state.camera_settings_open = camera_settings_open;
     }
 
+    let mut itpt: Vec<Mut<Transform>> = itpt.iter_mut().map(|(x, _)| x).collect();
+    let itpt: Vec<&mut Transform> = itpt.iter_mut().map(|x| x.as_mut()).collect();
+
     // show the actual dock area
     DockArea::new(&mut tree)
         .style(Style::from_egui(ctx.style().as_ref()))
@@ -604,6 +655,7 @@ pub fn update_ui(
                 app_state: app_state.as_mut(),
                 kcl_model_settings: kcl_model_settings.as_mut(),
                 camera_settings: camera_settings.as_mut(),
+                itpt,
             },
         );
 

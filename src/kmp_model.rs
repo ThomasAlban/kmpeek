@@ -5,13 +5,15 @@ use crate::{
     ui::{KclFileSelected, KmpFileSelected},
 };
 use bevy::prelude::*;
-use bevy_more_shapes::Cone;
+use bevy_more_shapes::Cylinder;
 
 pub struct KmpPlugin;
 
 impl Plugin for KmpPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (spawn_model, normalize_scale, update_itpt));
+        app.add_systems(Update, spawn_model);
+        // normalize has to run after update_itpt otherwise the transform will be overwritten
+        app.add_systems(Update, (update_itpt, normalize_scale).chain());
     }
 }
 
@@ -20,6 +22,13 @@ pub struct KmpModelSection;
 
 #[derive(Component, Deref)]
 pub struct ItptModel(pub usize);
+
+#[derive(Component)]
+pub struct ItptArrowLine {
+    p1: usize,
+    p2: usize,
+    is_line: bool,
+}
 
 #[allow(clippy::comparison_chain)]
 pub fn spawn_model(
@@ -54,25 +63,40 @@ pub fn spawn_model(
         }
 
         // meshes for the kmp model
-        let sphere = meshes.add(
+        let sphere_mesh = meshes.add(
             shape::UVSphere {
                 radius: 100.,
                 ..default()
             }
             .into(),
         );
-        let cylinder_mesh = meshes.add(
-            shape::Cylinder {
-                radius: 100.,
-                height: 1.,
-                ..default()
-            }
-            .into(),
-        );
-        let cone_mesh = meshes.add(Mesh::from(Cone {
-            radius: 100.,
-            height: 200.,
-            segments: 32,
+        // let cylinder_mesh = meshes.add(
+        //     shape::Cylinder {
+        //         radius: 100.,
+        //         height: 1.,
+        //         ..default()
+        //     }
+        //     .into(),
+        // );
+        let cylinder_mesh = meshes.add(Mesh::from(Cylinder {
+            height: 1.,
+            radius_bottom: 100.,
+            radius_top: 100.,
+            radial_segments: 32,
+            height_segments: 32,
+        }));
+        // let cone_mesh = meshes.add(Mesh::from(Cylinder {
+        //     radius: 100.,
+        //     height: 200.,
+        //     segments: 32,
+        // }));
+
+        let cone_mesh = meshes.add(Mesh::from(Cylinder {
+            height: 100.,
+            radius_bottom: 100.,
+            radius_top: 50.,
+            radial_segments: 32,
+            height_segments: 32,
         }));
 
         // materials
@@ -107,7 +131,7 @@ pub fn spawn_model(
                 // spawn the spheres where each point is
                 commands.spawn((
                     PbrBundle {
-                        mesh: sphere.clone(),
+                        mesh: sphere_mesh.clone(),
                         material: sphere_material.clone(),
                         transform: Transform::from_translation(point.0.position),
                         ..default()
@@ -124,8 +148,8 @@ pub fn spawn_model(
                         group_line_material.clone(),
                         cone_mesh.clone(),
                         cone_material.clone(),
-                        point.0.position,
-                        points[i + 1].0.position,
+                        (point.0.position, point.1),
+                        (points[i + 1].0.position, point.1 + 1),
                     );
                 } else if i == points.len() - 1 {
                     // draw a join line
@@ -141,8 +165,11 @@ pub fn spawn_model(
                             join_line_material.clone(),
                             cone_mesh.clone(),
                             cone_material.clone(),
-                            point.0.position,
-                            kmp.itpt.entries[start_index as usize].position,
+                            (point.0.position, point.1),
+                            (
+                                kmp.itpt.entries[start_index as usize].position,
+                                start_index as usize,
+                            ),
                         );
                     }
                 }
@@ -159,12 +186,12 @@ fn spawn_arrow_line(
     cone_mesh: Handle<Mesh>,
     cone_material: Handle<StandardMaterial>,
 
-    p1: Vec3,
-    p2: Vec3,
+    p1: (Vec3, usize),
+    p2: (Vec3, usize),
 ) {
-    let len = p1.distance(p2);
-    let mut line_transform = Transform::from_translation((p1 + p2) / 2.).looking_at(p2, Vec3::Y);
-    line_transform.scale.y = len;
+    let mut line_transform =
+        Transform::from_translation(p1.0.lerp(p2.0, 0.5)).looking_at(p2.0, Vec3::Y);
+    line_transform.scale.y = p1.0.distance(p2.0);
     line_transform.rotate_local_x(f32::to_radians(90.));
     // spawn the line (cylinder)
     commands.spawn((
@@ -176,10 +203,15 @@ fn spawn_arrow_line(
         },
         NormalizeScale::new(200., 8., Vec3::X + Vec3::Z),
         KmpModelSection,
+        ItptArrowLine {
+            p1: p1.1,
+            p2: p2.1,
+            is_line: true,
+        },
     ));
 
     let mut arrowhead_transform =
-        Transform::from_translation(p1.lerp(p2, 0.5)).looking_at(p2, Vec3::Y);
+        Transform::from_translation(p1.0.lerp(p2.0, 0.5)).looking_at(p2.0, Vec3::Y);
     arrowhead_transform.rotate_local_x(f32::to_radians(-90.));
     commands.spawn((
         PbrBundle {
@@ -190,13 +222,44 @@ fn spawn_arrow_line(
         },
         NormalizeScale::new(200., 20., Vec3::ONE),
         KmpModelSection,
+        ItptArrowLine {
+            p1: p1.1,
+            p2: p2.1,
+            is_line: false,
+        },
     ));
 }
 
-fn update_itpt(query: Query<(&Transform, &ItptModel), With<ItptModel>>, kmp: Option<ResMut<Kmp>>) {
+#[allow(clippy::type_complexity)]
+fn update_itpt(
+    mut itpt: ParamSet<(
+        Query<(&Transform, &ItptModel)>,
+        Query<(&mut Transform, &ItptArrowLine, &mut NormalizeScale)>,
+    )>,
+    kmp: Option<ResMut<Kmp>>,
+) {
     if let Some(mut kmp) = kmp {
-        for point in query.iter() {
+        for point in itpt.p0().iter() {
             kmp.itpt.entries[point.1 .0].position = point.0.translation;
+        }
+        for mut arrow_line in itpt.p1().iter_mut() {
+            let p1 = kmp.itpt.entries[arrow_line.1.p1].position;
+            let p2 = kmp.itpt.entries[arrow_line.1.p2].position;
+
+            let mut transform =
+                Transform::from_translation(p1.lerp(p2, 0.5)).looking_at(p2, Vec3::Y);
+
+            if arrow_line.1.is_line {
+                transform.scale.y = p1.distance(p2);
+                transform.rotate_local_x(f32::to_radians(90.));
+            } else {
+                transform.rotate_local_x(f32::to_radians(-90.));
+            }
+            *arrow_line.0 = transform;
+
+            if arrow_line.1.p1 == 0 {
+                println!("{}", transform.rotation.to_scaled_axis());
+            }
         }
     }
 }
