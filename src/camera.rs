@@ -13,8 +13,8 @@ pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CameraSettings>()
-            .add_systems(Startup, camera_setup.after(SetupAppStateSet))
             .add_plugins(InfiniteGridPlugin)
+            .add_systems(Startup, camera_setup.after(SetupAppStateSet))
             .add_systems(
                 Update,
                 (

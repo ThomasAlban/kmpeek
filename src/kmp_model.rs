@@ -70,14 +70,6 @@ pub fn spawn_model(
             }
             .into(),
         );
-        // let cylinder_mesh = meshes.add(
-        //     shape::Cylinder {
-        //         radius: 100.,
-        //         height: 1.,
-        //         ..default()
-        //     }
-        //     .into(),
-        // );
         let cylinder_mesh = meshes.add(Mesh::from(Cylinder {
             height: 1.,
             radius_bottom: 100.,
@@ -85,12 +77,6 @@ pub fn spawn_model(
             radial_segments: 32,
             height_segments: 32,
         }));
-        // let cone_mesh = meshes.add(Mesh::from(Cylinder {
-        //     radius: 100.,
-        //     height: 200.,
-        //     segments: 32,
-        // }));
-
         let cone_mesh = meshes.add(Mesh::from(Cylinder {
             height: 100.,
             radius_bottom: 100.,
@@ -234,7 +220,7 @@ fn spawn_arrow_line(
 fn update_itpt(
     mut itpt: ParamSet<(
         Query<(&Transform, &ItptModel)>,
-        Query<(&mut Transform, &ItptArrowLine, &mut NormalizeScale)>,
+        Query<(&mut Transform, &ItptArrowLine)>,
     )>,
     kmp: Option<ResMut<Kmp>>,
 ) {
@@ -242,23 +228,17 @@ fn update_itpt(
         for point in itpt.p0().iter() {
             kmp.itpt.entries[point.1 .0].position = point.0.translation;
         }
-        for mut arrow_line in itpt.p1().iter_mut() {
-            let p1 = kmp.itpt.entries[arrow_line.1.p1].position;
-            let p2 = kmp.itpt.entries[arrow_line.1.p2].position;
+        for (mut transform, arrow_line) in itpt.p1().iter_mut() {
+            let p1 = kmp.itpt.entries[arrow_line.p1].position;
+            let p2 = kmp.itpt.entries[arrow_line.p2].position;
 
-            let mut transform =
-                Transform::from_translation(p1.lerp(p2, 0.5)).looking_at(p2, Vec3::Y);
+            *transform = Transform::from_translation(p1.lerp(p2, 0.5)).looking_at(p2, Vec3::Y);
 
-            if arrow_line.1.is_line {
+            if arrow_line.is_line {
                 transform.scale.y = p1.distance(p2);
                 transform.rotate_local_x(f32::to_radians(90.));
             } else {
                 transform.rotate_local_x(f32::to_radians(-90.));
-            }
-            *arrow_line.0 = transform;
-
-            if arrow_line.1.p1 == 0 {
-                println!("{}", transform.rotation.to_scaled_axis());
             }
         }
     }
@@ -324,7 +304,7 @@ pub fn normalize_scale(
         let required_scale =
             (normalize.desired_pixel_size * normalize.multiplier) / actual_pixel_size;
 
-        let scale_before = gt.scale;
+        let scale_before = transform.scale;
 
         transform.scale = gt.scale * Vec3::splat(required_scale);
 
