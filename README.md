@@ -10,4 +10,5 @@ Expect it to take a few minutes to compile for the first time (because it will n
 ## State
 
 Currently it can't actually edit KMP files, though the functionality (e.g. opening, saving a KMP file) is there ready to be implemented. It can so far open a KMP file (which will load a course.kcl file in the same directory if avaliable), and I currently have it displaying item paths as a test. It also has multiple camera modes and customisation options for the view.
-<img width="1392" alt="Screenshot 2023-06-22 at 09 17 50" src="https://github.com/ThomasAlban/kmpeek/assets/98399119/45583174-614b-4729-b343-79ff7908ccde">
+<img width="1392" alt="image" src="https://github.com/ThomasAlban/kmpeek/assets/98399119/70a265d7-6d6d-4719-a97e-3191297ec7a4">
+
