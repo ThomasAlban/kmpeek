@@ -88,22 +88,22 @@ pub fn spawn_model(
 
         // materials
         let sphere_material = materials.add(StandardMaterial {
-            base_color: Color::RED,
+            base_color: Color::rgb(0.0, 0.6, 0.0),
             unlit: true,
             ..default()
         });
         let group_line_material = materials.add(StandardMaterial {
-            base_color: Color::ORANGE,
+            base_color: Color::rgb(0.0, 1.0, 0.0),
             unlit: true,
             ..default()
         });
         let join_line_material = materials.add(StandardMaterial {
-            base_color: Color::GREEN,
+            base_color: Color::rgb(0.2, 1.0, 0.2),
             unlit: true,
             ..default()
         });
         let cone_material = materials.add(StandardMaterial {
-            base_color: Color::YELLOW,
+            base_color: Color::WHITE,
             unlit: true,
             ..default()
         });
