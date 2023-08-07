@@ -1,40 +1,74 @@
 use bevy::{math::vec3, prelude::*};
 use byteorder::{ReadBytesExt, BE};
 use std::io::{self, Read, Seek, SeekFrom};
+use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 
 #[allow(dead_code)]
+#[derive(Display, EnumString, IntoStaticStr, EnumIter)]
 pub enum KclFlag {
+    #[strum(serialize = "Road 1")]
     Road1,
+    #[strum(serialize = "Slippery Road 1")]
     SlipperyRoad1,
-    WeakOffRoad,
-    OffRoad,
-    HeavyOffRoad,
+    #[strum(serialize = "Weak Offroad")]
+    WeakOffroad,
+    #[strum(serialize = "Offroad")]
+    Offroad,
+    #[strum(serialize = "Heavy Offroad")]
+    HeavyOffroad,
+    #[strum(serialize = "Slippery Road 2")]
     SlipperyRoad2,
+    #[strum(serialize = "Boost Panel")]
     BoostPanel,
+    #[strum(serialize = "Boost Ramp")]
     BoostRamp,
+    #[strum(serialize = "Jump Pad")]
     JumpPad,
+    #[strum(serialize = "Item Road")]
     ItemRoad,
+    #[strum(serialize = "Solid Fall")]
     SolidFall,
+    #[strum(serialize = "Moving Water")]
     MovingWater,
+    #[strum(serialize = "Wall 1")]
     Wall1,
+    #[strum(serialize = "Invisible Wall 1")]
     InvisibleWall1,
+    #[strum(serialize = "Item Wall")]
     ItemWall,
+    #[strum(serialize = "Wall 2")]
     Wall2,
+    #[strum(serialize = "Fall Boundary")]
     FallBoundary,
+    #[strum(serialize = "Cannon Trigger")]
     CannonTrigger,
+    #[strum(serialize = "Force Recalculation")]
     ForceRecalculation,
+    #[strum(serialize = "Half Pipe Ramp")]
     HalfPipeRamp,
+    #[strum(serialize = "Player Only Wall")]
     PlayerOnlyWall,
+    #[strum(serialize = "Moving Road")]
     MovingRoad,
+    #[strum(serialize = "Sticky Road")]
     StickyRoad,
+    #[strum(serialize = "Road 2")]
     Road2,
+    #[strum(serialize = "Sound Trigger")]
     SoundTrigger,
+    #[strum(serialize = "Weak Wall")]
     WeakWall,
+    #[strum(serialize = "Effect Trigger")]
     EffectTrigger,
+    #[strum(serialize = "Item State Modifier")]
     ItemStateModifier,
+    #[strum(serialize = "Half Pipe Invisible Wall")]
     HalfPipeInvisibleWall,
+    #[strum(serialize = "Rotating Road")]
     RotatingRoad,
+    #[strum(serialize = "Special Wall")]
     SpecialWall,
+    #[strum(serialize = "Invisible Wall 2")]
     InvisibleWall2,
 }
 

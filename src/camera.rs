@@ -6,15 +6,16 @@ use bevy::{
     window::{CursorGrabMode, PrimaryWindow},
 };
 use bevy_infinite_grid::{GridShadowCamera, InfiniteGrid, InfiniteGridBundle, InfiniteGridPlugin};
+use bevy_pkv::PkvStore;
+use serde::{Deserialize, Serialize};
 
-use crate::ui::{SetupAppStateSet, ViewportImage};
+use crate::ui::{AppSettings, AppState, SetupAppStateSet, ViewportImage};
 use bevy_mod_picking::prelude::*;
 
 pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<CameraSettings>()
-            .add_plugins(InfiniteGridPlugin)
+        app.add_plugins((InfiniteGridPlugin, DefaultPickingPlugins))
             .add_systems(Startup, camera_setup.after(SetupAppStateSet))
             .add_systems(
                 Update,
@@ -52,7 +53,7 @@ impl Default for OrbitCam {
 #[derive(Component)]
 pub struct TopDownCam;
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum CameraMode {
     Fly,
     Orbit,
@@ -64,7 +65,7 @@ impl Default for CameraMode {
     }
 }
 
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Serialize, Deserialize)]
 pub struct CameraSettings {
     pub mode: CameraMode,
     pub fly: FlySettings,
@@ -72,6 +73,7 @@ pub struct CameraSettings {
     pub top_down: TopDownSettings,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct FlySettings {
     pub start_pos: Vec3,
     pub look_sensitivity: f32,
@@ -92,6 +94,8 @@ impl Default for FlySettings {
         }
     }
 }
+
+#[derive(Serialize, Deserialize)]
 pub struct FlyKeyBindings {
     pub move_forward: Vec<KeyCode>,
     pub move_backward: Vec<KeyCode>,
@@ -117,6 +121,7 @@ impl Default for FlyKeyBindings {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct OrbitSettings {
     pub start_pos: Vec3,
     pub rotate_sensitivity: f32,
@@ -135,7 +140,7 @@ impl Default for OrbitSettings {
         }
     }
 }
-
+#[derive(Serialize, Deserialize)]
 pub struct OrbitKeyBindings {
     pub mouse_button: MouseButton,
     pub pan: Vec<KeyCode>,
@@ -149,6 +154,7 @@ impl Default for OrbitKeyBindings {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct TopDownSettings {
     pub start_pos: Vec3,
     pub near: f32,
@@ -171,6 +177,7 @@ impl Default for TopDownSettings {
         }
     }
 }
+#[derive(Serialize, Deserialize)]
 pub struct TopDownKeyBindings {
     pub mouse_button: MouseButton,
 }
@@ -259,19 +266,26 @@ pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
 
 pub fn cursor_grab(
     mouse_buttons: Res<Input<MouseButton>>,
-    settings: Res<CameraSettings>,
     mut window: Query<&mut Window, With<PrimaryWindow>>,
+    app_state: Res<AppState>,
+    pkv: Res<PkvStore>,
 ) {
+    if !app_state.mouse_in_viewport {
+        return;
+    }
     let mut window = window
         .get_single_mut()
         .expect("Primary window not found for cursor grab");
+    let settings = pkv
+        .get::<AppSettings>("settings")
+        .expect("could not get user settings");
 
-    if (settings.mode == CameraMode::Fly
-        && !mouse_buttons.pressed(settings.fly.key_bindings.mouse_button))
-        || (settings.mode == CameraMode::Orbit
-            && !mouse_buttons.pressed(settings.orbit.key_bindings.mouse_button))
-        || (settings.mode == CameraMode::TopDown
-            && !mouse_buttons.pressed(settings.top_down.key_bindings.mouse_button))
+    if (settings.camera.mode == CameraMode::Fly
+        && !mouse_buttons.pressed(settings.camera.fly.key_bindings.mouse_button))
+        || (settings.camera.mode == CameraMode::Orbit
+            && !mouse_buttons.pressed(settings.camera.orbit.key_bindings.mouse_button))
+        || (settings.camera.mode == CameraMode::TopDown
+            && !mouse_buttons.pressed(settings.camera.top_down.key_bindings.mouse_button))
     {
         window.cursor.visible = true;
         window.cursor.grab_mode = CursorGrabMode::None;
@@ -284,18 +298,25 @@ pub fn cursor_grab(
 
 #[allow(clippy::type_complexity)]
 pub fn update_active_camera(
-    settings: Res<CameraSettings>,
     mut fly_cam: Query<&mut Camera, (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>)>,
     mut orbit_cam: Query<&mut Camera, (With<OrbitCam>, Without<FlyCam>, Without<TopDownCam>)>,
     mut topdown_cam: Query<&mut Camera, (With<TopDownCam>, Without<FlyCam>, Without<OrbitCam>)>,
+    pkv: Res<PkvStore>,
 ) {
-    if !settings.is_changed() {
-        return;
-    }
-    let mut fly_cam = fly_cam.get_single_mut().unwrap();
-    let mut orbit_cam = orbit_cam.get_single_mut().unwrap();
-    let mut topdown_cam = topdown_cam.get_single_mut().unwrap();
-    match settings.mode {
+    let settings = pkv
+        .get::<AppSettings>("settings")
+        .expect("could not get user settings");
+    let mut fly_cam = fly_cam
+        .get_single_mut()
+        .expect("could not get fly cam in update_active_camera");
+    let mut orbit_cam = orbit_cam
+        .get_single_mut()
+        .expect("could not get orbit in update_active_camera");
+    let mut topdown_cam = topdown_cam
+        .get_single_mut()
+        .expect("could not get top down cam in update_active_camera");
+
+    match settings.camera.mode {
         CameraMode::Fly => {
             fly_cam.is_active = true;
             orbit_cam.is_active = false;
@@ -318,15 +339,24 @@ pub fn fly_cam_move(
     keys: Res<Input<KeyCode>>,
     time: Res<Time>,
     window: Query<&Window, With<PrimaryWindow>>,
-    settings: Res<CameraSettings>,
     mut fly_cam: Query<&mut Transform, With<FlyCam>>,
+    pkv: Res<PkvStore>,
+    app_state: Res<AppState>,
 ) {
+    if !app_state.mouse_in_viewport {
+        return;
+    }
+    let settings = pkv
+        .get::<AppSettings>("settings")
+        .expect("could not get user settings");
+    if settings.camera.mode != CameraMode::Fly {
+        return;
+    }
+
     let window = window
         .get_single()
-        .expect("Primary window not found for fly cam move");
-    let mut fly_cam_transform = fly_cam
-        .get_single_mut()
-        .expect("Could not get single fly cam");
+        .expect("primary window not found for fly cam move");
+    let mut fly_cam_transform = fly_cam.get_single_mut().expect("could not get fly cam");
 
     if (!cfg!(target_os = "macos")
         && (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight)))
@@ -335,7 +365,7 @@ pub fn fly_cam_move(
     {
         return;
     }
-    if settings.fly.hold_mouse_to_move && window.cursor.grab_mode == CursorGrabMode::None {
+    if settings.camera.fly.hold_mouse_to_move && window.cursor.grab_mode == CursorGrabMode::None {
         return;
     }
 
@@ -347,7 +377,7 @@ pub fn fly_cam_move(
     let mut speed_boost = false;
 
     for key in keys.get_pressed() {
-        let key_bindings = &settings.fly.key_bindings;
+        let key_bindings = &settings.camera.fly.key_bindings;
         if key_bindings.move_forward.contains(key) {
             velocity += forward;
         } else if key_bindings.move_backward.contains(key) {
@@ -365,23 +395,35 @@ pub fn fly_cam_move(
         }
     }
     if speed_boost {
-        velocity *= settings.fly.speed_boost;
+        velocity *= settings.camera.fly.speed_boost;
     }
-    fly_cam_transform.translation += velocity * time.delta_seconds() * 10000. * settings.fly.speed;
+    fly_cam_transform.translation +=
+        velocity * time.delta_seconds() * 10000. * settings.camera.fly.speed;
 }
 
 pub fn fly_cam_look(
-    settings: Res<CameraSettings>,
     window: Query<&Window, With<PrimaryWindow>>,
     mut mouse_motion: EventReader<MouseMotion>,
     mut fly_cam: Query<&mut Transform, With<FlyCam>>,
+    pkv: Res<PkvStore>,
+    app_state: Res<AppState>,
 ) {
+    if !app_state.mouse_in_viewport {
+        return;
+    }
+    let settings = pkv
+        .get::<AppSettings>("settings")
+        .expect("could not get user settings");
+    if settings.camera.mode != CameraMode::Fly {
+        return;
+    }
+
     let window = window
         .get_single()
-        .expect("Primary window not found for fly cam move");
+        .expect("primary window not found for fly cam move");
     let mut fly_cam_transform = fly_cam
         .get_single_mut()
-        .expect("Could not get single fly cam");
+        .expect("could not get single fly cam");
 
     for ev in mouse_motion.iter() {
         let (mut yaw, mut pitch, _) = fly_cam_transform.rotation.to_euler(EulerRot::YXZ);
@@ -390,13 +432,13 @@ pub fn fly_cam_look(
             _ => {
                 // Using smallest of height or width ensures equal vertical and horizontal sensitivity
                 let window_scale = window.height().min(window.width());
-                pitch -= (settings.fly.look_sensitivity * 0.00012 * ev.delta.y * window_scale)
-                    .to_radians();
-                yaw -= (settings.fly.look_sensitivity * 0.00012 * ev.delta.x * window_scale)
+                pitch -=
+                    (settings.camera.fly.look_sensitivity * 0.00012 * ev.delta.y * window_scale)
+                        .to_radians();
+                yaw -= (settings.camera.fly.look_sensitivity * 0.00012 * ev.delta.x * window_scale)
                     .to_radians();
             }
         }
-
         pitch = pitch.clamp(-1.54, 1.54);
         // order is important to prevent unintended roll
         fly_cam_transform.rotation =
@@ -404,47 +446,52 @@ pub fn fly_cam_look(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn orbit_cam(
     primary_window: Query<&mut Window, With<PrimaryWindow>>,
     mut mouse_motion: EventReader<MouseMotion>,
     mut mouse_scroll: EventReader<MouseWheel>,
     mouse_buttons: Res<Input<MouseButton>>,
     mut query: Query<(&mut OrbitCam, &mut Transform, &Projection)>,
-    settings: Res<CameraSettings>,
     keys: Res<Input<KeyCode>>,
+    pkv: Res<PkvStore>,
+    app_state: Res<AppState>,
 ) {
-    if settings.mode != CameraMode::Orbit {
+    if !app_state.mouse_in_viewport {
+        return;
+    }
+    let settings = pkv
+        .get::<AppSettings>("settings")
+        .expect("could not get user settings");
+    if settings.camera.mode != CameraMode::Orbit {
         return;
     }
 
-    let window = primary_window.get_single();
-    if window.is_err() {
-        warn!("Primary window not found for camera controller");
-        return;
-    }
-    let window = window.unwrap();
+    let window = primary_window
+        .get_single()
+        .expect("primary window not found for orbit_cam");
 
     let mut pan = Vec2::ZERO;
     let mut rotation_move = Vec2::ZERO;
     let mut scroll = 0.0;
     let mut orbit_button_changed = false;
 
-    if mouse_buttons.pressed(settings.orbit.key_bindings.mouse_button) {
+    if mouse_buttons.pressed(settings.camera.orbit.key_bindings.mouse_button) {
         // check if the pan key is being pressed, and if so, pan rather than orbit
         let mut rotate = true;
         for key in keys.get_pressed() {
-            if settings.orbit.key_bindings.pan.contains(key) {
+            if settings.camera.orbit.key_bindings.pan.contains(key) {
                 rotate = false;
                 break;
             }
         }
         if rotate {
             for ev in mouse_motion.iter() {
-                rotation_move += ev.delta * settings.orbit.rotate_sensitivity;
+                rotation_move += ev.delta * settings.camera.orbit.rotate_sensitivity;
             }
         } else {
             for ev in mouse_motion.iter() {
-                pan += ev.delta * settings.orbit.pan_sensitivity;
+                pan += ev.delta * settings.camera.orbit.pan_sensitivity;
             }
         }
     }
@@ -453,8 +500,8 @@ pub fn orbit_cam(
         scroll += ev.y;
     }
 
-    if mouse_buttons.just_released(settings.orbit.key_bindings.mouse_button)
-        || mouse_buttons.just_pressed(settings.orbit.key_bindings.mouse_button)
+    if mouse_buttons.just_released(settings.camera.orbit.key_bindings.mouse_button)
+        || mouse_buttons.just_pressed(settings.camera.orbit.key_bindings.mouse_button)
     {
         orbit_button_changed = true;
     }
@@ -502,7 +549,7 @@ pub fn orbit_cam(
         } else if scroll.abs() > 0.0 {
             any = true;
             orbit_cam.radius -=
-                scroll * orbit_cam.radius * 0.002 * settings.orbit.scroll_sensitivity;
+                scroll * orbit_cam.radius * 0.002 * settings.camera.orbit.scroll_sensitivity;
             // dont allow zoom to reach zero or you get stuck
             orbit_cam.radius = orbit_cam.radius.clamp(1., 1000000.);
         }
@@ -527,23 +574,27 @@ pub fn top_down_cam(
     mut mouse_scroll: EventReader<MouseWheel>,
     mouse_buttons: Res<Input<MouseButton>>,
     mut query: Query<(&TopDownCam, &mut Transform, &mut Projection)>,
-    settings: Res<CameraSettings>,
+    pkv: Res<PkvStore>,
+    app_state: Res<AppState>,
 ) {
-    if settings.mode != CameraMode::TopDown {
+    if !app_state.mouse_in_viewport {
+        return;
+    }
+    let settings = pkv
+        .get::<AppSettings>("settings")
+        .expect("could not get user settings");
+    if settings.camera.mode != CameraMode::TopDown {
         return;
     }
 
-    let window = primary_window.get_single();
-    if window.is_err() {
-        warn!("Primary window not found for camera controller");
-        return;
-    }
-    let window = window.unwrap();
+    let window = primary_window
+        .get_single()
+        .expect("primary window not found for top_down_cam");
 
     let mut pan = Vec2::ZERO;
     let mut scroll = 0.;
 
-    if mouse_buttons.pressed(settings.orbit.key_bindings.mouse_button) {
+    if mouse_buttons.pressed(settings.camera.orbit.key_bindings.mouse_button) {
         for ev in mouse_motion.iter() {
             pan += ev.delta;
         }
@@ -558,12 +609,13 @@ pub fn top_down_cam(
         if let Projection::Orthographic(projection) = &*projection {
             pan *= Vec2::new(projection.area.width(), projection.area.height()) / window_size;
         }
-        transform.translation += vec3(pan.x, 0., pan.y) * settings.top_down.move_sensitivity;
+        transform.translation += vec3(pan.x, 0., pan.y) * settings.camera.top_down.move_sensitivity;
 
         if scroll.abs() > 0. {
             if let Projection::Orthographic(projection) = &mut *projection {
-                projection.scale -=
-                    (scroll * projection.scale) * 0.001 * settings.top_down.scroll_sensitivity;
+                projection.scale -= (scroll * projection.scale)
+                    * 0.001
+                    * settings.camera.top_down.scroll_sensitivity;
                 projection.scale = projection.scale.clamp(1., 1000.);
             }
         }

@@ -1,17 +1,21 @@
-use crate::{kcl_file::Kcl, ui::KclFileSelected};
+use crate::{
+    kcl_file::Kcl,
+    ui::{AppSettings, KclFileSelected},
+};
 use bevy::{prelude::*, render::mesh::PrimitiveTopology};
+use bevy_pkv::PkvStore;
+use serde::{Deserialize, Serialize};
 use std::{ffi::OsStr, fs::File};
 
 pub struct KclPlugin;
 
 impl Plugin for KclPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<KclModelSettings>()
-            .add_systems(Update, (spawn_model, update_kcl_model));
+        app.add_systems(Update, (spawn_model, update_kcl_model));
     }
 }
 
-#[derive(Resource)]
+#[derive(Resource, Serialize, Deserialize)]
 pub struct KclModelSettings {
     pub visible: [bool; 32],
     pub color: [[f32; 4]; 32],
@@ -68,8 +72,11 @@ pub fn spawn_model(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut model: Query<Entity, With<KCLModelSection>>,
     mut ev_kcl_file_selected: EventReader<KclFileSelected>,
-    kcl_model_settings: Res<KclModelSettings>,
+    pkv: Res<PkvStore>,
 ) {
+    let settings = pkv
+        .get::<AppSettings>("settings")
+        .expect("could not get user settings");
     for ev in ev_kcl_file_selected.iter() {
         if ev.0.extension() != Some(OsStr::new("kcl")) {
             continue;
@@ -91,7 +98,7 @@ pub fn spawn_model(
             mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertex_group.vertices.clone());
             mesh.compute_flat_normals();
 
-            let color: Color = kcl_model_settings.color[i].into();
+            let color: Color = settings.kcl_model.color[i].into();
 
             commands.spawn((
                 KCLModelSection(i),
@@ -108,7 +115,7 @@ pub fn spawn_model(
                         },
                         ..default()
                     }),
-                    visibility: if kcl_model_settings.visible[i] {
+                    visibility: if settings.kcl_model.visible[i] {
                         Visibility::Inherited
                     } else {
                         Visibility::Hidden
@@ -122,7 +129,6 @@ pub fn spawn_model(
 }
 
 pub fn update_kcl_model(
-    kcl_model_settings: Res<KclModelSettings>,
     mut query: Query<
         (
             &mut Visibility,
@@ -133,20 +139,20 @@ pub fn update_kcl_model(
         With<KCLModelSection>,
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    pkv: Res<PkvStore>,
 ) {
-    if !kcl_model_settings.is_changed() {
-        return;
-    }
-
+    let settings = pkv
+        .get::<AppSettings>("settings")
+        .expect("could not get user settings");
     for (mut visibility, kcl_model_section, standard_material, _) in query.iter_mut() {
         let i = kcl_model_section.0;
-        *visibility = if kcl_model_settings.visible[i] {
+        *visibility = if settings.kcl_model.visible[i] {
             Visibility::Inherited
         } else {
             Visibility::Hidden
         };
         let material = materials.get_mut(&standard_material).unwrap();
-        material.base_color = kcl_model_settings.color[i].into();
+        material.base_color = settings.kcl_model.color[i].into();
         material.alpha_mode = if material.base_color.a() < 1. {
             AlphaMode::Add
         } else {
