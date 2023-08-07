@@ -1,6 +1,6 @@
 # kmpeek
 
-An in-progress 3D KMP editor for Mario Kart Wii, written in Rust using the [bevy](https://github.com/bevyengine/bevy) game engine. It is currently unusable as a KMP editor but hopefully will have its first release soon!
+An in-progress 3D KMP editor for Mario Kart Wii, written in Rust using the [bevy](https://github.com/bevyengine/bevy) game engine. The goal is for it to be the ultimate KMP editor for Mario Kart Wii, taking inspiration from the good parts of others (such as [Lorenzi's](https://github.com/hlorenzi/kmp-editor), [KMP Cloud](https://wiki.tockdom.com/wiki/KMP_Cloud)). It is currently unusable as a KMP editor but hopefully will have its first release soon!
 
 ## How to build
 
