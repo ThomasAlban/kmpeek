@@ -22,7 +22,6 @@ use bevy_egui::{
     EguiContexts, EguiPlugin, EguiUserTextures,
 };
 use bevy_pkv::PkvStore;
-// use bevy_mod_picking::prelude::*;
 use egui_dock::{DockArea, NodeIndex, Style, Tree};
 use serde::{Deserialize, Serialize};
 use std::{fs::File, path::PathBuf};
@@ -84,9 +83,6 @@ pub struct DockTree(Tree<Tab>);
 // stores the image which the camera renders to, so that we can display a viewport inside a tab
 #[derive(Deref, Resource)]
 pub struct ViewportImage(Handle<Image>);
-
-#[derive(Component)]
-pub struct BevyModPickingPointer;
 
 pub fn setup_app_state(
     mut commands: Commands,
@@ -174,9 +170,9 @@ struct TabViewer<'a> {
     itpt: Vec<&'a mut Transform>,
     normalize: Vec<&'a mut NormalizeScale>,
     // pointer: &'a mut PointerLocation,
-    fly_cam: (&'a mut Camera, &'a mut Transform),
-    orbit_cam: (&'a mut Camera, &'a mut Transform),
-    topdown_cam: (&'a mut Camera, &'a mut Transform, &'a mut Projection),
+    fly_cam: &'a mut Transform,
+    orbit_cam: &'a mut Transform,
+    topdown_cam: (&'a mut Transform, &'a mut Projection),
 }
 impl egui_dock::TabViewer for TabViewer<'_> {
     // each tab will be distinguished by a string - its name
@@ -318,13 +314,13 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                             let fly_default = FlySettings::default();
                             let orbit_default = OrbitSettings::default();
                             let topdown_default = TopDownSettings::default();
-                            *self.fly_cam.1 = Transform::from_translation(fly_default.start_pos)
+                            *self.fly_cam = Transform::from_translation(fly_default.start_pos)
                                 .looking_at(Vec3::ZERO, Vec3::Y);
-                            *self.orbit_cam.1 = Transform::from_translation(orbit_default.start_pos)
+                            *self.orbit_cam = Transform::from_translation(orbit_default.start_pos)
                                 .looking_at(Vec3::ZERO, Vec3::Y);
-                            *self.topdown_cam.1 = Transform::from_translation(topdown_default.start_pos)
+                            *self.topdown_cam.0 = Transform::from_translation(topdown_default.start_pos)
                                 .looking_at(Vec3::ZERO, Vec3::Z);
-                            *self.topdown_cam.2 = Projection::Orthographic(OrthographicProjection {
+                            *self.topdown_cam.1 = Projection::Orthographic(OrthographicProjection {
                                 near: topdown_default.near,
                                 far: topdown_default.far,
                                 scale: topdown_default.scale,
@@ -429,18 +425,12 @@ pub fn update_ui(
 
     mut cams: (
         // fly cam
-        Query<
-            (&mut Camera, &mut Transform),
-            (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>),
-        >,
+        Query<&mut Transform, (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>)>,
         // orbit cam
-        Query<
-            (&mut Camera, &mut Transform),
-            (Without<FlyCam>, With<OrbitCam>, Without<TopDownCam>),
-        >,
+        Query<&mut Transform, (Without<FlyCam>, With<OrbitCam>, Without<TopDownCam>)>,
         // topdown cam
         Query<
-            (&mut Camera, &mut Transform, &mut Projection),
+            (&mut Transform, &mut Projection),
             (Without<FlyCam>, Without<OrbitCam>, With<TopDownCam>),
         >,
     ),
@@ -459,7 +449,6 @@ pub fn update_ui(
     mut tree: ResMut<DockTree>,
     viewport: ResMut<ViewportImage>,
     mut pkv: ResMut<PkvStore>,
-    // mut pointer: Query<&mut PointerLocation, With<BevyModPickingPointer>>,
 ) {
     // get variables we need in this system from queries/assets
     let mut fly_cam = cams
@@ -486,9 +475,6 @@ pub fn update_ui(
     let mut settings = pkv
         .get::<AppSettings>("settings")
         .expect("could not get user settings");
-    // let mut pointer = pointer
-    //     .get_single_mut()
-    //     .expect("Could not get pointer in update ui");
     let mut itpt: Vec<Mut<Transform>> = itpt.iter_mut().map(|(x, _)| x).collect();
     let itpt: Vec<&mut Transform> = itpt.iter_mut().map(|x| x.as_mut()).collect();
     let mut normalize: Vec<Mut<NormalizeScale>> = normalize.iter_mut().collect();
@@ -650,9 +636,9 @@ pub fn update_ui(
                 itpt,
                 normalize,
                 // pointer: pointer.as_mut(),
-                fly_cam: (&mut fly_cam.0, &mut fly_cam.1),
-                orbit_cam: (&mut orbit_cam.0, &mut orbit_cam.1),
-                topdown_cam: (&mut topdown_cam.0, &mut topdown_cam.1, &mut topdown_cam.2),
+                fly_cam: &mut fly_cam,
+                orbit_cam: &mut orbit_cam,
+                topdown_cam: (&mut topdown_cam.0, &mut topdown_cam.1),
             },
         );
 

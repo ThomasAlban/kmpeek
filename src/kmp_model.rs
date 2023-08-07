@@ -5,7 +5,6 @@ use crate::{
     ui::{KclFileSelected, KmpFileSelected},
 };
 use bevy::prelude::*;
-use bevy_mod_picking::{prelude::RaycastPickTarget, PickableBundle};
 use bevy_more_shapes::Cylinder;
 
 pub struct KmpPlugin;
@@ -126,8 +125,6 @@ pub fn spawn_model(
                     NormalizeScale::new(200., 12., Vec3::ONE),
                     KmpModelSection,
                     ItptModel(point.1),
-                    PickableBundle::default(), // <- Makes the mesh pickable.
-                    RaycastPickTarget::default(), // <- Needed for the raycast backend.
                 ));
                 // if we are not at the end of the group
                 if i < points.len() - 1 {

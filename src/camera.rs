@@ -10,12 +10,11 @@ use bevy_pkv::PkvStore;
 use serde::{Deserialize, Serialize};
 
 use crate::ui::{AppSettings, AppState, SetupAppStateSet, ViewportImage};
-use bevy_mod_picking::prelude::*;
 
 pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((InfiniteGridPlugin, DefaultPickingPlugins))
+        app.add_plugins(InfiniteGridPlugin)
             .add_systems(Startup, camera_setup.after(SetupAppStateSet))
             .add_systems(
                 Update,
@@ -220,7 +219,6 @@ pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
                 ..default()
             },
             FlyCam,
-            RaycastPickCamera::default(),
         ))
         .insert(GridShadowCamera);
     commands.spawn((
@@ -239,7 +237,6 @@ pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
             radius: OrbitSettings::default().start_pos.length(),
             ..default()
         },
-        RaycastPickCamera::default(),
     ));
     commands.spawn((
         Camera3dBundle {
@@ -260,7 +257,6 @@ pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
             ..default()
         },
         TopDownCam,
-        RaycastPickCamera::default(),
     ));
 }
 

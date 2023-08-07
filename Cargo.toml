@@ -18,8 +18,6 @@ bevy = { version = "0.11", default-features = false, features = [
 ] }
 bevy_egui = "0.21.0"
 bevy_infinite_grid = { git = "https://github.com/Hibyehello/bevy_infinite_grid.git" }
-# using this branch until bevy_mod_picking for bevy 0.11 comes out
-bevy_mod_picking = { git = "https://github.com/bardt/bevy_mod_picking", branch = "bevy_0.11" }
 bevy_more_shapes = { git = "https://github.com/Hibyehello/bevy_more_shapes.git" }
 bevy_pkv = "0.8.0"
 bytemuck = "1.13.1"
