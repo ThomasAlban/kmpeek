@@ -9,6 +9,7 @@ use crate::{
     kmp_model::{ItptModel, NormalizeScale},
 };
 use bevy::{
+    core_pipeline::core_2d::graph::input,
     math::vec2,
     prelude::*,
     render::render_resource::{
@@ -17,14 +18,18 @@ use bevy::{
     window::PrimaryWindow,
 };
 use bevy_egui::{
-    egui::{self, TextureId},
+    egui::{self, Key, TextureId},
     EguiContexts, EguiPlugin, EguiUserTextures,
 };
 use bevy_pkv::PkvStore;
 use egui_dock::{DockArea, NodeIndex, Style, Tree};
 use egui_file::*;
 use serde::{Deserialize, Serialize};
-use std::{fs::File, path::PathBuf};
+use std::{
+    fs::{read_to_string, File},
+    io::Write,
+    path::PathBuf,
+};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
@@ -56,7 +61,10 @@ pub struct AppState {
     pub customise_kcl_open: bool,
     pub camera_settings_open: bool,
 
-    pub file_dialog: Option<(FileDialog, String)>,
+    pub open_kmp_kcl_file_dialog: Option<(FileDialog, String)>,
+    pub export_settings_file_dialog: Option<(FileDialog, String)>,
+    pub import_settings_file_dialog: Option<FileDialog>,
+
     pub kmp_file_path: Option<PathBuf>,
     pub mouse_in_viewport: bool,
 }
@@ -132,7 +140,10 @@ pub fn setup_app_state(
         customise_kcl_open: false,
         camera_settings_open: false,
 
-        file_dialog: None,
+        open_kmp_kcl_file_dialog: None,
+        export_settings_file_dialog: None,
+        import_settings_file_dialog: None,
+
         kmp_file_path: None,
         mouse_in_viewport: false,
     };
@@ -205,6 +216,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                 }
             }
             Tab::Settings => {
+                ui.label("These settings will be saved when you close the app.");
                 ui.add(
                     egui::Slider::new(&mut self.settings.point_scale, 0.01..=2.)
                         .text("Point Scale"),
@@ -344,13 +356,25 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                             ui.add(egui::DragValue::new(&mut self.settings.camera.fly.speed).speed(0.1));
                         });
                         ui.horizontal(|ui| {
-                            ui.label("Speed Boost").on_hover_text(
+                            ui.label("Speed Multiplier").on_hover_text(
                                 "How much faster the camera moves when holding the speed boost button",
                             );
                             ui.add(egui::DragValue::new(&mut self.settings.camera.fly.speed_boost).speed(0.1));
                         });
                         ui.checkbox(&mut self.settings.camera.fly.hold_mouse_to_move, "Hold Mouse To Move")
                             .on_hover_text("Whether or not the mouse button needs to be pressed in order to move the camera");
+
+                        ui.horizontal(|ui| {
+                            ui.label("Mouse Button").on_hover_text("The mouse button that needs to be pressed to move the camera");
+                            egui::ComboBox::from_id_source("Mouse Button")
+                            .selected_text(format!("{:?}", self.settings.camera.fly.key_bindings.mouse_button))
+                            .width(60.)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.settings.camera.fly.key_bindings.mouse_button, MouseButton::Left, "Left");
+                                ui.selectable_value(&mut self.settings.camera.fly.key_bindings.mouse_button, MouseButton::Middle, "Middle");
+                                ui.selectable_value(&mut self.settings.camera.fly.key_bindings.mouse_button, MouseButton::Right, "Right");
+                            });
+                        });
                     });
                     ui.collapsing("Orbit Camera", |ui| {
                         ui.horizontal(|ui| {
@@ -377,6 +401,18 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                                     .speed(0.1),
                             );
                         });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Mouse Button").on_hover_text("The mouse button that needs to be pressed to move the camera");
+                            egui::ComboBox::from_id_source("Mouse Button")
+                            .selected_text(format!("{:?}", self.settings.camera.orbit.key_bindings.mouse_button))
+                            .width(60.)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.settings.camera.orbit.key_bindings.mouse_button, MouseButton::Left, "Left");
+                                ui.selectable_value(&mut self.settings.camera.orbit.key_bindings.mouse_button, MouseButton::Middle, "Middle");
+                                ui.selectable_value(&mut self.settings.camera.orbit.key_bindings.mouse_button, MouseButton::Right, "Right");
+                            });
+                        });
                     });
                     ui.collapsing("Top Down Camera", |ui| {
                         ui.horizontal(|ui| {
@@ -395,9 +431,39 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                                     .speed(0.1),
                             );
                         });
+                        ui.horizontal(|ui| {
+                            ui.label("Mouse Button").on_hover_text("The mouse button that needs to be pressed to move the camera");
+                            egui::ComboBox::from_id_source("Mouse Button")
+                            .selected_text(format!("{:?}", self.settings.camera.top_down.key_bindings.mouse_button))
+                            .width(60.)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.settings.camera.top_down.key_bindings.mouse_button, MouseButton::Left, "Left");
+                                ui.selectable_value(&mut self.settings.camera.top_down.key_bindings.mouse_button, MouseButton::Middle, "Middle");
+                                ui.selectable_value(&mut self.settings.camera.top_down.key_bindings.mouse_button, MouseButton::Right, "Right");
+                            });
+                        });
                     });
                 });
 
+                ui.horizontal(|ui| {
+                    if ui.button("Export Settings").clicked() {
+                        let settings_string = serde_json::to_string_pretty(self.settings)
+                            .expect("could not convert settings to json");
+                        let mut dialog = FileDialog::save_file(None)
+                            .default_size((500., 250.))
+                            .default_filename("kmpeek_settings.json");
+                        dialog.open();
+
+                        self.app_state.export_settings_file_dialog =
+                            Some((dialog, settings_string));
+                    }
+
+                    if ui.button("Import Settings").clicked() {
+                        let mut dialog = FileDialog::open_file(None).default_size((500., 250.));
+                        dialog.open();
+                        self.app_state.import_settings_file_dialog = Some(dialog);
+                    }
+                });
                 if ui.button("Reset All Settings").clicked() {
                     *self.settings = AppSettings::default();
                 }
@@ -495,7 +561,7 @@ pub fn update_ui(
                     false
                 }));
             dialog.open();
-            app_state.file_dialog = Some((dialog, $type.to_owned()));
+            app_state.open_kmp_kcl_file_dialog = Some((dialog, $type.to_owned()));
         };
     }
     macro_rules! undo {
@@ -542,21 +608,6 @@ pub fn update_ui(
             undo!();
         }
     }
-
-    let mut kmp_file_path: Option<PathBuf> = None;
-    if let Some(dialog) = &mut app_state.file_dialog {
-        if dialog.0.show(ctx).selected() {
-            if let Some(file) = dialog.0.path() {
-                if dialog.1 == "kmp" {
-                    kmp_file_path = Some(file.into());
-                    ev_kmp_file_selected.send(KmpFileSelected(file.into()));
-                } else if dialog.1 == "kcl" {
-                    ev_kcl_file_selected.send(KclFileSelected(file.into()));
-                }
-            }
-        }
-    }
-    app_state.kmp_file_path = kmp_file_path;
 
     // menu bar
     egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
@@ -643,6 +694,45 @@ pub fn update_ui(
                 topdown_cam: (&mut topdown_cam.0, &mut topdown_cam.1),
             },
         );
+
+    let mut kmp_file_path: Option<PathBuf> = None;
+    if let Some(dialog) = &mut app_state.open_kmp_kcl_file_dialog {
+        if dialog.0.show(ctx).selected() {
+            if let Some(file) = dialog.0.path() {
+                if dialog.1 == "kmp" {
+                    kmp_file_path = Some(file.into());
+                    ev_kmp_file_selected.send(KmpFileSelected(file.into()));
+                } else if dialog.1 == "kcl" {
+                    ev_kcl_file_selected.send(KclFileSelected(file.into()));
+                }
+            }
+        }
+    }
+    app_state.kmp_file_path = kmp_file_path;
+
+    if let Some(dialog) = &mut app_state.export_settings_file_dialog {
+        if dialog.0.show(ctx).selected() {
+            if let Some(file) = dialog.0.path() {
+                let mut file = File::create(file).expect("could not create user settings file");
+                file.write_all(dialog.1.as_bytes())
+                    .expect("could not write to user settings file");
+            }
+        }
+    }
+
+    if let Some(dialog) = &mut app_state.import_settings_file_dialog {
+        if dialog.show(ctx).selected() {
+            if let Some(file) = dialog.path() {
+                let input_settings_string =
+                    read_to_string(file).expect("could not read user settings to string");
+                let input_settings: Result<AppSettings, serde_json::Error> =
+                    serde_json::from_str(&input_settings_string);
+                if let Ok(input_settings) = input_settings {
+                    settings = input_settings;
+                }
+            }
+        }
+    }
 
     pkv.set("settings", &settings)
         .expect("could not set user settings");
