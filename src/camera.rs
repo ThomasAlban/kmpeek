@@ -8,6 +8,7 @@ use bevy::{
 use bevy_infinite_grid::{GridShadowCamera, InfiniteGrid, InfiniteGridBundle, InfiniteGridPlugin};
 
 use crate::ui::{SetupAppStateSet, ViewportImage};
+use bevy_mod_picking::prelude::*;
 
 pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
@@ -212,6 +213,7 @@ pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
                 ..default()
             },
             FlyCam,
+            RaycastPickCamera::default(),
         ))
         .insert(GridShadowCamera);
     commands.spawn((
@@ -230,6 +232,7 @@ pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
             radius: OrbitSettings::default().start_pos.length(),
             ..default()
         },
+        RaycastPickCamera::default(),
     ));
     commands.spawn((
         Camera3dBundle {
@@ -250,6 +253,7 @@ pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
             ..default()
         },
         TopDownCam,
+        RaycastPickCamera::default(),
     ));
 }
 
@@ -324,15 +328,24 @@ pub fn fly_cam_move(
         .get_single_mut()
         .expect("Could not get single fly cam");
 
+    if (!cfg!(target_os = "macos")
+        && (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight)))
+        || (cfg!(target_os = "macos")
+            && (keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight)))
+    {
+        return;
+    }
+    if settings.fly.hold_mouse_to_move && window.cursor.grab_mode == CursorGrabMode::None {
+        return;
+    }
+
     let mut velocity = Vec3::ZERO;
     let local_z = fly_cam_transform.local_z();
     let forward = -Vec3::new(local_z.x, 0., local_z.z);
     let right = Vec3::new(local_z.z, 0., -local_z.x);
 
-    if settings.fly.hold_mouse_to_move && window.cursor.grab_mode == CursorGrabMode::None {
-        return;
-    }
     let mut speed_boost = false;
+
     for key in keys.get_pressed() {
         let key_bindings = &settings.fly.key_bindings;
         if key_bindings.move_forward.contains(key) {

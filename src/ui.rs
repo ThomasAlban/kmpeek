@@ -376,7 +376,6 @@ pub fn update_ui(
     if (!cfg!(target_os = "macos")
         && (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight)))
         || (cfg!(target_os = "macos")
-            // L/RWin maps to Command on Macos
             && (keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight)))
     {
         // ^ if the control/command key is pressed:
