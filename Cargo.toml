@@ -23,6 +23,7 @@ bevy_pkv = "0.8.0"
 bytemuck = "1.13.1"
 byteorder = "1.4.3"
 egui_dock = "0.6.3"
+egui_file = "0.10.0"
 # egui_dock = { git = "https://github.com/Vickerinox/egui_dock", branch = "window-dock/undocking" }
 num-traits = "0.2.15"
 serde = { version = "1.0.163", features = ["derive"] }

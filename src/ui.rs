@@ -3,7 +3,6 @@ use crate::{
         CameraMode, CameraSettings, FlyCam, FlySettings, OrbitCam, OrbitSettings, TopDownCam,
         TopDownSettings,
     },
-    file_dialog::*,
     kcl_file::*,
     kcl_model::KclModelSettings,
     kmp_file::Kmp,
@@ -23,6 +22,7 @@ use bevy_egui::{
 };
 use bevy_pkv::PkvStore;
 use egui_dock::{DockArea, NodeIndex, Style, Tree};
+use egui_file::*;
 use serde::{Deserialize, Serialize};
 use std::{fs::File, path::PathBuf};
 use strum::IntoEnumIterator;
@@ -543,18 +543,20 @@ pub fn update_ui(
         }
     }
 
+    let mut kmp_file_path: Option<PathBuf> = None;
     if let Some(dialog) = &mut app_state.file_dialog {
         if dialog.0.show(ctx).selected() {
             if let Some(file) = dialog.0.path() {
                 if dialog.1 == "kmp" {
-                    app_state.kmp_file_path = Some(file.clone());
-                    ev_kmp_file_selected.send(KmpFileSelected(file));
+                    kmp_file_path = Some(file.into());
+                    ev_kmp_file_selected.send(KmpFileSelected(file.into()));
                 } else if dialog.1 == "kcl" {
-                    ev_kcl_file_selected.send(KclFileSelected(file));
+                    ev_kcl_file_selected.send(KclFileSelected(file.into()));
                 }
             }
         }
     }
+    app_state.kmp_file_path = kmp_file_path;
 
     // menu bar
     egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
