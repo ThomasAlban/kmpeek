@@ -6,10 +6,14 @@ use bevy::{
     window::{CursorGrabMode, PrimaryWindow},
 };
 use bevy_infinite_grid::{GridShadowCamera, InfiniteGrid, InfiniteGridBundle, InfiniteGridPlugin};
+use bevy_mod_raycast::RaycastSource;
 use bevy_pkv::PkvStore;
 use serde::{Deserialize, Serialize};
 
-use crate::ui::{AppSettings, AppState, SetupAppStateSet, ViewportImage};
+use crate::{
+    mouse_picking::RaycastSet,
+    ui::{AppSettings, AppState, SetupAppStateSet, ViewportImage},
+};
 
 pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
@@ -220,44 +224,49 @@ pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
             },
             FlyCam,
         ))
-        .insert(GridShadowCamera);
-    commands.spawn((
-        Camera3dBundle {
-            camera: Camera {
-                // render to the image
-                target: RenderTarget::Image(viewport.clone()),
-                is_active: false,
+        .insert(GridShadowCamera)
+        .insert(RaycastSource::<RaycastSet>::new());
+    commands
+        .spawn((
+            Camera3dBundle {
+                camera: Camera {
+                    // render to the image
+                    target: RenderTarget::Image(viewport.clone()),
+                    is_active: false,
+                    ..default()
+                },
+                transform: Transform::from_translation(orbit_default.start_pos)
+                    .looking_at(Vec3::ZERO, Vec3::Y),
                 ..default()
             },
-            transform: Transform::from_translation(orbit_default.start_pos)
-                .looking_at(Vec3::ZERO, Vec3::Y),
-            ..default()
-        },
-        OrbitCam {
-            radius: OrbitSettings::default().start_pos.length(),
-            ..default()
-        },
-    ));
-    commands.spawn((
-        Camera3dBundle {
-            camera: Camera {
-                // render to the image
-                target: RenderTarget::Image(viewport.clone()),
-                is_active: false,
+            OrbitCam {
+                radius: OrbitSettings::default().start_pos.length(),
                 ..default()
             },
-            projection: Projection::Orthographic(OrthographicProjection {
-                near: topdown_default.near,
-                far: topdown_default.far,
-                scale: topdown_default.scale,
+        ))
+        .insert(RaycastSource::<RaycastSet>::new());
+    commands
+        .spawn((
+            Camera3dBundle {
+                camera: Camera {
+                    // render to the image
+                    target: RenderTarget::Image(viewport.clone()),
+                    is_active: false,
+                    ..default()
+                },
+                projection: Projection::Orthographic(OrthographicProjection {
+                    near: topdown_default.near,
+                    far: topdown_default.far,
+                    scale: topdown_default.scale,
+                    ..default()
+                }),
+                transform: Transform::from_translation(topdown_default.start_pos)
+                    .looking_at(Vec3::ZERO, Vec3::Z),
                 ..default()
-            }),
-            transform: Transform::from_translation(topdown_default.start_pos)
-                .looking_at(Vec3::ZERO, Vec3::Z),
-            ..default()
-        },
-        TopDownCam,
-    ));
+            },
+            TopDownCam,
+        ))
+        .insert(RaycastSource::<RaycastSet>::new());
 }
 
 pub fn cursor_grab(

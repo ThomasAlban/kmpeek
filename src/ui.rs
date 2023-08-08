@@ -583,8 +583,8 @@ pub fn update_ui(
     macro_rules! save {
         () => {
             if let (Some(kmp_file_path), Some(ref mut kmp)) = (&app_state.kmp_file_path, &mut kmp) {
-                let kmp_file = File::create(kmp_file_path).unwrap();
-                kmp.write(kmp_file).unwrap();
+                let kmp_file = File::create(kmp_file_path).expect("could not create kmp file");
+                kmp.write(kmp_file).expect("could not write kmp file");
             }
         };
     }

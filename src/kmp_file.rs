@@ -183,21 +183,20 @@ impl KmpData for Header {
                 "Invalid file magic",
             ));
         }
-        let file_magic = String::from_utf8(file_magic.to_vec());
-        if file_magic.is_err() {
+        // convert file magic to string
+        let Ok(file_magic) = String::from_utf8(file_magic.to_vec()) else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "Invalid file magic",
+                "invalid file magic",
             ));
-        }
-        let file_magic = file_magic.unwrap();
+        };
         let file_len = rdr.read_u32::<BE>()?;
         // check that the number of sections is 15
         let num_sections = rdr.read_u16::<BE>()?;
         if num_sections != 15 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("Expected 15 sections but found {num_sections}"),
+                format!("expected 15 sections but found {num_sections} sections"),
             ));
         }
         let header_len = rdr.read_u16::<BE>()?;
@@ -243,14 +242,12 @@ struct SectionHeader {
 impl KmpData for SectionHeader {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let section_name = rdr.read_array::<u8, 4>()?;
-        let section_name = String::from_utf8(section_name.to_vec());
-        if section_name.is_err() {
+        let Ok(section_name) = String::from_utf8(section_name.to_vec()) else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "Invalid section name",
+                "invalid section name",
             ));
-        }
-        let section_name = section_name.unwrap();
+        };
         let num_entries = rdr.read_u16::<BE>()?;
         let additional_value = rdr.read_u16::<BE>()?;
         Ok(SectionHeader {

@@ -88,8 +88,8 @@ pub fn spawn_model(
         commands.remove_resource::<Kcl>();
 
         // open the KCL file and read it
-        let kcl_file = File::open(ev.0.clone()).unwrap();
-        let kcl = Kcl::read(kcl_file).unwrap();
+        let kcl_file = File::open(ev.0.clone()).expect("could not open kcl file");
+        let kcl = Kcl::read(kcl_file).expect("could not read kcl file");
         // spawn the KCL model
         for i in 0..32 {
             let vertex_group = kcl.vertex_groups[i].clone();
@@ -151,7 +151,9 @@ pub fn update_kcl_model(
         } else {
             Visibility::Hidden
         };
-        let material = materials.get_mut(&standard_material).unwrap();
+        let material = materials
+            .get_mut(&standard_material)
+            .expect("could not get kcl material");
         material.base_color = settings.kcl_model.color[i].into();
         material.alpha_mode = if material.base_color.a() < 1. {
             AlphaMode::Add

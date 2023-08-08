@@ -3,11 +3,13 @@ mod kcl_file;
 mod kcl_model;
 mod kmp_file;
 mod kmp_model;
+mod mouse_picking;
 mod ui;
 
 use camera::*;
 use kcl_model::*;
 use kmp_model::*;
+use mouse_picking::*;
 use ui::*;
 
 use bevy::{
@@ -32,6 +34,12 @@ fn main() {
             },
             ..default()
         })
-        .add_plugins((CameraPlugin, UIPlugin, KclPlugin, KmpPlugin))
+        .add_plugins((
+            CameraPlugin,
+            UIPlugin,
+            KclPlugin,
+            KmpPlugin,
+            MousePickingPlugin,
+        ))
         .run();
 }

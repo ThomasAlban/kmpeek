@@ -1,7 +1,8 @@
 use std::{ffi::OsStr, fs::File};
 
-use crate::{kmp_file::*, ui::KmpFileSelected};
+use crate::{kmp_file::*, mouse_picking::RaycastSet, ui::KmpFileSelected};
 use bevy::prelude::*;
+use bevy_mod_raycast::RaycastMesh;
 use bevy_more_shapes::Cylinder;
 
 pub struct KmpPlugin;
@@ -46,8 +47,8 @@ pub fn spawn_model(
         commands.remove_resource::<Kmp>();
 
         // open the KMP file and read it
-        let kmp_file = File::open(ev.0.clone()).unwrap();
-        let kmp = Kmp::read(kmp_file).unwrap();
+        let kmp_file = File::open(ev.0.clone()).expect("could not open kmp file");
+        let kmp = Kmp::read(kmp_file).expect("could not read kmp file");
 
         commands.insert_resource(kmp.clone());
 
@@ -104,17 +105,19 @@ pub fn spawn_model(
             }
             for (i, point) in points.iter().enumerate() {
                 // spawn the spheres where each point is
-                commands.spawn((
-                    PbrBundle {
-                        mesh: sphere_mesh.clone(),
-                        material: sphere_material.clone(),
-                        transform: Transform::from_translation(point.0.position),
-                        ..default()
-                    },
-                    NormalizeScale::new(200., 12., Vec3::ONE),
-                    KmpModelSection,
-                    ItptModel(point.1),
-                ));
+                commands
+                    .spawn((
+                        PbrBundle {
+                            mesh: sphere_mesh.clone(),
+                            material: sphere_material.clone(),
+                            transform: Transform::from_translation(point.0.position),
+                            ..default()
+                        },
+                        NormalizeScale::new(200., 12., Vec3::ONE),
+                        KmpModelSection,
+                        ItptModel(point.1),
+                    ))
+                    .insert(RaycastMesh::<RaycastSet>::default());
                 // if we are not at the end of the group
                 if i < points.len() - 1 {
                     spawn_arrow_line(
