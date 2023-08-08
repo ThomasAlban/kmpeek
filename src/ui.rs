@@ -9,7 +9,6 @@ use crate::{
     kmp_model::{ItptModel, NormalizeScale},
 };
 use bevy::{
-    core_pipeline::core_2d::graph::input,
     math::vec2,
     prelude::*,
     render::render_resource::{
@@ -18,7 +17,7 @@ use bevy::{
     window::PrimaryWindow,
 };
 use bevy_egui::{
-    egui::{self, Key, TextureId},
+    egui::{self, TextureId},
     EguiContexts, EguiPlugin, EguiUserTextures,
 };
 use bevy_pkv::PkvStore;
@@ -61,12 +60,16 @@ pub struct AppState {
     pub customise_kcl_open: bool,
     pub camera_settings_open: bool,
 
-    pub open_kmp_kcl_file_dialog: Option<(FileDialog, String)>,
-    pub export_settings_file_dialog: Option<(FileDialog, String)>,
-    pub import_settings_file_dialog: Option<FileDialog>,
+    pub file_dialog: Option<(FileDialog, DialogType)>,
 
     pub kmp_file_path: Option<PathBuf>,
     pub mouse_in_viewport: bool,
+}
+
+pub enum DialogType {
+    OpenKmpKcl,
+    ExportSettings,
+    ImportSettings,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -74,6 +77,7 @@ pub struct AppSettings {
     pub camera: CameraSettings,
     pub kcl_model: KclModelSettings,
     pub point_scale: f32,
+    pub open_course_kcl_in_directory: bool,
 }
 impl Default for AppSettings {
     fn default() -> Self {
@@ -81,6 +85,7 @@ impl Default for AppSettings {
             camera: CameraSettings::default(),
             kcl_model: KclModelSettings::default(),
             point_scale: 1.,
+            open_course_kcl_in_directory: true,
         }
     }
 }
@@ -140,9 +145,7 @@ pub fn setup_app_state(
         customise_kcl_open: false,
         camera_settings_open: false,
 
-        open_kmp_kcl_file_dialog: None,
-        export_settings_file_dialog: None,
-        import_settings_file_dialog: None,
+        file_dialog: None,
 
         kmp_file_path: None,
         mouse_in_viewport: false,
@@ -225,6 +228,10 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                 for normalize in self.normalize.iter_mut() {
                     normalize.multiplier = self.settings.point_scale;
                 }
+                ui.checkbox(
+                    &mut self.settings.open_course_kcl_in_directory,
+                    "Auto open course.kcl",
+                );
 
                 egui::CollapsingHeader::new("Collision Model")
                     .default_open(true)
@@ -447,21 +454,18 @@ impl egui_dock::TabViewer for TabViewer<'_> {
 
                 ui.horizontal(|ui| {
                     if ui.button("Export Settings").clicked() {
-                        let settings_string = serde_json::to_string_pretty(self.settings)
-                            .expect("could not convert settings to json");
                         let mut dialog = FileDialog::save_file(None)
                             .default_size((500., 250.))
                             .default_filename("kmpeek_settings.json");
                         dialog.open();
 
-                        self.app_state.export_settings_file_dialog =
-                            Some((dialog, settings_string));
+                        self.app_state.file_dialog = Some((dialog, DialogType::ExportSettings));
                     }
 
                     if ui.button("Import Settings").clicked() {
                         let mut dialog = FileDialog::open_file(None).default_size((500., 250.));
                         dialog.open();
-                        self.app_state.import_settings_file_dialog = Some(dialog);
+                        self.app_state.file_dialog = Some((dialog, DialogType::ImportSettings));
                     }
                 });
                 if ui.button("Reset All Settings").clicked() {
@@ -549,19 +553,19 @@ pub fn update_ui(
 
     // things which can be called from both the UI and keybinds
     macro_rules! open_file {
-        ($type:literal) => {
+        () => {
             let mut dialog = FileDialog::open_file(None)
                 .default_size((500., 250.))
                 .filter(Box::new(|path| {
                     if let Some(os_str) = path.extension() {
                         if let Some(str) = os_str.to_str() {
-                            return str == $type;
+                            return str == "kcl" || str == "kmp";
                         }
                     }
                     false
                 }));
             dialog.open();
-            app_state.open_kmp_kcl_file_dialog = Some((dialog, $type.to_owned()));
+            app_state.file_dialog = Some((dialog, DialogType::OpenKmpKcl));
         };
     }
     macro_rules! undo {
@@ -596,12 +600,10 @@ pub fn update_ui(
             // keybinds with shift held
             if keys.just_pressed(KeyCode::Z) {
                 redo!();
-            } else if keys.just_pressed(KeyCode::O) {
-                open_file!("kcl");
             }
         // keybinds without shift held
         } else if keys.just_pressed(KeyCode::O) {
-            open_file!("kmp");
+            open_file!();
         } else if keys.just_pressed(KeyCode::S) {
             save!();
         } else if keys.just_pressed(KeyCode::Z) {
@@ -618,17 +620,10 @@ pub fn update_ui(
             }
             ui.menu_button("File", |ui| {
                 if ui
-                    .add(egui::Button::new("Open KMP").shortcut_text(format!("{sc_btn}+O")))
+                    .add(egui::Button::new("Open KCL/KMP").shortcut_text(format!("{sc_btn}+O")))
                     .clicked()
                 {
-                    open_file!("kmp");
-                    ui.close_menu();
-                }
-                if ui
-                    .add(egui::Button::new("Open KCL").shortcut_text(format!("{sc_btn}+Shift+O")))
-                    .clicked()
-                {
-                    open_file!("kcl");
+                    open_file!();
                     ui.close_menu();
                 }
                 if ui
@@ -696,43 +691,49 @@ pub fn update_ui(
         );
 
     let mut kmp_file_path: Option<PathBuf> = None;
-    if let Some(dialog) = &mut app_state.open_kmp_kcl_file_dialog {
+    if let Some(dialog) = &mut app_state.file_dialog {
         if dialog.0.show(ctx).selected() {
             if let Some(file) = dialog.0.path() {
-                if dialog.1 == "kmp" {
-                    kmp_file_path = Some(file.into());
-                    ev_kmp_file_selected.send(KmpFileSelected(file.into()));
-                } else if dialog.1 == "kcl" {
-                    ev_kcl_file_selected.send(KclFileSelected(file.into()));
+                match dialog.1 {
+                    DialogType::OpenKmpKcl => {
+                        if let Some(file_ext) = file.extension() {
+                            if file_ext == "kmp" {
+                                kmp_file_path = Some(file.into());
+                                ev_kmp_file_selected.send(KmpFileSelected(file.into()));
+                                if settings.open_course_kcl_in_directory {
+                                    let mut course_kcl_path = file.to_owned();
+                                    course_kcl_path.set_file_name("course.kcl");
+                                    if course_kcl_path.exists() {
+                                        ev_kcl_file_selected.send(KclFileSelected(course_kcl_path));
+                                    }
+                                }
+                            } else if file_ext == "kcl" {
+                                ev_kcl_file_selected.send(KclFileSelected(file.into()));
+                            }
+                        }
+                    }
+                    DialogType::ExportSettings => {
+                        let settings_string = serde_json::to_string_pretty(&settings)
+                            .expect("could not convert settings to json");
+                        let mut file =
+                            File::create(file).expect("could not create user settings file");
+                        file.write_all(settings_string.as_bytes())
+                            .expect("could not write to user settings file");
+                    }
+                    DialogType::ImportSettings => {
+                        let input_settings_string =
+                            read_to_string(file).expect("could not read user settings to string");
+                        let input_settings: Result<AppSettings, _> =
+                            serde_json::from_str(&input_settings_string);
+                        if let Ok(input_settings) = input_settings {
+                            settings = input_settings;
+                        }
+                    }
                 }
             }
         }
     }
     app_state.kmp_file_path = kmp_file_path;
-
-    if let Some(dialog) = &mut app_state.export_settings_file_dialog {
-        if dialog.0.show(ctx).selected() {
-            if let Some(file) = dialog.0.path() {
-                let mut file = File::create(file).expect("could not create user settings file");
-                file.write_all(dialog.1.as_bytes())
-                    .expect("could not write to user settings file");
-            }
-        }
-    }
-
-    if let Some(dialog) = &mut app_state.import_settings_file_dialog {
-        if dialog.show(ctx).selected() {
-            if let Some(file) = dialog.path() {
-                let input_settings_string =
-                    read_to_string(file).expect("could not read user settings to string");
-                let input_settings: Result<AppSettings, serde_json::Error> =
-                    serde_json::from_str(&input_settings_string);
-                if let Ok(input_settings) = input_settings {
-                    settings = input_settings;
-                }
-            }
-        }
-    }
 
     pkv.set("settings", &settings)
         .expect("could not set user settings");

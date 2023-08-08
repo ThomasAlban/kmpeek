@@ -1,9 +1,6 @@
 use std::{ffi::OsStr, fs::File};
 
-use crate::{
-    kmp_file::*,
-    ui::{KclFileSelected, KmpFileSelected},
-};
+use crate::{kmp_file::*, ui::KmpFileSelected};
 use bevy::prelude::*;
 use bevy_more_shapes::Cylinder;
 
@@ -36,7 +33,6 @@ pub fn spawn_model(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut ev_kmp_file_selected: EventReader<KmpFileSelected>,
-    mut ev_kcl_file_selected: EventWriter<KclFileSelected>,
     mut model: Query<Entity, With<KmpModelSection>>,
 ) {
     for ev in ev_kmp_file_selected.iter() {
@@ -54,13 +50,6 @@ pub fn spawn_model(
         let kmp = Kmp::read(kmp_file).unwrap();
 
         commands.insert_resource(kmp.clone());
-
-        let mut path = ev.0.clone();
-        path.pop();
-        path.push("course.kcl");
-        if File::open(path.clone()).is_ok() {
-            ev_kcl_file_selected.send(KclFileSelected(path));
-        }
 
         // meshes for the kmp model
         let sphere_mesh = meshes.add(
