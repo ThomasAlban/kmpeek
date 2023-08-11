@@ -210,63 +210,60 @@ pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
     let orbit_default = OrbitSettings::default();
     let topdown_default = TopDownSettings::default();
 
-    commands
-        .spawn((
-            Camera3dBundle {
-                camera: Camera {
-                    // render to the image
-                    target: RenderTarget::Image(viewport.clone()),
-                    ..default()
-                },
-                transform: Transform::from_translation(fly_default.start_pos)
-                    .looking_at(Vec3::ZERO, Vec3::Y),
+    commands.spawn((
+        Camera3dBundle {
+            camera: Camera {
+                // render to the image
+                // target: RenderTarget::Image(viewport.clone()),
                 ..default()
             },
-            FlyCam,
-        ))
-        .insert(GridShadowCamera)
-        .insert(RaycastSource::<RaycastSet>::new());
-    commands
-        .spawn((
-            Camera3dBundle {
-                camera: Camera {
-                    // render to the image
-                    target: RenderTarget::Image(viewport.clone()),
-                    is_active: false,
-                    ..default()
-                },
-                transform: Transform::from_translation(orbit_default.start_pos)
-                    .looking_at(Vec3::ZERO, Vec3::Y),
+            transform: Transform::from_translation(fly_default.start_pos)
+                .looking_at(Vec3::ZERO, Vec3::Y),
+            ..default()
+        },
+        FlyCam,
+        GridShadowCamera,
+        RaycastSource::<RaycastSet>::new_transform_empty(),
+    ));
+    commands.spawn((
+        Camera3dBundle {
+            camera: Camera {
+                // render to the image
+                target: RenderTarget::Image(viewport.clone()),
+                is_active: false,
                 ..default()
             },
-            OrbitCam {
-                radius: OrbitSettings::default().start_pos.length(),
+            transform: Transform::from_translation(orbit_default.start_pos)
+                .looking_at(Vec3::ZERO, Vec3::Y),
+            ..default()
+        },
+        OrbitCam {
+            radius: OrbitSettings::default().start_pos.length(),
+            ..default()
+        },
+        // RaycastSource::<RaycastSet>::new(),
+    ));
+    commands.spawn((
+        Camera3dBundle {
+            camera: Camera {
+                // render to the image
+                target: RenderTarget::Image(viewport.clone()),
+                is_active: false,
                 ..default()
             },
-        ))
-        .insert(RaycastSource::<RaycastSet>::new());
-    commands
-        .spawn((
-            Camera3dBundle {
-                camera: Camera {
-                    // render to the image
-                    target: RenderTarget::Image(viewport.clone()),
-                    is_active: false,
-                    ..default()
-                },
-                projection: Projection::Orthographic(OrthographicProjection {
-                    near: topdown_default.near,
-                    far: topdown_default.far,
-                    scale: topdown_default.scale,
-                    ..default()
-                }),
-                transform: Transform::from_translation(topdown_default.start_pos)
-                    .looking_at(Vec3::ZERO, Vec3::Z),
+            projection: Projection::Orthographic(OrthographicProjection {
+                near: topdown_default.near,
+                far: topdown_default.far,
+                scale: topdown_default.scale,
                 ..default()
-            },
-            TopDownCam,
-        ))
-        .insert(RaycastSource::<RaycastSet>::new());
+            }),
+            transform: Transform::from_translation(topdown_default.start_pos)
+                .looking_at(Vec3::ZERO, Vec3::Z),
+            ..default()
+        },
+        TopDownCam,
+        // RaycastSource::<RaycastSet>::new(),
+    ));
 }
 
 pub fn cursor_grab(
@@ -275,9 +272,9 @@ pub fn cursor_grab(
     app_state: Res<AppState>,
     pkv: Res<PkvStore>,
 ) {
-    if !app_state.mouse_in_viewport {
-        return;
-    }
+    // if !app_state.mouse_in_viewport {
+    //     return;
+    // }
     let mut window = window
         .get_single_mut()
         .expect("Primary window not found for cursor grab");
@@ -348,9 +345,9 @@ pub fn fly_cam_move(
     pkv: Res<PkvStore>,
     app_state: Res<AppState>,
 ) {
-    if !app_state.mouse_in_viewport {
-        return;
-    }
+    // if !app_state.mouse_in_viewport {
+    //     return;
+    // }
     let settings = pkv
         .get::<AppSettings>("settings")
         .expect("could not get user settings");
@@ -413,9 +410,9 @@ pub fn fly_cam_look(
     pkv: Res<PkvStore>,
     app_state: Res<AppState>,
 ) {
-    if !app_state.mouse_in_viewport {
-        return;
-    }
+    // if !app_state.mouse_in_viewport {
+    //     return;
+    // }
     let settings = pkv
         .get::<AppSettings>("settings")
         .expect("could not get user settings");

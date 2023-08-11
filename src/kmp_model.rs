@@ -105,19 +105,18 @@ pub fn spawn_model(
             }
             for (i, point) in points.iter().enumerate() {
                 // spawn the spheres where each point is
-                commands
-                    .spawn((
-                        PbrBundle {
-                            mesh: sphere_mesh.clone(),
-                            material: sphere_material.clone(),
-                            transform: Transform::from_translation(point.0.position),
-                            ..default()
-                        },
-                        NormalizeScale::new(200., 12., Vec3::ONE),
-                        KmpModelSection,
-                        ItptModel(point.1),
-                    ))
-                    .insert(RaycastMesh::<RaycastSet>::default());
+                commands.spawn((
+                    PbrBundle {
+                        mesh: sphere_mesh.clone(),
+                        material: sphere_material.clone(),
+                        transform: Transform::from_translation(point.0.position),
+                        ..default()
+                    },
+                    // NormalizeScale::new(200., 12., Vec3::ONE),
+                    KmpModelSection,
+                    ItptModel(point.1),
+                    RaycastMesh::<RaycastSet>::default(),
+                ));
                 // if we are not at the end of the group
                 if i < points.len() - 1 {
                     spawn_arrow_line(
