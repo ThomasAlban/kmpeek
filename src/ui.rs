@@ -30,7 +30,7 @@ use std::{
     path::PathBuf,
 };
 use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
+use strum_macros::{Display, EnumIter};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 pub struct SetupAppStateSet;
@@ -163,7 +163,7 @@ pub struct KmpFileSelected(pub PathBuf);
 #[derive(Event)]
 pub struct KclFileSelected(pub PathBuf);
 
-#[derive(Debug, PartialEq, EnumIter)]
+#[derive(Display, PartialEq, EnumIter)]
 pub enum Tab {
     Viewport,
     Edit,
@@ -171,7 +171,6 @@ pub enum Tab {
 }
 
 // this tells egui how to render each tab
-#[allow(clippy::type_complexity)]
 struct TabViewer<'a> {
     // add into here any data that needs to be passed into any tabs
     viewport_image: &'a mut Image,
@@ -236,6 +235,10 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                 egui::CollapsingHeader::new("Collision Model")
                     .default_open(true)
                     .show(ui, |ui| {
+                        ui.checkbox(
+                            &mut self.settings.kcl_model.backface_culling,
+                            "Backface Culling",
+                        );
                         let visible = &mut self.settings.kcl_model.visible;
                         use KclFlag::*;
 
@@ -476,7 +479,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
     }
     // show the title of the tab - the 'Tab' type already stores its title anyway
     fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
-        format!("{tab:?}").into()
+        tab.to_string().into()
     }
 }
 
@@ -655,7 +658,7 @@ pub fn update_ui(
                     // search for the tab and see if it currently exists
                     let tab_in_tree = tree.find_tab(&tab);
                     if ui
-                        .selectable_label(tab_in_tree.is_some(), format!("{tab:?}"))
+                        .selectable_label(tab_in_tree.is_some(), tab.to_string())
                         .clicked()
                     {
                         // remove if it exists, else create it

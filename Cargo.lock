@@ -471,14 +471,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy_flycam"
-version = "0.10.1"
-source = "git+https://github.com/Hibyehello/bevy_flycam.git#54b6024ddce9abc593bc50980a71c54f35a04797"
-dependencies = [
- "bevy",
-]
-
-[[package]]
 name = "bevy_gizmos"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -515,11 +507,11 @@ dependencies = [
 
 [[package]]
 name = "bevy_infinite_grid"
-version = "0.7.0"
-source = "git+https://github.com/Hibyehello/bevy_infinite_grid.git#b047d042751362d8947963dd3278a671f40302df"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f7af2ebdc273ef301605520755d8d3a4cf294b841e57330932b11c0a1b44bf6"
 dependencies = [
  "bevy",
- "bevy_flycam",
 ]
 
 [[package]]

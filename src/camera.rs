@@ -5,7 +5,7 @@ use bevy::{
     render::camera::RenderTarget,
     window::{CursorGrabMode, PrimaryWindow},
 };
-use bevy_infinite_grid::{GridShadowCamera, InfiniteGrid, InfiniteGridBundle, InfiniteGridPlugin};
+use bevy_infinite_grid::{InfiniteGrid, InfiniteGridBundle, InfiniteGridPlugin};
 use bevy_mod_raycast::RaycastSource;
 use bevy_pkv::PkvStore;
 use serde::{Deserialize, Serialize};
@@ -214,7 +214,7 @@ pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
         Camera3dBundle {
             camera: Camera {
                 // render to the image
-                // target: RenderTarget::Image(viewport.clone()),
+                target: RenderTarget::Image(viewport.clone()),
                 ..default()
             },
             transform: Transform::from_translation(fly_default.start_pos)
@@ -222,8 +222,7 @@ pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
             ..default()
         },
         FlyCam,
-        GridShadowCamera,
-        RaycastSource::<RaycastSet>::new_transform_empty(),
+        RaycastSource::<RaycastSet>::new(),
     ));
     commands.spawn((
         Camera3dBundle {
@@ -241,7 +240,7 @@ pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
             radius: OrbitSettings::default().start_pos.length(),
             ..default()
         },
-        // RaycastSource::<RaycastSet>::new(),
+        RaycastSource::<RaycastSet>::new(),
     ));
     commands.spawn((
         Camera3dBundle {
@@ -262,7 +261,7 @@ pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
             ..default()
         },
         TopDownCam,
-        // RaycastSource::<RaycastSet>::new(),
+        RaycastSource::<RaycastSet>::new(),
     ));
 }
 
@@ -272,9 +271,9 @@ pub fn cursor_grab(
     app_state: Res<AppState>,
     pkv: Res<PkvStore>,
 ) {
-    // if !app_state.mouse_in_viewport {
-    //     return;
-    // }
+    if !app_state.mouse_in_viewport {
+        return;
+    }
     let mut window = window
         .get_single_mut()
         .expect("Primary window not found for cursor grab");
@@ -345,9 +344,9 @@ pub fn fly_cam_move(
     pkv: Res<PkvStore>,
     app_state: Res<AppState>,
 ) {
-    // if !app_state.mouse_in_viewport {
-    //     return;
-    // }
+    if !app_state.mouse_in_viewport {
+        return;
+    }
     let settings = pkv
         .get::<AppSettings>("settings")
         .expect("could not get user settings");
@@ -410,9 +409,9 @@ pub fn fly_cam_look(
     pkv: Res<PkvStore>,
     app_state: Res<AppState>,
 ) {
-    // if !app_state.mouse_in_viewport {
-    //     return;
-    // }
+    if !app_state.mouse_in_viewport {
+        return;
+    }
     let settings = pkv
         .get::<AppSettings>("settings")
         .expect("could not get user settings");

@@ -2,7 +2,10 @@ use crate::{
     kcl_file::Kcl,
     ui::{AppSettings, KclFileSelected},
 };
-use bevy::{prelude::*, render::mesh::PrimitiveTopology};
+use bevy::{
+    prelude::*,
+    render::{mesh::PrimitiveTopology, render_resource::Face},
+};
 use bevy_pkv::PkvStore;
 use serde::{Deserialize, Serialize};
 use std::{ffi::OsStr, fs::File};
@@ -19,6 +22,7 @@ impl Plugin for KclPlugin {
 pub struct KclModelSettings {
     pub visible: [bool; 32],
     pub color: [[f32; 4]; 32],
+    pub backface_culling: bool,
 }
 impl Default for KclModelSettings {
     fn default() -> Self {
@@ -58,6 +62,7 @@ impl Default for KclModelSettings {
                 [0.0, 0.6, 0.0, 0.8], // half-pipe invis wall
                 [0.8, 0.7, 0.8, 1.0], // special wall
             ],
+            backface_culling: false,
         }
     }
 }
@@ -106,8 +111,12 @@ pub fn spawn_model(
                     mesh: meshes.add(mesh),
                     material: materials.add(StandardMaterial {
                         base_color: color,
-                        cull_mode: None,
-                        double_sided: true,
+                        cull_mode: if settings.kcl_model.backface_culling {
+                            Some(Face::Back)
+                        } else {
+                            None
+                        },
+                        double_sided: !settings.kcl_model.backface_culling,
                         alpha_mode: if color.a() < 1. {
                             AlphaMode::Add
                         } else {
@@ -160,5 +169,11 @@ pub fn update_kcl_model(
         } else {
             AlphaMode::Opaque
         };
+        material.cull_mode = if settings.kcl_model.backface_culling {
+            Some(Face::Back)
+        } else {
+            None
+        };
+        material.double_sided = !settings.kcl_model.backface_culling
     }
 }
