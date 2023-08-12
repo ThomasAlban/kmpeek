@@ -56,6 +56,9 @@ pub trait KmpData {
     fn write<T>(&self, wtr: T) -> io::Result<T>
     where
         T: Write + Read + Seek;
+    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized;
 }
 
 /// stores all the data of the KMP file
@@ -64,11 +67,11 @@ pub struct Kmp {
     pub header: Header,
     pub ktpt: Section<Ktpt>,
     pub enpt: Section<Enpt>,
-    pub enph: Section<Path>,
+    pub enph: Section<Enph>,
     pub itpt: Section<Itpt>,
-    pub itph: Section<Path>,
+    pub itph: Section<Itph>,
     pub ckpt: Section<Ckpt>,
-    pub ckph: Section<Path>,
+    pub ckph: Section<Ckph>,
     pub gobj: Section<Gobj>,
     pub poti: Section<Poti>,
     pub area: Section<Area>,
@@ -85,11 +88,11 @@ impl Kmp {
 
         let ktpt = Section::<Ktpt>::read(&mut rdr)?;
         let enpt = Section::<Enpt>::read(&mut rdr)?;
-        let enph = Section::<Path>::read(&mut rdr)?;
+        let enph = Section::<Enph>::read(&mut rdr)?;
         let itpt = Section::<Itpt>::read(&mut rdr)?;
-        let itph = Section::<Path>::read(&mut rdr)?;
+        let itph = Section::<Itph>::read(&mut rdr)?;
         let ckpt = Section::<Ckpt>::read(&mut rdr)?;
-        let ckph = Section::<Path>::read(&mut rdr)?;
+        let ckph = Section::<Ckph>::read(&mut rdr)?;
         let gobj = Section::<Gobj>::read(&mut rdr)?;
         let poti = Section::<Poti>::read(&mut rdr)?;
         let area = Section::<Area>::read(&mut rdr)?;
@@ -229,6 +232,12 @@ impl KmpData for Header {
         wtr.write_array(self.section_offsets)?;
         Ok(wtr)
     }
+    fn get_section(_: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        None
+    }
 }
 
 /// Each section has a header containing its info (like the name and number of entries)
@@ -264,6 +273,12 @@ impl KmpData for SectionHeader {
         wtr.write_u16::<BE>(self.num_entries)?;
         wtr.write_u16::<BE>(self.additional_value)?;
         Ok(wtr)
+    }
+    fn get_section(_: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        None
     }
 }
 
@@ -305,40 +320,11 @@ where
         }
         Ok(wtr)
     }
-}
-
-/// Sections of the KMP such as ENPH (enemy paths), ITPH (item paths) all have the same data structure, so all use this Path struct.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Path {
-    pub start: u8,
-    pub group_length: u8,
-    pub prev_group: [u8; 6],
-    pub next_group: [u8; 6],
-}
-impl KmpData for Path {
-    fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let start = rdr.read_u8()?;
-        let group_length = rdr.read_u8()?;
-        let prev_group = rdr.read_array::<u8, 6>()?;
-        let next_group = rdr.read_array::<u8, 6>()?;
-        rdr.read_u16::<BE>()?;
-        Ok(Path {
-            start,
-            group_length,
-            prev_group,
-            next_group,
-        })
-    }
-    fn write<T>(&self, mut wtr: T) -> io::Result<T>
+    fn get_section(_: &mut Kmp) -> Option<&mut Section<Self>>
     where
-        T: Write,
+        Self: Sized,
     {
-        wtr.write_u8(self.start)?;
-        wtr.write_u8(self.group_length)?;
-        wtr.write_array(self.prev_group)?;
-        wtr.write_array(self.next_group)?;
-        wtr.write_u16::<BE>(0)?;
-        Ok(wtr)
+        None
     }
 }
 
@@ -370,6 +356,12 @@ impl KmpData for Ktpt {
         wtr.write_i16::<BE>(self.player_index)?;
         wtr.write_u16::<BE>(0)?;
         Ok(wtr)
+    }
+    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        Some(&mut kmp.ktpt)
     }
 }
 
@@ -408,6 +400,52 @@ impl KmpData for Enpt {
         wtr.write_u8(self.setting_3)?;
         Ok(wtr)
     }
+    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        Some(&mut kmp.enpt)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Enph {
+    pub start: u8,
+    pub group_length: u8,
+    pub prev_group: [u8; 6],
+    pub next_group: [u8; 6],
+}
+impl KmpData for Enph {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
+        let start = rdr.read_u8()?;
+        let group_length = rdr.read_u8()?;
+        let prev_group = rdr.read_array::<u8, 6>()?;
+        let next_group = rdr.read_array::<u8, 6>()?;
+        rdr.read_u16::<BE>()?;
+        Ok(Enph {
+            start,
+            group_length,
+            prev_group,
+            next_group,
+        })
+    }
+    fn write<T>(&self, mut wtr: T) -> io::Result<T>
+    where
+        T: Write,
+    {
+        wtr.write_u8(self.start)?;
+        wtr.write_u8(self.group_length)?;
+        wtr.write_array(self.prev_group)?;
+        wtr.write_array(self.next_group)?;
+        wtr.write_u16::<BE>(0)?;
+        Ok(wtr)
+    }
+    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        Some(&mut kmp.enph)
+    }
 }
 
 /// The ITPT (item point) section describes item points; the Red Shell and Bullet Bill routes. The items attempt to follow the path described by each group of points (as determined by ITPH). More than 0xFF (255) entries will force a console freeze while loading the track.
@@ -440,6 +478,52 @@ impl KmpData for Itpt {
         wtr.write_u16::<BE>(self.setting_1)?;
         wtr.write_u16::<BE>(self.setting_2)?;
         Ok(wtr)
+    }
+    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        Some(&mut kmp.itpt)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Itph {
+    pub start: u8,
+    pub group_length: u8,
+    pub prev_group: [u8; 6],
+    pub next_group: [u8; 6],
+}
+impl KmpData for Itph {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
+        let start = rdr.read_u8()?;
+        let group_length = rdr.read_u8()?;
+        let prev_group = rdr.read_array::<u8, 6>()?;
+        let next_group = rdr.read_array::<u8, 6>()?;
+        rdr.read_u16::<BE>()?;
+        Ok(Itph {
+            start,
+            group_length,
+            prev_group,
+            next_group,
+        })
+    }
+    fn write<T>(&self, mut wtr: T) -> io::Result<T>
+    where
+        T: Write,
+    {
+        wtr.write_u8(self.start)?;
+        wtr.write_u8(self.group_length)?;
+        wtr.write_array(self.prev_group)?;
+        wtr.write_array(self.next_group)?;
+        wtr.write_u16::<BE>(0)?;
+        Ok(wtr)
+    }
+    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        Some(&mut kmp.itph)
     }
 }
 
@@ -483,6 +567,52 @@ impl KmpData for Ckpt {
         wtr.write_u8(self.prev_cp)?;
         wtr.write_u8(self.next_cp)?;
         Ok(wtr)
+    }
+    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        Some(&mut kmp.ckpt)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Ckph {
+    pub start: u8,
+    pub group_length: u8,
+    pub prev_group: [u8; 6],
+    pub next_group: [u8; 6],
+}
+impl KmpData for Ckph {
+    fn read(mut rdr: impl Read) -> io::Result<Self> {
+        let start = rdr.read_u8()?;
+        let group_length = rdr.read_u8()?;
+        let prev_group = rdr.read_array::<u8, 6>()?;
+        let next_group = rdr.read_array::<u8, 6>()?;
+        rdr.read_u16::<BE>()?;
+        Ok(Ckph {
+            start,
+            group_length,
+            prev_group,
+            next_group,
+        })
+    }
+    fn write<T>(&self, mut wtr: T) -> io::Result<T>
+    where
+        T: Write,
+    {
+        wtr.write_u8(self.start)?;
+        wtr.write_u8(self.group_length)?;
+        wtr.write_array(self.prev_group)?;
+        wtr.write_array(self.next_group)?;
+        wtr.write_u16::<BE>(0)?;
+        Ok(wtr)
+    }
+    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        Some(&mut kmp.ckph)
     }
 }
 
@@ -534,6 +664,12 @@ impl KmpData for Gobj {
         wtr.write_u16::<BE>(self.presence_flags)?;
         Ok(wtr)
     }
+    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        Some(&mut kmp.gobj)
+    }
 }
 
 /// Each POTI entry can contain a number of POTI entries/points.
@@ -562,6 +698,12 @@ impl KmpData for PotiPoint {
         wtr.write_u16::<BE>(self.setting_1)?;
         wtr.write_u16::<BE>(self.setting_2)?;
         Ok(wtr)
+    }
+    fn get_section(_: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        None
     }
 }
 
@@ -600,6 +742,12 @@ impl KmpData for Poti {
             wtr = e.write(wtr)?;
         }
         Ok(wtr)
+    }
+    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        Some(&mut kmp.poti)
     }
 }
 
@@ -663,6 +811,12 @@ impl KmpData for Area {
         wtr.write_u8(self.enpt_id)?;
         wtr.write_u16::<BE>(0)?;
         Ok(wtr)
+    }
+    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        Some(&mut kmp.area)
     }
 }
 
@@ -745,6 +899,12 @@ impl KmpData for Came {
         wtr.write_f32::<BE>(self.time)?;
         Ok(wtr)
     }
+    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        Some(&mut kmp.came)
+    }
 }
 
 /// The JGPT (jugem point) section describes "Jugem" points; the respawn positions. The index is relevant for the link of the CKPT section.
@@ -777,6 +937,12 @@ impl KmpData for Jgpt {
         wtr.write_u16::<BE>(self.respawn_id)?;
         wtr.write_i16::<BE>(self.extra_data)?;
         Ok(wtr)
+    }
+    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        Some(&mut kmp.jgpt)
     }
 }
 
@@ -811,6 +977,12 @@ impl KmpData for Cnpt {
         wtr.write_i16::<BE>(self.shoot_effect)?;
         Ok(wtr)
     }
+    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        Some(&mut kmp.cnpt)
+    }
 }
 
 /// The MSPT (mission success point) section describes end positions. After battles and tournaments have ended, the players are placed on this point(s).
@@ -843,6 +1015,12 @@ impl KmpData for Mspt {
         wtr.write_u16::<BE>(self.id)?;
         wtr.write_u16::<BE>(self.unknown)?;
         Ok(wtr)
+    }
+    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        Some(&mut kmp.mspt)
     }
 }
 
@@ -897,5 +1075,11 @@ impl KmpData for Stgi {
         let bytes = self.speed_mod.to_be_bytes();
         wtr.write_array([bytes[0], bytes[1]])?;
         Ok(wtr)
+    }
+    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
+    where
+        Self: Sized,
+    {
+        Some(&mut kmp.stgi)
     }
 }

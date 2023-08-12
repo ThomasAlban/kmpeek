@@ -5,12 +5,14 @@ mod kmp_file;
 mod kmp_model;
 mod mouse_picking;
 mod ui;
+mod undo;
 
 use camera::*;
 use kcl_model::*;
 use kmp_model::*;
 use mouse_picking::*;
 use ui::*;
+use undo::*;
 
 use bevy::{
     prelude::*,
@@ -40,6 +42,7 @@ fn main() {
             KclPlugin,
             KmpPlugin,
             MousePickingPlugin,
+            UndoPlugin,
         ))
         .run();
 }

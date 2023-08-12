@@ -51,7 +51,7 @@ fn update_raycast_with_cursor(
 
     scaled_mouse_pos = scaled_mouse_pos.clamp(Vec2::ZERO, viewport_rect.max);
 
-    println!("mouse pos: {mouse_pos}, scaled: {scaled_mouse_pos}");
+    println!("\n\nmouse pos: {mouse_pos}\nscaled: {scaled_mouse_pos}");
 
     //grab the most recent cursor event if it exists
     for mut pick_source in &mut query {
