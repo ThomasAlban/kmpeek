@@ -64,6 +64,7 @@ pub struct AppState {
 
     pub kmp_file_path: Option<PathBuf>,
     pub mouse_in_viewport: bool,
+    pub viewport_rect: Rect,
 }
 
 pub enum DialogType {
@@ -149,6 +150,7 @@ pub fn setup_app_state(
 
         kmp_file_path: None,
         mouse_in_viewport: false,
+        viewport_rect: Rect::from_corners(Vec2::ZERO, Vec2::ZERO),
     };
 
     let camera_settings = CameraSettings::default();
@@ -207,6 +209,9 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                 // show the viewport image
                 ui.image(self.viewport_tex_id, viewport_size.to_array());
                 self.app_state.mouse_in_viewport = ui.ui_contains_pointer();
+                let rect = ui.max_rect();
+                self.app_state.viewport_rect =
+                    Rect::new(rect.min.x, rect.min.y, rect.max.x, rect.max.y);
             }
             Tab::Edit => {
                 for point in self.itpt.iter_mut() {
