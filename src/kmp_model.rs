@@ -112,7 +112,7 @@ pub fn spawn_model(
                         transform: Transform::from_translation(point.0.position),
                         ..default()
                     },
-                    // NormalizeScale::new(200., 12., Vec3::ONE),
+                    NormalizeScale::new(200., 12., Vec3::ONE),
                     KmpModelSection,
                     ItptModel(point.1),
                     RaycastMesh::<RaycastSet>::default(),

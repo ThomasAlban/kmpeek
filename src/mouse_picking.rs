@@ -1,6 +1,6 @@
-use bevy::{input::mouse, math::vec2, prelude::*, window::PrimaryWindow};
+use bevy::{math::vec2, prelude::*, window::PrimaryWindow};
 use bevy_mod_raycast::{
-    print_intersections, DefaultPluginState, DefaultRaycastingPlugin, RaycastMethod, RaycastSource,
+    print_intersections, DefaultRaycastingPlugin, RaycastMethod, RaycastPluginState, RaycastSource,
     RaycastSystem,
 };
 
@@ -21,7 +21,7 @@ impl Plugin for MousePickingPlugin {
 }
 
 fn setup(mut commands: Commands) {
-    commands.insert_resource(DefaultPluginState::<RaycastSet>::default().with_debug_cursor());
+    commands.insert_resource(RaycastPluginState::<RaycastSet>::default().with_debug_cursor());
 }
 
 #[derive(Reflect)]
@@ -43,9 +43,6 @@ fn update_raycast_with_cursor(
     let window_rect: Rect = Rect::from_corners(Vec2::ZERO, vec2(window.width(), window.height()));
     let viewport_rect = app_state.viewport_rect;
 
-    // println!("window {:?} viewport {:?}", window_rect, viewport_rect);
-    // println!("mouse {}", mouse_pos);
-
     // ratio between viewport size and window size
     let ratio = viewport_rect.size() / window_rect.size();
 
@@ -57,7 +54,6 @@ fn update_raycast_with_cursor(
     scaled_mouse_pos *= ratio;
     scaled_mouse_pos = scaled_mouse_pos.clamp(Vec2::ZERO, viewport_rect.max);
     scaled_mouse_pos *= window.scale_factor() as f32;
-    // println!("scaled {}", scaled_mouse_pos);
 
     //grab the most recent cursor event if it exists
     for mut pick_source in &mut query {
