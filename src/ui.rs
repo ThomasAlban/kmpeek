@@ -198,10 +198,12 @@ impl egui_dock::TabViewer for TabViewer<'_> {
             Tab::Viewport => {
                 let viewport_size = vec2(ui.available_width(), ui.available_height());
                 // resize the viewport if needed
-                if self.viewport_image.size().as_uvec2() != viewport_size.as_uvec2() {
+                if self.viewport_image.size().as_uvec2()
+                    != (viewport_size.as_uvec2() * self.window.scale_factor() as u32)
+                {
                     let size = Extent3d {
-                        width: viewport_size.x as u32,
-                        height: viewport_size.y as u32,
+                        width: viewport_size.x as u32 * self.window.scale_factor() as u32,
+                        height: viewport_size.y as u32 * self.window.scale_factor() as u32,
                         ..default()
                     };
                     self.viewport_image.resize(size);
