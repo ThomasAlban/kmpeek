@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::sync::Arc;
 
 use crate::kmp_file::*;
@@ -15,7 +17,7 @@ impl Plugin for UndoPlugin {
 
 // trait that will be implemented on structs for all the ways we can change the kmp data structure
 // - create, delete, modify
-trait UndoItem: Debug {
+pub trait UndoItem: Debug {
     fn undo(&self, kmp: &mut Kmp);
     fn redo(&self, kmp: &mut Kmp);
 }
@@ -27,11 +29,14 @@ struct Create<T> {
 }
 impl<T: KmpData + Clone + Debug> UndoItem for Create<T> {
     fn undo(&self, kmp: &mut Kmp) {
-        T::get_section(kmp).unwrap().entries.remove(self.index);
+        T::get_section(kmp)
+            .expect("UndoItem type should be a KmpData section entry")
+            .entries
+            .remove(self.index);
     }
     fn redo(&self, kmp: &mut Kmp) {
         T::get_section(kmp)
-            .unwrap()
+            .expect("UndoItem type should be a KmpData section entry")
             .entries
             .insert(self.index, self.value.clone())
     }
@@ -45,7 +50,7 @@ struct Remove<T> {
 impl<T: KmpData + Clone + Debug> UndoItem for Remove<T> {
     fn undo(&self, kmp: &mut Kmp) {
         T::get_section(kmp)
-            .unwrap()
+            .expect("UndoItem type should be a KmpData section entry")
             .entries
             .insert(self.index, self.value.clone());
     }
@@ -62,16 +67,20 @@ struct Modify<T> {
 }
 impl<T: KmpData + Clone + Debug> UndoItem for Modify<T> {
     fn undo(&self, kmp: &mut Kmp) {
-        T::get_section(kmp).unwrap().entries[self.index] = self.before.clone();
+        T::get_section(kmp)
+            .expect("UndoItem type should be a KmpData section entry")
+            .entries[self.index] = self.before.clone();
     }
     fn redo(&self, kmp: &mut Kmp) {
-        T::get_section(kmp).unwrap().entries[self.index] = self.after.clone();
+        T::get_section(kmp)
+            .expect("UndoItem type should be a KmpData section entry")
+            .entries[self.index] = self.after.clone();
     }
 }
 
 // this undo stack contains the various structs above, Arc and Mutex so it can be shared across threads
 #[derive(Resource, Deref, DerefMut)]
-struct UndoStack(UndoCommands<Arc<dyn UndoItem + Send + Sync>>);
+pub struct UndoStack(pub UndoCommands<Arc<dyn UndoItem + Send + Sync>>);
 impl UndoStack {
     pub fn push(&mut self, command: impl UndoItem + Send + Sync + 'static) {
         let command = Arc::new(command);
