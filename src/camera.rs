@@ -11,7 +11,7 @@ use bevy_pkv::PkvStore;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    mouse_picking::RaycastSet,
+    mouse_picking::{KclRaycastSet, KmpRaycastSet},
     ui::{AppSettings, AppState, SetupAppStateSet, ViewportImage},
 };
 
@@ -222,7 +222,8 @@ pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
             ..default()
         },
         FlyCam,
-        RaycastSource::<RaycastSet>::new(),
+        RaycastSource::<KmpRaycastSet>::new(),
+        RaycastSource::<KclRaycastSet>::new(),
     ));
     commands.spawn((
         Camera3dBundle {
@@ -240,7 +241,8 @@ pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
             radius: OrbitSettings::default().start_pos.length(),
             ..default()
         },
-        RaycastSource::<RaycastSet>::new(),
+        // RaycastSource::<KmpRaycastSet>::new(),
+        // RaycastSource::<KclRaycastSet>::new(),
     ));
     commands.spawn((
         Camera3dBundle {
@@ -261,7 +263,8 @@ pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
             ..default()
         },
         TopDownCam,
-        RaycastSource::<RaycastSet>::new(),
+        // RaycastSource::<KmpRaycastSet>::new(),
+        // RaycastSource::<KclRaycastSet>::new(),
     ));
 }
 

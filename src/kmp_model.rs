@@ -1,7 +1,8 @@
 use std::{ffi::OsStr, fs::File};
 
-use crate::{kmp_file::*, mouse_picking::RaycastSet, ui::KmpFileSelected};
+use crate::{kmp_file::*, mouse_picking::KmpRaycastSet, ui::KmpFileSelected};
 use bevy::prelude::*;
+use bevy_mod_outline::*;
 use bevy_mod_raycast::RaycastMesh;
 use bevy_more_shapes::Cylinder;
 
@@ -53,13 +54,14 @@ pub fn spawn_model(
         commands.insert_resource(kmp.clone());
 
         // meshes for the kmp model
-        let sphere_mesh = meshes.add(
-            shape::UVSphere {
-                radius: 100.,
-                ..default()
-            }
-            .into(),
-        );
+        let mut sphere_mesh: Mesh = shape::UVSphere {
+            radius: 100.,
+            ..default()
+        }
+        .into();
+        sphere_mesh.generate_outline_normals().unwrap();
+        let sphere_mesh = meshes.add(sphere_mesh);
+
         let cylinder_mesh = meshes.add(Mesh::from(Cylinder {
             height: 1.,
             radius_bottom: 100.,
@@ -115,7 +117,15 @@ pub fn spawn_model(
                     NormalizeScale::new(200., 12., Vec3::ONE),
                     KmpModelSection,
                     ItptModel(point.1),
-                    RaycastMesh::<RaycastSet>::default(),
+                    RaycastMesh::<KmpRaycastSet>::default(),
+                    OutlineBundle {
+                        outline: OutlineVolume {
+                            visible: false,
+                            colour: Color::rgba(1.0, 1.0, 1.0, 0.3),
+                            width: 7.0,
+                        },
+                        ..default()
+                    },
                 ));
                 // if we are not at the end of the group
                 if i < points.len() - 1 {
@@ -210,14 +220,14 @@ fn spawn_arrow_line(
 #[allow(clippy::type_complexity)]
 fn update_itpt(
     mut itpt: ParamSet<(
-        Query<(&Transform, &ItptModel)>,
+        Query<(&mut Transform, &ItptModel)>,
         Query<(&mut Transform, &ItptArrowLine)>,
     )>,
-    kmp: Option<ResMut<Kmp>>,
+    kmp: Option<Res<Kmp>>,
 ) {
-    if let Some(mut kmp) = kmp {
-        for point in itpt.p0().iter() {
-            kmp.itpt.entries[point.1 .0].position = point.0.translation;
+    if let Some(kmp) = kmp {
+        for mut point in itpt.p0().iter_mut() {
+            point.0.translation = kmp.itpt.entries[point.1 .0].position;
         }
         for (mut transform, arrow_line) in itpt.p1().iter_mut() {
             let p1 = kmp.itpt.entries[arrow_line.p1].position;

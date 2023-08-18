@@ -6,7 +6,8 @@ use crate::{
     kcl_file::*,
     kcl_model::KclModelSettings,
     kmp_file::Kmp,
-    kmp_model::{ItptModel, NormalizeScale},
+    kmp_model::NormalizeScale,
+    undo::UndoStack,
 };
 use bevy::{
     math::vec2,
@@ -79,6 +80,7 @@ pub struct AppSettings {
     pub kcl_model: KclModelSettings,
     pub point_scale: f32,
     pub open_course_kcl_in_directory: bool,
+    pub reset_tree: bool,
 }
 impl Default for AppSettings {
     fn default() -> Self {
@@ -87,12 +89,20 @@ impl Default for AppSettings {
             kcl_model: KclModelSettings::default(),
             point_scale: 1.,
             open_course_kcl_in_directory: true,
+            reset_tree: false,
         }
     }
 }
 
-#[derive(Deref, DerefMut, Resource)]
+#[derive(Deref, DerefMut, Resource, Serialize, Deserialize)]
 pub struct DockTree(Tree<Tab>);
+impl Default for DockTree {
+    fn default() -> Self {
+        let mut tree = Tree::new(vec![Tab::Viewport]);
+        tree.split_left(NodeIndex::root(), 0.2, vec![Tab::Edit, Tab::Settings]);
+        Self(tree)
+    }
+}
 
 // stores the image which the camera renders to, so that we can display a viewport inside a tab
 #[derive(Deref, Resource)]
@@ -131,15 +141,15 @@ pub fn setup_app_state(
 
     commands.insert_resource(ViewportImage(image_handle));
 
-    // create the docktree
-    let mut tree = Tree::new(vec![Tab::Viewport]);
-    tree.split_left(NodeIndex::root(), 0.2, vec![Tab::Edit, Tab::Settings]);
-    commands.insert_resource(DockTree(tree));
-
     // set app settings to defaults if they do not already exist
     if pkv.get::<AppSettings>("settings").is_err() {
         pkv.set("settings", &AppSettings::default())
-            .expect("failed to store user settings");
+            .expect("failed to store app settings");
+    }
+
+    if pkv.get::<DockTree>("tree").is_err() {
+        pkv.set("tree", &DockTree::default())
+            .expect("failed to store dock tree");
     }
 
     let app_state = AppState {
@@ -165,7 +175,7 @@ pub struct KmpFileSelected(pub PathBuf);
 #[derive(Event)]
 pub struct KclFileSelected(pub PathBuf);
 
-#[derive(Display, PartialEq, EnumIter)]
+#[derive(Display, PartialEq, EnumIter, Serialize, Deserialize, Clone, Copy)]
 pub enum Tab {
     Viewport,
     Edit,
@@ -178,11 +188,11 @@ struct TabViewer<'a> {
     viewport_image: &'a mut Image,
     viewport_tex_id: TextureId,
     window: &'a Window,
+    kmp: Option<ResMut<'a, Kmp>>,
 
     app_state: &'a mut AppState,
     settings: &'a mut AppSettings,
 
-    itpt: Vec<&'a mut Transform>,
     normalize: Vec<&'a mut NormalizeScale>,
     // pointer: &'a mut PointerLocation,
     fly_cam: &'a mut Transform,
@@ -216,12 +226,14 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                     Rect::new(rect.min.x, rect.min.y, rect.max.x, rect.max.y);
             }
             Tab::Edit => {
-                for point in self.itpt.iter_mut() {
-                    ui.horizontal(|ui| {
-                        ui.add(egui::DragValue::new(&mut point.translation.x).speed(20.));
-                        ui.add(egui::DragValue::new(&mut point.translation.y).speed(20.));
-                        ui.add(egui::DragValue::new(&mut point.translation.z).speed(20.));
-                    });
+                if let Some(kmp) = &mut self.kmp {
+                    for point in kmp.itpt.entries.iter_mut() {
+                        ui.horizontal(|ui| {
+                            ui.add(egui::DragValue::new(&mut point.position.x).speed(20.));
+                            ui.add(egui::DragValue::new(&mut point.position.y).speed(20.));
+                            ui.add(egui::DragValue::new(&mut point.position.z).speed(20.));
+                        });
+                    }
                 }
             }
             Tab::Settings => {
@@ -478,9 +490,15 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                         self.app_state.file_dialog = Some((dialog, DialogType::ImportSettings));
                     }
                 });
-                if ui.button("Reset All Settings").clicked() {
-                    *self.settings = AppSettings::default();
-                }
+                ui.horizontal(|ui| {
+                    if ui.button("Reset Tab Layout").clicked() {
+                        self.settings.reset_tree = true;
+                    }
+                    if ui.button("Reset All Settings").clicked() {
+                        *self.settings = AppSettings::default();
+                        self.settings.reset_tree = true;
+                    }
+                });
             }
         };
     }
@@ -515,20 +533,10 @@ pub fn update_ui(
         >,
     ),
 
-    mut itpt: Query<
-        (&mut Transform, &ItptModel),
-        (
-            With<ItptModel>,
-            Without<FlyCam>,
-            Without<OrbitCam>,
-            Without<TopDownCam>,
-        ),
-    >,
-
     mut image_assets: ResMut<Assets<Image>>,
-    mut tree: ResMut<DockTree>,
     viewport: ResMut<ViewportImage>,
     mut pkv: ResMut<PkvStore>,
+    mut undo_stack: ResMut<UndoStack>,
 ) {
     // get variables we need in this system from queries/assets
     let mut fly_cam = cams
@@ -555,8 +563,9 @@ pub fn update_ui(
     let mut settings = pkv
         .get::<AppSettings>("settings")
         .expect("could not get user settings");
-    let mut itpt: Vec<Mut<Transform>> = itpt.iter_mut().map(|(x, _)| x).collect();
-    let itpt: Vec<&mut Transform> = itpt.iter_mut().map(|x| x.as_mut()).collect();
+    let mut tree = pkv
+        .get::<DockTree>("tree")
+        .expect("could not get dock tree");
     let mut normalize: Vec<Mut<NormalizeScale>> = normalize.iter_mut().collect();
     let normalize: Vec<&mut NormalizeScale> = normalize.iter_mut().map(|x| x.as_mut()).collect();
     let ctx = contexts.ctx_mut();
@@ -580,14 +589,16 @@ pub fn update_ui(
     }
     macro_rules! undo {
         () => {
-            // to do
-            println!("undo");
+            if let Some(ref mut kmp) = kmp {
+                undo_stack.undo(kmp);
+            }
         };
     }
     macro_rules! redo {
         () => {
-            // to do
-            println!("redo");
+            if let Some(ref mut kmp) = kmp {
+                undo_stack.redo(kmp);
+            }
         };
     }
     macro_rules! save {
@@ -691,14 +702,18 @@ pub fn update_ui(
                 window,
                 app_state: &mut app_state,
                 settings: &mut settings,
-                itpt,
+                kmp,
+
                 normalize,
-                // pointer: pointer.as_mut(),
                 fly_cam: &mut fly_cam,
                 orbit_cam: &mut orbit_cam,
                 topdown_cam: (&mut topdown_cam.0, &mut topdown_cam.1),
             },
         );
+    if settings.reset_tree {
+        tree = DockTree::default();
+        settings.reset_tree = false;
+    }
 
     let mut kmp_file_path: Option<PathBuf> = None;
     if let Some(dialog) = &mut app_state.file_dialog {
@@ -733,9 +748,7 @@ pub fn update_ui(
                     DialogType::ImportSettings => {
                         let input_settings_string =
                             read_to_string(file).expect("could not read user settings to string");
-                        let input_settings: Result<AppSettings, _> =
-                            serde_json::from_str(&input_settings_string);
-                        if let Ok(input_settings) = input_settings {
+                        if let Ok(input_settings) = serde_json::from_str(&input_settings_string) {
                             settings = input_settings;
                         }
                     }
@@ -747,4 +760,5 @@ pub fn update_ui(
 
     pkv.set("settings", &settings)
         .expect("could not set user settings");
+    pkv.set("tree", &tree).expect("could not set dock tree");
 }

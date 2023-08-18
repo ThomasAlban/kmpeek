@@ -19,12 +19,13 @@ bevy = { version = "0.11", default-features = false, features = [
 ] }
 bevy_egui = "0.21.0"
 bevy_infinite_grid = "0.8.0"
+bevy_mod_outline = "0.5.0"
 bevy_mod_raycast = { git = "https://github.com/aevyrie/bevy_mod_raycast" }
 bevy_more_shapes = { git = "https://github.com/Hibyehello/bevy_more_shapes.git" }
 bevy_pkv = "0.8.0"
 bytemuck = "1.13.1"
 byteorder = "1.4.3"
-egui_dock = "0.6.3"
+egui_dock = { version = "0.6.3", features = ["serde"] }
 egui_file = "0.10.0"
 num-traits = "0.2.15"
 serde = { version = "1.0.163", features = ["derive"] }

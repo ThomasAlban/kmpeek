@@ -1,11 +1,13 @@
 use crate::{
     kcl_file::Kcl,
+    mouse_picking::KclRaycastSet,
     ui::{AppSettings, KclFileSelected},
 };
 use bevy::{
     prelude::*,
     render::{mesh::PrimitiveTopology, render_resource::Face},
 };
+use bevy_mod_raycast::RaycastMesh;
 use bevy_pkv::PkvStore;
 use serde::{Deserialize, Serialize};
 use std::{ffi::OsStr, fs::File};
@@ -106,7 +108,6 @@ pub fn spawn_model(
             let color: Color = settings.kcl_model.color[i].into();
 
             commands.spawn((
-                KCLModelSection(i),
                 PbrBundle {
                     mesh: meshes.add(mesh),
                     material: materials.add(StandardMaterial {
@@ -131,6 +132,8 @@ pub fn spawn_model(
                     },
                     ..default()
                 },
+                KCLModelSection(i),
+                RaycastMesh::<KclRaycastSet>::default(),
             ));
         }
         commands.insert_resource(kcl);
