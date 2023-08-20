@@ -449,13 +449,14 @@ impl KmpData for Enph {
 }
 
 /// The ITPT (item point) section describes item points; the Red Shell and Bullet Bill routes. The items attempt to follow the path described by each group of points (as determined by ITPH). More than 0xFF (255) entries will force a console freeze while loading the track.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Itpt {
     pub position: Vec3,
     pub bullet_bill_control: f32,
     pub setting_1: u16,
     pub setting_2: u16,
 }
+
 impl KmpData for Itpt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let position = rdr.read_vec3()?;

@@ -1,7 +1,7 @@
 use crate::{
     camera::{
-        CameraMode, CameraSettings, FlyCam, FlySettings, OrbitCam, OrbitSettings, TopDownCam,
-        TopDownSettings,
+        CameraMode, CameraModeChanged, CameraSettings, FlyCam, FlySettings, OrbitCam,
+        OrbitSettings, TopDownCam, TopDownSettings,
     },
     kcl_file::*,
     kcl_model::KclModelSettings,
@@ -26,9 +26,10 @@ use egui_dock::{DockArea, NodeIndex, Style, Tree};
 use egui_file::*;
 use serde::{Deserialize, Serialize};
 use std::{
+    env,
     fs::{read_to_string, File},
     io::Write,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
@@ -113,6 +114,9 @@ pub fn setup_app_state(
     mut egui_user_textures: ResMut<EguiUserTextures>,
     mut images: ResMut<Assets<Image>>,
     mut pkv: ResMut<PkvStore>,
+    mut ev_kmp_file_selected: EventWriter<KmpFileSelected>,
+    mut ev_kcl_file_selected: EventWriter<KclFileSelected>,
+    mut ev_camera_mode_changed: EventWriter<CameraModeChanged>,
 ) {
     // this is the texture that will be rendered to
     let image: Image = Image {
@@ -152,7 +156,7 @@ pub fn setup_app_state(
             .expect("failed to store dock tree");
     }
 
-    let app_state = AppState {
+    let mut app_state = AppState {
         customise_kcl_open: false,
         camera_settings_open: false,
 
@@ -162,6 +166,36 @@ pub fn setup_app_state(
         mouse_in_viewport: false,
         viewport_rect: Rect::from_corners(Vec2::ZERO, Vec2::ZERO),
     };
+
+    // get the settings for below so we know settings.open_course_kcl_in_directory
+    let settings = pkv.get::<AppSettings>("settings").unwrap();
+
+    ev_camera_mode_changed.send(CameraModeChanged(settings.camera.mode));
+
+    // if there is a command line arg of a path to a kmp or kcl, open it
+    let args: Vec<String> = env::args().collect();
+    let mut kmp_file_path: Option<PathBuf> = None;
+    if let Some(arg) = args.get(1) {
+        let path = Path::new(arg);
+        if path.is_file() {
+            if let Some(file_ext) = path.extension() {
+                if file_ext == "kmp" {
+                    kmp_file_path = Some(path.into());
+                    ev_kmp_file_selected.send(KmpFileSelected(path.into()));
+                    if settings.open_course_kcl_in_directory {
+                        let mut course_kcl_path = path.to_owned();
+                        course_kcl_path.set_file_name("course.kcl");
+                        if course_kcl_path.exists() {
+                            ev_kcl_file_selected.send(KclFileSelected(course_kcl_path));
+                        }
+                    }
+                } else if file_ext == "kcl" {
+                    ev_kcl_file_selected.send(KclFileSelected(path.into()));
+                }
+            }
+        }
+    }
+    app_state.kmp_file_path = kmp_file_path;
 
     let camera_settings = CameraSettings::default();
 
@@ -183,7 +217,7 @@ pub enum Tab {
 }
 
 // this tells egui how to render each tab
-struct TabViewer<'a> {
+struct TabViewer<'a, 'b> {
     // add into here any data that needs to be passed into any tabs
     viewport_image: &'a mut Image,
     viewport_tex_id: TextureId,
@@ -198,8 +232,9 @@ struct TabViewer<'a> {
     fly_cam: &'a mut Transform,
     orbit_cam: &'a mut Transform,
     topdown_cam: (&'a mut Transform, &'a mut Projection),
+    ev_camera_mode_changed: &'a mut EventWriter<'b, CameraModeChanged>,
 }
-impl egui_dock::TabViewer for TabViewer<'_> {
+impl egui_dock::TabViewer for TabViewer<'_, '_> {
     // each tab will be distinguished by a string - its name
     type Tab = Tab;
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
@@ -249,7 +284,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                 ui.checkbox(
                     &mut self.settings.open_course_kcl_in_directory,
                     "Auto open course.kcl",
-                );
+                ).on_hover_text("If enabled, when opening a KMP file, if there is a 'course.kcl' file in the same directory, it will also be opened");
 
                 egui::CollapsingHeader::new("Collision Model")
                     .default_open(true)
@@ -257,6 +292,9 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                         ui.checkbox(
                             &mut self.settings.kcl_model.backface_culling,
                             "Backface Culling",
+                        )
+                        .on_hover_text(
+                            "Whether or not the back faces of the collision model are shown",
                         );
                         let visible = &mut self.settings.kcl_model.visible;
                         use KclFlag::*;
@@ -345,9 +383,15 @@ impl egui_dock::TabViewer for TabViewer<'_> {
 
                 egui::CollapsingHeader::new("Camera").default_open(true).show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.selectable_value(&mut self.settings.camera.mode, CameraMode::Fly, "Fly");
-                        ui.selectable_value(&mut self.settings.camera.mode, CameraMode::Orbit, "Orbit");
-                        ui.selectable_value(&mut self.settings.camera.mode, CameraMode::TopDown, "Top Down");
+                        if ui.selectable_value(&mut self.settings.camera.mode, CameraMode::Fly, "Fly").clicked() {
+                            self.ev_camera_mode_changed.send(CameraModeChanged(CameraMode::Fly));
+                        }
+                        if ui.selectable_value(&mut self.settings.camera.mode, CameraMode::Orbit, "Orbit").clicked() {
+                            self.ev_camera_mode_changed.send(CameraModeChanged(CameraMode::Orbit));
+                        }
+                        if ui.selectable_value(&mut self.settings.camera.mode, CameraMode::TopDown, "Top Down").clicked() {
+                            self.ev_camera_mode_changed.send(CameraModeChanged(CameraMode::TopDown));
+                        }
                     });
 
                     ui.horizontal(|ui| {
@@ -516,6 +560,7 @@ pub fn update_ui(
     window: Query<&Window, With<PrimaryWindow>>,
     mut ev_kmp_file_selected: EventWriter<KmpFileSelected>,
     mut ev_kcl_file_selected: EventWriter<KclFileSelected>,
+    mut ev_camera_mode_changed: EventWriter<CameraModeChanged>,
 
     mut normalize: Query<&mut NormalizeScale>,
 
@@ -539,33 +584,14 @@ pub fn update_ui(
     mut undo_stack: ResMut<UndoStack>,
 ) {
     // get variables we need in this system from queries/assets
-    let mut fly_cam = cams
-        .0
-        .get_single_mut()
-        .expect("Could not get fly cam in update ui");
-    let mut orbit_cam = cams
-        .1
-        .get_single_mut()
-        .expect("Could not get orbit cam in update ui");
-    let mut topdown_cam = cams
-        .2
-        .get_single_mut()
-        .expect("Could not get topdown cam in update ui");
-    let window = window
-        .get_single()
-        .expect("Could not get primary window in update ui");
-    let viewport_image = image_assets
-        .get_mut(&viewport)
-        .expect("Could not get viewport image in update ui");
-    let viewport_tex_id = contexts
-        .image_id(&viewport)
-        .expect("Could not get viewport texture ID in update ui");
-    let mut settings = pkv
-        .get::<AppSettings>("settings")
-        .expect("could not get user settings");
-    let mut tree = pkv
-        .get::<DockTree>("tree")
-        .expect("could not get dock tree");
+    let mut fly_cam = cams.0.get_single_mut().unwrap();
+    let mut orbit_cam = cams.1.get_single_mut().unwrap();
+    let mut topdown_cam = cams.2.get_single_mut().unwrap();
+    let window = window.get_single().unwrap();
+    let viewport_image = image_assets.get_mut(&viewport).unwrap();
+    let viewport_tex_id = contexts.image_id(&viewport).unwrap();
+    let mut settings = pkv.get::<AppSettings>("settings").unwrap();
+    let mut tree = pkv.get::<DockTree>("tree").unwrap();
     let mut normalize: Vec<Mut<NormalizeScale>> = normalize.iter_mut().collect();
     let normalize: Vec<&mut NormalizeScale> = normalize.iter_mut().map(|x| x.as_mut()).collect();
     let ctx = contexts.ctx_mut();
@@ -708,6 +734,8 @@ pub fn update_ui(
                 fly_cam: &mut fly_cam,
                 orbit_cam: &mut orbit_cam,
                 topdown_cam: (&mut topdown_cam.0, &mut topdown_cam.1),
+
+                ev_camera_mode_changed: &mut ev_camera_mode_changed,
             },
         );
     if settings.reset_tree {

@@ -103,22 +103,59 @@ impl<T: KmpData + Clone + Debug + 'static> UndoItem for Modify<T> {
 pub struct ModifyAction {
     pub items: Vec<Modify<Itpt>>,
     pub main_point_itpt_index: Option<usize>,
-    pub mouse_screen_offset: Vec2,
+    pub mouse_point_offset: Vec2,
+    pub mouse_initial_pos: Vec2,
+    pub initial_intersection_distance: f32,
 }
 impl ModifyAction {
     pub fn new(
         items: Vec<Modify<Itpt>>,
         main_point_itpt_index: usize,
-        mouse_screen_offset: Vec2,
+        mouse_point_offset: Vec2,
+        mouse_initial_pos: Vec2,
+        initial_intersection_distance: f32,
     ) -> Self {
         Self {
             items,
             main_point_itpt_index: Some(main_point_itpt_index),
-            mouse_screen_offset,
+            mouse_point_offset,
+            mouse_initial_pos,
+            initial_intersection_distance,
         }
+    }
+    // whether or not this modify action actually modifies any items
+    pub fn modifies(&self) -> bool {
+        for item in self.items.iter() {
+            if item.before != item.after {
+                return true;
+            }
+        }
+        false
     }
 }
 impl UndoItem for ModifyAction {
+    fn undo(&self, kmp: &mut Kmp) {
+        for item in self.items.iter() {
+            item.undo(kmp);
+        }
+    }
+    fn redo(&self, kmp: &mut Kmp) {
+        for item in self.items.iter() {
+            item.redo(kmp);
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct RemoveAction {
+    pub items: Vec<Remove<Itpt>>,
+}
+impl RemoveAction {
+    pub fn new(items: Vec<Remove<Itpt>>) -> Self {
+        Self { items }
+    }
+}
+impl UndoItem for RemoveAction {
     fn undo(&self, kmp: &mut Kmp) {
         for item in self.items.iter() {
             item.undo(kmp);

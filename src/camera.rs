@@ -19,6 +19,7 @@ pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(InfiniteGridPlugin)
+            .add_event::<CameraModeChanged>()
             .add_systems(Startup, camera_setup.after(SetupAppStateSet))
             .add_systems(
                 Update,
@@ -33,6 +34,9 @@ impl Plugin for CameraPlugin {
             );
     }
 }
+
+#[derive(Event)]
+pub struct CameraModeChanged(pub CameraMode);
 
 #[derive(Component)]
 pub struct FlyCam;
@@ -56,7 +60,7 @@ impl Default for OrbitCam {
 #[derive(Component)]
 pub struct TopDownCam;
 
-#[derive(PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(PartialEq, Clone, Copy, Serialize, Deserialize, Debug)]
 pub enum CameraMode {
     Fly,
     Orbit,
@@ -222,8 +226,8 @@ pub fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
             ..default()
         },
         FlyCam,
-        RaycastSource::<KmpRaycastSet>::new(),
-        RaycastSource::<KclRaycastSet>::new(),
+        // RaycastSource::<KmpRaycastSet>::new(),
+        // RaycastSource::<KclRaycastSet>::new(),
     ));
     commands.spawn((
         Camera3dBundle {
@@ -277,12 +281,8 @@ pub fn cursor_grab(
     if !app_state.mouse_in_viewport {
         return;
     }
-    let mut window = window
-        .get_single_mut()
-        .expect("Primary window not found for cursor grab");
-    let settings = pkv
-        .get::<AppSettings>("settings")
-        .expect("could not get user settings");
+    let mut window = window.get_single_mut().unwrap();
+    let settings = pkv.get::<AppSettings>("settings").unwrap();
 
     if (settings.camera.mode == CameraMode::Fly
         && !mouse_buttons.pressed(settings.camera.fly.key_bindings.mouse_button))
@@ -302,39 +302,78 @@ pub fn cursor_grab(
 
 #[allow(clippy::type_complexity)]
 pub fn update_active_camera(
-    mut fly_cam: Query<&mut Camera, (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>)>,
-    mut orbit_cam: Query<&mut Camera, (With<OrbitCam>, Without<FlyCam>, Without<TopDownCam>)>,
-    mut topdown_cam: Query<&mut Camera, (With<TopDownCam>, Without<FlyCam>, Without<OrbitCam>)>,
-    pkv: Res<PkvStore>,
+    mut fly_cam: Query<
+        (Entity, &mut Camera),
+        (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>),
+    >,
+    mut orbit_cam: Query<
+        (Entity, &mut Camera),
+        (With<OrbitCam>, Without<FlyCam>, Without<TopDownCam>),
+    >,
+    mut topdown_cam: Query<
+        (Entity, &mut Camera),
+        (With<TopDownCam>, Without<FlyCam>, Without<OrbitCam>),
+    >,
+    mut commands: Commands,
+    mut ev_camera_mode_changed: EventReader<CameraModeChanged>,
 ) {
-    let settings = pkv
-        .get::<AppSettings>("settings")
-        .expect("could not get user settings");
-    let mut fly_cam = fly_cam
-        .get_single_mut()
-        .expect("could not get fly cam in update_active_camera");
-    let mut orbit_cam = orbit_cam
-        .get_single_mut()
-        .expect("could not get orbit in update_active_camera");
-    let mut topdown_cam = topdown_cam
-        .get_single_mut()
-        .expect("could not get top down cam in update_active_camera");
+    for ev in ev_camera_mode_changed.iter() {
+        let mut fly_cam = fly_cam.get_single_mut().unwrap();
+        let mut orbit_cam = orbit_cam.get_single_mut().unwrap();
+        let mut topdown_cam = topdown_cam.get_single_mut().unwrap();
 
-    match settings.camera.mode {
-        CameraMode::Fly => {
-            fly_cam.is_active = true;
-            orbit_cam.is_active = false;
-            topdown_cam.is_active = false;
-        }
-        CameraMode::Orbit => {
-            fly_cam.is_active = false;
-            orbit_cam.is_active = true;
-            topdown_cam.is_active = false;
-        }
-        CameraMode::TopDown => {
-            fly_cam.is_active = false;
-            orbit_cam.is_active = false;
-            topdown_cam.is_active = true;
+        match ev.0 {
+            CameraMode::Fly => {
+                commands
+                    .entity(fly_cam.0)
+                    .insert(RaycastSource::<KmpRaycastSet>::new())
+                    .insert(RaycastSource::<KclRaycastSet>::new());
+                fly_cam.1.is_active = true;
+                commands
+                    .entity(orbit_cam.0)
+                    .remove::<RaycastSource<KmpRaycastSet>>()
+                    .remove::<RaycastSource<KclRaycastSet>>();
+                orbit_cam.1.is_active = false;
+                commands
+                    .entity(topdown_cam.0)
+                    .remove::<RaycastSource<KmpRaycastSet>>()
+                    .remove::<RaycastSource<KclRaycastSet>>();
+                topdown_cam.1.is_active = false;
+            }
+            CameraMode::Orbit => {
+                commands
+                    .entity(fly_cam.0)
+                    .remove::<RaycastSource<KmpRaycastSet>>()
+                    .remove::<RaycastSource<KclRaycastSet>>();
+                fly_cam.1.is_active = false;
+                commands
+                    .entity(orbit_cam.0)
+                    .insert(RaycastSource::<KmpRaycastSet>::new())
+                    .insert(RaycastSource::<KclRaycastSet>::new());
+                orbit_cam.1.is_active = true;
+                commands
+                    .entity(topdown_cam.0)
+                    .remove::<RaycastSource<KmpRaycastSet>>()
+                    .remove::<RaycastSource<KclRaycastSet>>();
+                topdown_cam.1.is_active = false;
+            }
+            CameraMode::TopDown => {
+                commands
+                    .entity(fly_cam.0)
+                    .remove::<RaycastSource<KmpRaycastSet>>()
+                    .remove::<RaycastSource<KclRaycastSet>>();
+                fly_cam.1.is_active = false;
+                commands
+                    .entity(orbit_cam.0)
+                    .remove::<RaycastSource<KmpRaycastSet>>()
+                    .remove::<RaycastSource<KclRaycastSet>>();
+                orbit_cam.1.is_active = false;
+                commands
+                    .entity(topdown_cam.0)
+                    .insert(RaycastSource::<KmpRaycastSet>::new())
+                    .insert(RaycastSource::<KclRaycastSet>::new());
+                topdown_cam.1.is_active = true;
+            }
         }
     }
 }
@@ -350,17 +389,13 @@ pub fn fly_cam_move(
     if !app_state.mouse_in_viewport {
         return;
     }
-    let settings = pkv
-        .get::<AppSettings>("settings")
-        .expect("could not get user settings");
+    let settings = pkv.get::<AppSettings>("settings").unwrap();
     if settings.camera.mode != CameraMode::Fly {
         return;
     }
 
-    let window = window
-        .get_single()
-        .expect("primary window not found for fly cam move");
-    let mut fly_cam_transform = fly_cam.get_single_mut().expect("could not get fly cam");
+    let window = window.get_single().unwrap();
+    let mut fly_cam_transform = fly_cam.get_single_mut().unwrap();
 
     if (!cfg!(target_os = "macos")
         && (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight)))
@@ -415,19 +450,13 @@ pub fn fly_cam_look(
     if !app_state.mouse_in_viewport {
         return;
     }
-    let settings = pkv
-        .get::<AppSettings>("settings")
-        .expect("could not get user settings");
+    let settings = pkv.get::<AppSettings>("settings").unwrap();
     if settings.camera.mode != CameraMode::Fly {
         return;
     }
 
-    let window = window
-        .get_single()
-        .expect("primary window not found for fly cam move");
-    let mut fly_cam_transform = fly_cam
-        .get_single_mut()
-        .expect("could not get single fly cam");
+    let window = window.get_single().unwrap();
+    let mut fly_cam_transform = fly_cam.get_single_mut().unwrap();
 
     for ev in mouse_motion.iter() {
         let (mut yaw, mut pitch, _) = fly_cam_transform.rotation.to_euler(EulerRot::YXZ);
@@ -464,16 +493,12 @@ pub fn orbit_cam(
     if !app_state.mouse_in_viewport {
         return;
     }
-    let settings = pkv
-        .get::<AppSettings>("settings")
-        .expect("could not get user settings");
+    let settings = pkv.get::<AppSettings>("settings").unwrap();
     if settings.camera.mode != CameraMode::Orbit {
         return;
     }
 
-    let window = primary_window
-        .get_single()
-        .expect("primary window not found for orbit_cam");
+    let window = primary_window.get_single().unwrap();
 
     let mut pan = Vec2::ZERO;
     let mut rotation_move = Vec2::ZERO;
@@ -584,16 +609,12 @@ pub fn top_down_cam(
     if !app_state.mouse_in_viewport {
         return;
     }
-    let settings = pkv
-        .get::<AppSettings>("settings")
-        .expect("could not get user settings");
+    let settings = pkv.get::<AppSettings>("settings").unwrap();
     if settings.camera.mode != CameraMode::TopDown {
         return;
     }
 
-    let window = primary_window
-        .get_single()
-        .expect("primary window not found for top_down_cam");
+    let window = primary_window.get_single().unwrap();
 
     let mut pan = Vec2::ZERO;
     let mut scroll = 0.;
