@@ -9,6 +9,6 @@ Expect it to take a few minutes to compile for the first time (because it will n
 
 ## State
 
-So far, it can open a kmp file (which will load a course.kcl in the same directory if found, if not you can manually open a kcl file), which will currently only show item paths. You can edit the positions of the item paths by dragging the numbers in the 'Edit' panel. You can also save the kmp file which will save these changes. 
+So far, it can open a kmp file (which will load a course.kcl in the same directory if found, if not you can manually open a kcl file), which will currently only show item paths. You can edit the positions of the item points by clicking and dragging them, or changing the numbers in the 'Edit' pane. You can also save your changes.
 <img width="1392" alt="image" src="https://github.com/ThomasAlban/kmpeek/assets/98399119/70a265d7-6d6d-4719-a97e-3191297ec7a4">
 
