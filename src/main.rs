@@ -14,10 +14,7 @@ use mouse_picking::*;
 use ui::*;
 use undo::*;
 
-use bevy::{
-    prelude::*,
-    winit::{UpdateMode, WinitSettings},
-};
+use bevy::{prelude::*, winit::WinitSettings};
 
 fn main() {
     App::new()
@@ -29,13 +26,7 @@ fn main() {
             }),
             ..default()
         }))
-        .insert_resource(WinitSettings {
-            focused_mode: UpdateMode::Continuous,
-            unfocused_mode: UpdateMode::ReactiveLowPower {
-                max_wait: std::time::Duration::MAX,
-            },
-            ..default()
-        })
+        .insert_resource(WinitSettings::desktop_app())
         .add_plugins((
             CameraPlugin,
             UIPlugin,

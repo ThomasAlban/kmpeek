@@ -48,12 +48,14 @@ fn update_raycast_with_cursor(
 
     let scaled_mouse_pos = scale_mouse_pos(mouse_pos, window, app_state.viewport_rect);
 
-    let mut kmp_pick_source = kmp_query.get_single_mut().unwrap();
-    kmp_pick_source.cast_method = RaycastMethod::Screenspace(scaled_mouse_pos);
+    if let Ok(mut kmp_pick_source) = kmp_query.get_single_mut() {
+        kmp_pick_source.cast_method = RaycastMethod::Screenspace(scaled_mouse_pos);
+    }
 
-    let mut kcl_pick_source = kcl_query.get_single_mut().unwrap();
-    kcl_pick_source.cast_method =
-        RaycastMethod::Screenspace(scaled_mouse_pos + modify_action.mouse_point_offset);
+    if let Ok(mut kcl_pick_source) = kcl_query.get_single_mut() {
+        kcl_pick_source.cast_method =
+            RaycastMethod::Screenspace(scaled_mouse_pos + modify_action.mouse_point_offset);
+    }
 }
 
 fn scale_mouse_pos(mouse_pos: Vec2, window: &Window, viewport_rect: Rect) -> Vec2 {

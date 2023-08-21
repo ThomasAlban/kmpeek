@@ -3,7 +3,7 @@ use bevy::{
     math::vec3,
     prelude::*,
     render::camera::RenderTarget,
-    window::{CursorGrabMode, PrimaryWindow},
+    window::{CursorGrabMode, PrimaryWindow, RequestRedraw},
 };
 use bevy_infinite_grid::{InfiniteGrid, InfiniteGridBundle, InfiniteGridPlugin};
 use bevy_mod_raycast::RaycastSource;
@@ -385,6 +385,7 @@ pub fn fly_cam_move(
     mut fly_cam: Query<&mut Transform, With<FlyCam>>,
     pkv: Res<PkvStore>,
     app_state: Res<AppState>,
+    mut ev_request_redraw: EventWriter<RequestRedraw>,
 ) {
     if !app_state.mouse_in_viewport {
         return;
@@ -415,6 +416,10 @@ pub fn fly_cam_move(
 
     let mut speed_boost = false;
 
+    if keys.get_pressed().count() > 0 {
+        ev_request_redraw.send(RequestRedraw);
+    }
+
     for key in keys.get_pressed() {
         let key_bindings = &settings.camera.fly.key_bindings;
         if key_bindings.move_forward.contains(key) {
@@ -436,6 +441,7 @@ pub fn fly_cam_move(
     if speed_boost {
         velocity *= settings.camera.fly.speed_boost;
     }
+
     fly_cam_transform.translation +=
         velocity * time.delta_seconds() * 10000. * settings.camera.fly.speed;
 }
