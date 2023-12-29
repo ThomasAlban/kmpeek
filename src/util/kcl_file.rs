@@ -1,3 +1,4 @@
+use crate::util::ReadArrays;
 use bevy::{math::vec3, prelude::*};
 use byteorder::{ReadBytesExt, BE};
 use std::io::{self, Read, Seek, SeekFrom};
@@ -76,6 +77,17 @@ pub enum KclFlag {
 pub struct Kcl {
     pub vertex_groups: Vec<VertexGroup>,
 }
+impl Kcl {
+    fn new() -> Self {
+        let mut vertex_groups: Vec<VertexGroup> = Vec::with_capacity(32);
+        for _ in 0..32 {
+            vertex_groups.push(VertexGroup {
+                vertices: Vec::new(),
+            })
+        }
+        Kcl { vertex_groups }
+    }
+}
 
 #[derive(Clone)]
 pub struct VertexGroup {
@@ -83,60 +95,52 @@ pub struct VertexGroup {
 }
 
 impl Kcl {
-    pub fn read(mut rdr: impl Read + Seek) -> io::Result<Self> {
+    pub fn read(mut r: impl Read + Seek) -> io::Result<Self> {
         // offsets of position data, normals data, triangular prims, spatial index
         let mut offsets = [0u32; 4];
         for e in offsets.iter_mut() {
-            *e = rdr.read_u32::<BE>()?;
+            *e = r.read_u32::<BE>()?;
         }
 
         // go to the start of pos_data
-        rdr.seek(SeekFrom::Start(offsets[0] as u64))?;
+        r.seek(SeekFrom::Start(offsets[0] as u64))?;
 
         let mut vertices = Vec::new();
 
         // while the current position of the cursor is still in the position data section
-        while rdr.stream_position()? < offsets[1] as u64 {
-            let x = rdr.read_f32::<BE>()?;
-            let y = rdr.read_f32::<BE>()?;
-            let z = rdr.read_f32::<BE>()?;
-            vertices.push(vec3(x, y, z));
+        while r.stream_position()? < offsets[1] as u64 {
+            vertices.push(r.read_vec3()?);
         }
 
         // go to the start of the normal data section
-        rdr.seek(SeekFrom::Start(offsets[1].into()))?;
+        r.seek(SeekFrom::Start(offsets[1].into()))?;
 
         let mut normals: Vec<Vec3> = Vec::new();
 
         // while the current position is still in the normal data section
         // + 0x10 because the triangular prisms section starts 0x10 further along than it says it is
-        while rdr.stream_position()? < (offsets[2] + 0x10) as u64 {
-            let x = rdr.read_f32::<BE>()?;
-            let y = rdr.read_f32::<BE>()?;
-            let z = rdr.read_f32::<BE>()?;
+        while r.stream_position()? < (offsets[2] + 0x10) as u64 {
+            let x = r.read_f32::<BE>()?;
+            let y = r.read_f32::<BE>()?;
+            let z = r.read_f32::<BE>()?;
             normals.push(vec3(x, y, z));
         }
 
         // go to the start of the triangular prisms section
-        rdr.seek(SeekFrom::Start(offsets[2] as u64 + 0x10))?;
+        r.seek(SeekFrom::Start(offsets[2] as u64 + 0x10))?;
 
-        let mut vertex_groups: Vec<VertexGroup> = Vec::with_capacity(32);
-        for _ in 0..32 {
-            vertex_groups.push(VertexGroup {
-                vertices: Vec::new(),
-            })
-        }
+        let mut kcl = Kcl::new();
 
-        while rdr.stream_position()? < offsets[3] as u64 {
-            let length = rdr.read_f32::<BE>()?;
-            let pos_index = rdr.read_u16::<BE>()? as usize;
-            let face_nrm_index = rdr.read_u16::<BE>()? as usize;
+        while r.stream_position()? < offsets[3] as u64 {
+            let length = r.read_f32::<BE>()?;
+            let pos_index = r.read_u16::<BE>()? as usize;
+            let face_nrm_index = r.read_u16::<BE>()? as usize;
 
-            let nrm_a_index = rdr.read_u16::<BE>()? as usize;
-            let nrm_b_index = rdr.read_u16::<BE>()? as usize;
-            let nrm_c_index = rdr.read_u16::<BE>()? as usize;
+            let nrm_a_index = r.read_u16::<BE>()? as usize;
+            let nrm_b_index = r.read_u16::<BE>()? as usize;
+            let nrm_c_index = r.read_u16::<BE>()? as usize;
 
-            let kcl_flag = rdr.read_u16::<BE>()?;
+            let kcl_flag = r.read_u16::<BE>()?;
             // elimanates all the other data apart from the base type
             let kcl_type = (kcl_flag & 0x1f) as usize;
 
@@ -163,8 +167,8 @@ impl Kcl {
             let v2 = *vertex + (cross_b * (length / cross_b.dot(*nrm_c)));
             let v3 = *vertex + (cross_a * (length / cross_a.dot(*nrm_c)));
 
-            vertex_groups[kcl_type].vertices.extend([v1, v2, v3]);
+            kcl.vertex_groups[kcl_type].vertices.extend([v1, v2, v3]);
         }
-        Ok(Kcl { vertex_groups })
+        Ok(kcl)
     }
 }

@@ -1,52 +1,8 @@
+use crate::util::{ReadArrays, WriteArrays};
 use bevy::{math::Vec3, prelude::*};
-use bytemuck::{cast_slice_mut, Pod};
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
-use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Seek, Write};
-
-// add extra functions to the Read and Write traits to make it easier to read and write vec3s and arrays
-trait ReadArrays: Read {
-    fn read_vec3(&mut self) -> io::Result<Vec3> {
-        let mut result = [0f32; 3];
-        for x in result.iter_mut() {
-            *x = self.read_f32::<BE>()?;
-        }
-        Ok(result.into())
-    }
-    // takes in T (the numeric type of the array) and N (number of elements) and reads an array of that size and type
-    fn read_array<T, const N: usize>(&mut self) -> io::Result<[T; N]>
-    where
-        T: Default + Pod + PrimInt,
-    {
-        // create an array of the default value of T with length N
-        let mut result = [T::default(); N];
-        // read the exact number of bytes required to fill result
-        self.read_exact(cast_slice_mut(&mut result))?;
-        // convert each element of result to big endian
-        result.iter_mut().for_each(|x| *x = x.to_be());
-        Ok(result)
-    }
-}
-impl<R: Read> ReadArrays for R {}
-trait WriteArrays: Write {
-    fn write_vec3(&mut self, vec3: Vec3) -> io::Result<()> {
-        self.write_f32::<BE>(vec3.x)?;
-        self.write_f32::<BE>(vec3.y)?;
-        self.write_f32::<BE>(vec3.z)?;
-        Ok(())
-    }
-    fn write_array<T, const N: usize>(&mut self, mut array: [T; N]) -> io::Result<()>
-    where
-        T: Pod + PrimInt,
-    {
-        array.iter_mut().for_each(|x| *x = x.to_be());
-        let result: &[u8] = cast_slice_mut(&mut array);
-        self.write_all(result)?;
-        Ok(())
-    }
-}
-impl<W: Write> WriteArrays for W {}
 
 // every struct here should have a read() function that takes a reader and returns a read struct, and a write() function that writes itself as bytes to the writer
 pub trait KmpData {
@@ -56,9 +12,6 @@ pub trait KmpData {
     fn write<T>(&self, wtr: T) -> io::Result<T>
     where
         T: Write + Read + Seek;
-    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized;
 }
 
 /// stores all the data of the KMP file
@@ -122,6 +75,7 @@ impl Kmp {
         })
     }
     /// Write the KMP object to an object that implements Write.
+    #[allow(dead_code)]
     pub fn write<T>(&mut self, mut wtr: T) -> io::Result<T>
     where
         T: Write + Read + Seek,
@@ -232,12 +186,6 @@ impl KmpData for Header {
         wtr.write_array(self.section_offsets)?;
         Ok(wtr)
     }
-    fn get_section(_: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        None
-    }
 }
 
 /// Each section has a header containing its info (like the name and number of entries)
@@ -273,12 +221,6 @@ impl KmpData for SectionHeader {
         wtr.write_u16::<BE>(self.num_entries)?;
         wtr.write_u16::<BE>(self.additional_value)?;
         Ok(wtr)
-    }
-    fn get_section(_: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        None
     }
 }
 
@@ -320,20 +262,14 @@ where
         }
         Ok(wtr)
     }
-    fn get_section(_: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        None
-    }
 }
 
 /// The KTPT (kart point) section describes kart points; the starting position for racers.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Ktpt {
-    position: Vec3,
-    rotation: Vec3,
-    player_index: i16,
+    pub position: Vec3,
+    pub rotation: Vec3,
+    pub player_index: i16,
 }
 impl KmpData for Ktpt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
@@ -357,22 +293,16 @@ impl KmpData for Ktpt {
         wtr.write_u16::<BE>(0)?;
         Ok(wtr)
     }
-    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        Some(&mut kmp.ktpt)
-    }
 }
 
 /// The ENPT (enemy point) section describes enemy points; the routes of CPU racers. The CPU racers attempt to follow the path described by each group of points (as determined by ENPH). More than 0xFF (255) entries will force a console freeze while loading the track.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Enpt {
     pub position: Vec3,
-    leniency: f32,
-    setting_1: u16,
-    setting_2: u8,
-    setting_3: u8,
+    pub leniency: f32,
+    pub setting_1: u16,
+    pub setting_2: u8,
+    pub setting_3: u8,
 }
 impl KmpData for Enpt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
@@ -399,12 +329,6 @@ impl KmpData for Enpt {
         wtr.write_u8(self.setting_2)?;
         wtr.write_u8(self.setting_3)?;
         Ok(wtr)
-    }
-    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        Some(&mut kmp.enpt)
     }
 }
 
@@ -440,12 +364,6 @@ impl KmpData for Enph {
         wtr.write_u16::<BE>(0)?;
         Ok(wtr)
     }
-    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        Some(&mut kmp.enph)
-    }
 }
 
 /// The ITPT (item point) section describes item points; the Red Shell and Bullet Bill routes. The items attempt to follow the path described by each group of points (as determined by ITPH). More than 0xFF (255) entries will force a console freeze while loading the track.
@@ -480,12 +398,6 @@ impl KmpData for Itpt {
         wtr.write_u16::<BE>(self.setting_2)?;
         Ok(wtr)
     }
-    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        Some(&mut kmp.itpt)
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -519,12 +431,6 @@ impl KmpData for Itph {
         wtr.write_array(self.next_group)?;
         wtr.write_u16::<BE>(0)?;
         Ok(wtr)
-    }
-    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        Some(&mut kmp.itph)
     }
 }
 
@@ -569,12 +475,6 @@ impl KmpData for Ckpt {
         wtr.write_u8(self.next_cp)?;
         Ok(wtr)
     }
-    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        Some(&mut kmp.ckpt)
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -608,12 +508,6 @@ impl KmpData for Ckph {
         wtr.write_array(self.next_group)?;
         wtr.write_u16::<BE>(0)?;
         Ok(wtr)
-    }
-    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        Some(&mut kmp.ckph)
     }
 }
 
@@ -665,12 +559,6 @@ impl KmpData for Gobj {
         wtr.write_u16::<BE>(self.presence_flags)?;
         Ok(wtr)
     }
-    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        Some(&mut kmp.gobj)
-    }
 }
 
 /// Each POTI entry can contain a number of POTI entries/points.
@@ -699,12 +587,6 @@ impl KmpData for PotiPoint {
         wtr.write_u16::<BE>(self.setting_1)?;
         wtr.write_u16::<BE>(self.setting_2)?;
         Ok(wtr)
-    }
-    fn get_section(_: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        None
     }
 }
 
@@ -743,12 +625,6 @@ impl KmpData for Poti {
             wtr = e.write(wtr)?;
         }
         Ok(wtr)
-    }
-    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        Some(&mut kmp.poti)
     }
 }
 
@@ -812,12 +688,6 @@ impl KmpData for Area {
         wtr.write_u8(self.enpt_id)?;
         wtr.write_u16::<BE>(0)?;
         Ok(wtr)
-    }
-    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        Some(&mut kmp.area)
     }
 }
 
@@ -900,12 +770,6 @@ impl KmpData for Came {
         wtr.write_f32::<BE>(self.time)?;
         Ok(wtr)
     }
-    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        Some(&mut kmp.came)
-    }
 }
 
 /// The JGPT (jugem point) section describes "Jugem" points; the respawn positions. The index is relevant for the link of the CKPT section.
@@ -938,12 +802,6 @@ impl KmpData for Jgpt {
         wtr.write_u16::<BE>(self.respawn_id)?;
         wtr.write_i16::<BE>(self.extra_data)?;
         Ok(wtr)
-    }
-    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        Some(&mut kmp.jgpt)
     }
 }
 
@@ -978,12 +836,6 @@ impl KmpData for Cnpt {
         wtr.write_i16::<BE>(self.shoot_effect)?;
         Ok(wtr)
     }
-    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        Some(&mut kmp.cnpt)
-    }
 }
 
 /// The MSPT (mission success point) section describes end positions. After battles and tournaments have ended, the players are placed on this point(s).
@@ -1016,12 +868,6 @@ impl KmpData for Mspt {
         wtr.write_u16::<BE>(self.id)?;
         wtr.write_u16::<BE>(self.unknown)?;
         Ok(wtr)
-    }
-    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        Some(&mut kmp.mspt)
     }
 }
 
@@ -1076,11 +922,5 @@ impl KmpData for Stgi {
         let bytes = self.speed_mod.to_be_bytes();
         wtr.write_array([bytes[0], bytes[1]])?;
         Ok(wtr)
-    }
-    fn get_section(kmp: &mut Kmp) -> Option<&mut Section<Self>>
-    where
-        Self: Sized,
-    {
-        Some(&mut kmp.stgi)
     }
 }

@@ -1,20 +1,11 @@
-mod camera;
-mod kcl_file;
-mod kcl_model;
-mod kmp_file;
-mod kmp_model;
-mod mouse_picking;
 mod ui;
-mod undo;
+mod util;
+mod viewer;
 
-use camera::*;
-use kcl_model::*;
-use kmp_model::*;
-use mouse_picking::*;
-use ui::*;
-use undo::*;
+use bevy::{prelude::*, window::PresentMode, winit::WinitSettings};
 
-use bevy::{prelude::*, winit::WinitSettings};
+use ui::UIPlugin;
+use viewer::ViewerPlugin;
 
 fn main() {
     App::new()
@@ -22,18 +13,12 @@ fn main() {
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "KMPeek".into(),
+                present_mode: PresentMode::AutoNoVsync,
                 ..default()
             }),
             ..default()
         }))
         .insert_resource(WinitSettings::desktop_app())
-        .add_plugins((
-            CameraPlugin,
-            UIPlugin,
-            KclPlugin,
-            KmpPlugin,
-            MousePickingPlugin,
-            UndoPlugin,
-        ))
+        .add_plugins((ViewerPlugin, UIPlugin))
         .run();
 }

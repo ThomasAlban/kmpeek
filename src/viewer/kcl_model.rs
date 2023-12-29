@@ -1,14 +1,12 @@
 use crate::{
-    kcl_file::Kcl,
-    mouse_picking::KclRaycastSet,
-    ui::{AppSettings, KclFileSelected},
+    ui::{app_state::AppSettings, update_ui::KclFileSelected},
+    util::kcl_file::Kcl,
 };
 use bevy::{
     prelude::*,
     render::{mesh::PrimitiveTopology, render_resource::Face},
 };
-use bevy_mod_raycast::RaycastMesh;
-use bevy_pkv::PkvStore;
+
 use serde::{Deserialize, Serialize};
 use std::{ffi::OsStr, fs::File};
 
@@ -79,10 +77,9 @@ pub fn spawn_model(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut model: Query<Entity, With<KCLModelSection>>,
     mut ev_kcl_file_selected: EventReader<KclFileSelected>,
-    pkv: Res<PkvStore>,
+    settings: Res<AppSettings>,
 ) {
-    let settings = pkv.get::<AppSettings>("settings").unwrap();
-    for ev in ev_kcl_file_selected.iter() {
+    for ev in ev_kcl_file_selected.read() {
         if ev.0.extension() != Some(OsStr::new("kcl")) {
             continue;
         }
@@ -131,7 +128,7 @@ pub fn spawn_model(
                     ..default()
                 },
                 KCLModelSection(i),
-                RaycastMesh::<KclRaycastSet>::default(),
+                // RaycastMesh::<KclRaycastSet>::default(),
             ));
         }
         commands.insert_resource(kcl);
@@ -149,9 +146,8 @@ pub fn update_kcl_model(
         With<KCLModelSection>,
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    pkv: Res<PkvStore>,
+    settings: Res<AppSettings>,
 ) {
-    let settings = pkv.get::<AppSettings>("settings").unwrap();
     for (mut visibility, kcl_model_section, standard_material, _) in query.iter_mut() {
         let i = kcl_model_section.0;
         *visibility = if settings.kcl_model.visible[i] {
@@ -159,7 +155,7 @@ pub fn update_kcl_model(
         } else {
             Visibility::Hidden
         };
-        let material = materials.get_mut(&standard_material).unwrap();
+        let material = materials.get_mut(standard_material.id()).unwrap();
         material.base_color = settings.kcl_model.color[i].into();
         material.alpha_mode = if material.base_color.a() < 1. {
             AlphaMode::Add
