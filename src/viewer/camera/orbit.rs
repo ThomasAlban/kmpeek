@@ -93,7 +93,6 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
     ));
 }
 
-#[allow(clippy::too_many_arguments)]
 fn orbit_cam(
     primary_window: Query<&mut Window, With<PrimaryWindow>>,
     mut mouse_motion: EventReader<MouseMotion>,

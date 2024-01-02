@@ -2,7 +2,13 @@ mod ui;
 mod util;
 mod viewer;
 
-use bevy::{prelude::*, window::PresentMode, winit::WinitSettings};
+use std::time::Duration;
+
+use bevy::{
+    prelude::*,
+    window::PresentMode,
+    winit::{UpdateMode, WinitSettings},
+};
 
 use ui::UIPlugin;
 use viewer::ViewerPlugin;
@@ -18,7 +24,13 @@ fn main() {
             }),
             ..default()
         }))
-        .insert_resource(WinitSettings::desktop_app())
+        .insert_resource(WinitSettings {
+            focused_mode: UpdateMode::Continuous,
+            unfocused_mode: UpdateMode::ReactiveLowPower {
+                wait: Duration::from_secs(60),
+            },
+            ..default()
+        })
         .add_plugins((ViewerPlugin, UIPlugin))
         .run();
 }

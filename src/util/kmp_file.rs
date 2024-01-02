@@ -13,6 +13,9 @@ pub trait KmpData {
     where
         T: Write + Read + Seek;
 }
+pub trait KmpPoint {
+    fn get_position(&self) -> Vec3;
+}
 
 /// stores all the data of the KMP file
 #[derive(Debug, Serialize, Deserialize, Resource, Clone)]
@@ -20,11 +23,11 @@ pub struct Kmp {
     pub header: Header,
     pub ktpt: Section<Ktpt>,
     pub enpt: Section<Enpt>,
-    pub enph: Section<Enph>,
+    pub enph: Section<PathGroup>,
     pub itpt: Section<Itpt>,
-    pub itph: Section<Itph>,
+    pub itph: Section<PathGroup>,
     pub ckpt: Section<Ckpt>,
-    pub ckph: Section<Ckph>,
+    pub ckph: Section<PathGroup>,
     pub gobj: Section<Gobj>,
     pub poti: Section<Poti>,
     pub area: Section<Area>,
@@ -41,11 +44,11 @@ impl Kmp {
 
         let ktpt = Section::<Ktpt>::read(&mut rdr)?;
         let enpt = Section::<Enpt>::read(&mut rdr)?;
-        let enph = Section::<Enph>::read(&mut rdr)?;
+        let enph = Section::<PathGroup>::read(&mut rdr)?;
         let itpt = Section::<Itpt>::read(&mut rdr)?;
-        let itph = Section::<Itph>::read(&mut rdr)?;
+        let itph = Section::<PathGroup>::read(&mut rdr)?;
         let ckpt = Section::<Ckpt>::read(&mut rdr)?;
-        let ckph = Section::<Ckph>::read(&mut rdr)?;
+        let ckph = Section::<PathGroup>::read(&mut rdr)?;
         let gobj = Section::<Gobj>::read(&mut rdr)?;
         let poti = Section::<Poti>::read(&mut rdr)?;
         let area = Section::<Area>::read(&mut rdr)?;
@@ -294,6 +297,11 @@ impl KmpData for Ktpt {
         Ok(wtr)
     }
 }
+impl KmpPoint for Ktpt {
+    fn get_position(&self) -> Vec3 {
+        self.position
+    }
+}
 
 /// The ENPT (enemy point) section describes enemy points; the routes of CPU racers. The CPU racers attempt to follow the path described by each group of points (as determined by ENPH). More than 0xFF (255) entries will force a console freeze while loading the track.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -331,22 +339,27 @@ impl KmpData for Enpt {
         Ok(wtr)
     }
 }
+impl KmpPoint for Enpt {
+    fn get_position(&self) -> Vec3 {
+        self.position
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Enph {
+pub struct PathGroup {
     pub start: u8,
     pub group_length: u8,
     pub prev_group: [u8; 6],
     pub next_group: [u8; 6],
 }
-impl KmpData for Enph {
+impl KmpData for PathGroup {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let start = rdr.read_u8()?;
         let group_length = rdr.read_u8()?;
         let prev_group = rdr.read_array::<u8, 6>()?;
         let next_group = rdr.read_array::<u8, 6>()?;
         rdr.read_u16::<BE>()?;
-        Ok(Enph {
+        Ok(PathGroup {
             start,
             group_length,
             prev_group,
@@ -399,38 +412,9 @@ impl KmpData for Itpt {
         Ok(wtr)
     }
 }
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Itph {
-    pub start: u8,
-    pub group_length: u8,
-    pub prev_group: [u8; 6],
-    pub next_group: [u8; 6],
-}
-impl KmpData for Itph {
-    fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let start = rdr.read_u8()?;
-        let group_length = rdr.read_u8()?;
-        let prev_group = rdr.read_array::<u8, 6>()?;
-        let next_group = rdr.read_array::<u8, 6>()?;
-        rdr.read_u16::<BE>()?;
-        Ok(Itph {
-            start,
-            group_length,
-            prev_group,
-            next_group,
-        })
-    }
-    fn write<T>(&self, mut wtr: T) -> io::Result<T>
-    where
-        T: Write,
-    {
-        wtr.write_u8(self.start)?;
-        wtr.write_u8(self.group_length)?;
-        wtr.write_array(self.prev_group)?;
-        wtr.write_array(self.next_group)?;
-        wtr.write_u16::<BE>(0)?;
-        Ok(wtr)
+impl KmpPoint for Itpt {
+    fn get_position(&self) -> Vec3 {
+        self.position
     }
 }
 
@@ -473,40 +457,6 @@ impl KmpData for Ckpt {
         wtr.write_u8(self.cp_type)?;
         wtr.write_u8(self.prev_cp)?;
         wtr.write_u8(self.next_cp)?;
-        Ok(wtr)
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Ckph {
-    pub start: u8,
-    pub group_length: u8,
-    pub prev_group: [u8; 6],
-    pub next_group: [u8; 6],
-}
-impl KmpData for Ckph {
-    fn read(mut rdr: impl Read) -> io::Result<Self> {
-        let start = rdr.read_u8()?;
-        let group_length = rdr.read_u8()?;
-        let prev_group = rdr.read_array::<u8, 6>()?;
-        let next_group = rdr.read_array::<u8, 6>()?;
-        rdr.read_u16::<BE>()?;
-        Ok(Ckph {
-            start,
-            group_length,
-            prev_group,
-            next_group,
-        })
-    }
-    fn write<T>(&self, mut wtr: T) -> io::Result<T>
-    where
-        T: Write,
-    {
-        wtr.write_u8(self.start)?;
-        wtr.write_u8(self.group_length)?;
-        wtr.write_array(self.prev_group)?;
-        wtr.write_array(self.next_group)?;
-        wtr.write_u16::<BE>(0)?;
         Ok(wtr)
     }
 }
@@ -560,6 +510,11 @@ impl KmpData for Gobj {
         Ok(wtr)
     }
 }
+impl KmpPoint for Gobj {
+    fn get_position(&self) -> Vec3 {
+        self.position
+    }
+}
 
 /// Each POTI entry can contain a number of POTI entries/points.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -587,6 +542,11 @@ impl KmpData for PotiPoint {
         wtr.write_u16::<BE>(self.setting_1)?;
         wtr.write_u16::<BE>(self.setting_2)?;
         Ok(wtr)
+    }
+}
+impl KmpPoint for PotiPoint {
+    fn get_position(&self) -> Vec3 {
+        self.position
     }
 }
 
@@ -690,6 +650,11 @@ impl KmpData for Area {
         Ok(wtr)
     }
 }
+impl KmpPoint for Area {
+    fn get_position(&self) -> Vec3 {
+        self.position
+    }
+}
 
 /// The CAME (camera) section describes cameras; used to determine cameras for starting routes, Time Trial pans, etc.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -771,6 +736,11 @@ impl KmpData for Came {
         Ok(wtr)
     }
 }
+impl KmpPoint for Came {
+    fn get_position(&self) -> Vec3 {
+        self.position
+    }
+}
 
 /// The JGPT (jugem point) section describes "Jugem" points; the respawn positions. The index is relevant for the link of the CKPT section.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -802,6 +772,11 @@ impl KmpData for Jgpt {
         wtr.write_u16::<BE>(self.respawn_id)?;
         wtr.write_i16::<BE>(self.extra_data)?;
         Ok(wtr)
+    }
+}
+impl KmpPoint for Jgpt {
+    fn get_position(&self) -> Vec3 {
+        self.position
     }
 }
 
@@ -837,6 +812,11 @@ impl KmpData for Cnpt {
         Ok(wtr)
     }
 }
+impl KmpPoint for Cnpt {
+    fn get_position(&self) -> Vec3 {
+        self.position
+    }
+}
 
 /// The MSPT (mission success point) section describes end positions. After battles and tournaments have ended, the players are placed on this point(s).
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -868,6 +848,11 @@ impl KmpData for Mspt {
         wtr.write_u16::<BE>(self.id)?;
         wtr.write_u16::<BE>(self.unknown)?;
         Ok(wtr)
+    }
+}
+impl KmpPoint for Mspt {
+    fn get_position(&self) -> Vec3 {
+        self.position
     }
 }
 

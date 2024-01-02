@@ -5,7 +5,10 @@ use super::{
 };
 use crate::{
     ui::dock_tree::{Tab, TabViewer},
-    viewer::camera::{CameraModeChanged, FlyCam, OrbitCam, TopDownCam},
+    viewer::{
+        camera::{CameraModeChanged, FlyCam, OrbitCam, TopDownCam},
+        kmp::KmpVisibilityUpdated,
+    },
 };
 use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_egui::{
@@ -42,7 +45,6 @@ pub struct KmpFileSelected(pub PathBuf);
 #[derive(Event)]
 pub struct KclFileSelected(pub PathBuf);
 
-#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn update_ui(
     keys: Res<Input<KeyCode>>,
     mut contexts: EguiContexts,
@@ -51,6 +53,7 @@ fn update_ui(
     mut ev_kmp_file_selected: EventWriter<KmpFileSelected>,
     mut ev_kcl_file_selected: EventWriter<KclFileSelected>,
     mut ev_camera_mode_changed: EventWriter<CameraModeChanged>,
+    mut ev_kmp_visibility_updated: EventWriter<KmpVisibilityUpdated>,
 
     // mut normalize: Query<&mut NormalizeScale>,
     mut cams: (
@@ -80,9 +83,6 @@ fn update_ui(
 
     let settings = settings.as_mut();
     let tree = tree.as_mut();
-
-    // let mut normalize: Vec<Mut<NormalizeScale>> = normalize.iter_mut().collect();
-    // let normalize: Vec<&mut NormalizeScale> = normalize.iter_mut().map(|x| x.as_mut()).collect();
     let ctx = contexts.ctx_mut();
 
     // things which can be called from both the UI and keybinds
@@ -224,6 +224,7 @@ fn update_ui(
                 topdown_cam: (&mut topdown_cam.0, &mut topdown_cam.1),
 
                 ev_camera_mode_changed: &mut ev_camera_mode_changed,
+                ev_kmp_visibility_updated: &mut ev_kmp_visibility_updated,
             },
         );
     if settings.reset_tree {

@@ -3,7 +3,7 @@ use crate::{
     viewer::kcl_model::KclModelSettings,
     viewer::{
         camera::{CameraModeChanged, CameraSettings},
-        kmp_model::KmpModelSettings,
+        kmp::settings::KmpModelSettings,
     },
 };
 use bevy::prelude::*;

@@ -28,7 +28,6 @@ impl Normalize {
     }
 }
 
-#[allow(clippy::type_complexity)]
 fn update_normalize(
     mut query: ParamSet<(
         Query<(&GlobalTransform, &Camera)>,
@@ -37,6 +36,20 @@ fn update_normalize(
     settings: Res<AppSettings>,
 ) {
     if !settings.kmp_model.normalize {
+        for (mut transform, _, normalize) in query.p1().iter_mut() {
+            let scale_before = transform.scale;
+            transform.scale = Vec3::ONE * settings.kmp_model.point_scale;
+
+            if !normalize.axes.x {
+                transform.scale.x = scale_before.x;
+            }
+            if !normalize.axes.y {
+                transform.scale.y = scale_before.y;
+            }
+            if !normalize.axes.z {
+                transform.scale.z = scale_before.z;
+            }
+        }
         return;
     }
 

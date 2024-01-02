@@ -5,8 +5,12 @@ use super::{
 };
 use crate::{
     util::kcl_file::*,
-    viewer::camera::{
-        CameraMode, CameraModeChanged, CameraSettings, FlySettings, OrbitSettings, TopDownSettings,
+    viewer::{
+        camera::{
+            CameraMode, CameraModeChanged, CameraSettings, FlySettings, OrbitSettings,
+            TopDownSettings,
+        },
+        kmp::KmpVisibilityUpdated,
     },
 };
 use bevy::prelude::*;
@@ -55,7 +59,7 @@ pub enum Tab {
 }
 
 // this tells egui how to render each tab
-pub struct TabViewer<'a, 'b> {
+pub struct TabViewer<'a, 'b, 'c> {
     // add into here any data that needs to be passed into any tabs
     pub viewport_image: &'a mut Image,
     pub viewport_tex_id: TextureId,
@@ -68,8 +72,9 @@ pub struct TabViewer<'a, 'b> {
     pub orbit_cam: &'a mut Transform,
     pub topdown_cam: (&'a mut Transform, &'a mut Projection),
     pub ev_camera_mode_changed: &'a mut EventWriter<'b, CameraModeChanged>,
+    pub ev_kmp_visibility_updated: &'a mut EventWriter<'c, KmpVisibilityUpdated>,
 }
-impl egui_dock::TabViewer for TabViewer<'_, '_> {
+impl egui_dock::TabViewer for TabViewer<'_, '_, '_> {
     // each tab will be distinguished by a string - its name
     type Tab = Tab;
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
@@ -90,10 +95,20 @@ impl egui_dock::TabViewer for TabViewer<'_, '_> {
                         .text("Point Scale"),
                 );
                 ui.checkbox(&mut self.settings.kmp_model.normalize, "Normalize points");
-                // go through and update the normalize multipliers of everything
-                // for normalize in self.normalize.iter_mut() {
-                //     normalize.multiplier = self.settings.point_scale;
-                // }
+
+                macro_rules! visibility_checkbox {
+                    ($sect:ident, $msg:expr) => {
+                        let checkbox =
+                            ui.checkbox(&mut self.settings.kmp_model.sections.$sect.visible, $msg);
+                        if checkbox.changed() {
+                            self.ev_kmp_visibility_updated.send(KmpVisibilityUpdated);
+                        }
+                    };
+                }
+                visibility_checkbox!(start_points, "Start points visible");
+                visibility_checkbox!(enemy_paths, "Enemy paths visible");
+                visibility_checkbox!(item_paths, "Item paths visible");
+
                 ui.checkbox(
                     &mut self.settings.open_course_kcl_in_directory,
                     "Auto open course.kcl",
@@ -115,7 +130,7 @@ impl egui_dock::TabViewer for TabViewer<'_, '_> {
                         let mut show_walls = visible[Wall1 as usize]
                             && visible[Wall2 as usize]
                             && visible[WeakWall as usize];
-                        let mut show_invisible_walls =
+                        let mut show_invis_walls =
                             visible[InvisibleWall1 as usize] && visible[InvisibleWall2 as usize];
                         let mut show_death_barriers =
                             visible[SolidFall as usize] && visible[FallBoundary as usize];
@@ -124,41 +139,33 @@ impl egui_dock::TabViewer for TabViewer<'_, '_> {
                             && visible[SoundTrigger as usize]
                             && visible[KclFlag::CannonTrigger as usize];
 
-                        let (
-                            show_walls_before,
-                            show_invisible_walls_before,
-                            show_death_barriers_before,
-                            show_effects_triggers_before,
-                        ) = (
-                            show_walls,
-                            show_invisible_walls,
-                            show_death_barriers,
-                            show_effects_triggers,
-                        );
+                        let show_walls_checkbox = ui.checkbox(&mut show_walls, "Show Walls");
+                        let show_invis_walls_checkbox =
+                            ui.checkbox(&mut show_invis_walls, "Show Invisible Walls");
+                        let show_death_barriers_checkbox =
+                            ui.checkbox(&mut show_death_barriers, "Show Death Barriers");
+                        let show_effects_triggers_checkbox =
+                            ui.checkbox(&mut show_effects_triggers, "Show Effects & Triggers");
 
-                        ui.checkbox(&mut show_walls, "Show Walls");
-                        ui.checkbox(&mut show_invisible_walls, "Show Invisible Walls");
-                        ui.checkbox(&mut show_death_barriers, "Show Death Barriers");
-                        ui.checkbox(&mut show_effects_triggers, "Show Effects & Triggers");
-
-                        if show_walls != show_walls_before {
+                        if show_walls_checkbox.changed() {
                             [
                                 visible[Wall1 as usize],
                                 visible[Wall2 as usize],
                                 visible[WeakWall as usize],
                             ] = [show_walls; 3];
                         }
-                        if show_invisible_walls != show_invisible_walls_before {
+
+                        if show_invis_walls_checkbox.changed() {
                             [
                                 visible[InvisibleWall1 as usize],
                                 visible[InvisibleWall2 as usize],
-                            ] = [show_invisible_walls; 2];
+                            ] = [show_invis_walls; 2];
                         }
-                        if show_death_barriers != show_death_barriers_before {
+                        if show_death_barriers_checkbox.changed() {
                             [visible[SolidFall as usize], visible[FallBoundary as usize]] =
                                 [show_death_barriers; 2];
                         }
-                        if show_effects_triggers != show_effects_triggers_before {
+                        if show_effects_triggers_checkbox.changed() {
                             [
                                 visible[ItemStateModifier as usize],
                                 visible[EffectTrigger as usize],

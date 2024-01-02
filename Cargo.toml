@@ -18,10 +18,10 @@ bevy = { version = "0.12.1", default-features = false, features = [
     "serialize",
 ] }
 bevy_egui = "0.24.0"
-bevy_infinite_grid = { git = "https://github.com/pcwalton/bevy_infinite_grid", branch = "bevy-0.12" }
-bevy_mod_outline = "0.6.0"
-bevy_mod_raycast = { git = "https://github.com/aevyrie/bevy_mod_raycast" }
-bevy_more_shapes = { git = "https://github.com/Hibyehello/bevy_more_shapes.git" }
+bevy_infinite_grid = { path = "../bevy_infinite_grid" }
+# bevy_infinite_grid = { git = "https://github.com/ForesightMiningSoftwareCorporation/bevy_infinite_grid", branch = "main" }
+# bevy_mod_outline = "0.6.0"
+# bevy_mod_raycast = { git = "https://github.com/aevyrie/bevy_mod_raycast" }
 bevy_pkv = "0.9.0"
 bytemuck = "1.13.1"
 byteorder = "1.4.3"
@@ -32,7 +32,7 @@ serde = { version = "1.0.163", features = ["derive"] }
 serde_json = "1.0.96"
 strum = "0.25.0"
 strum_macros = "0.25.1"
-undo_2 = "0.2.0"
+# undo_2 = "0.2.0"
 
 # Enable a small amount of optimization in debug mode
 [profile.dev]
@@ -46,4 +46,8 @@ opt-level = 3
 opt-level = 3
 lto = true
 strip = true
-codegen-units = 1
+# codegen-units = 1
+
+[lints.clippy]
+type_complexity = "allow"
+too_many_arguments = "allow"

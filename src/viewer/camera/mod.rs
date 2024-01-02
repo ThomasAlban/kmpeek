@@ -82,7 +82,6 @@ fn cursor_grab(
     window.cursor.grab_mode = CursorGrabMode::Locked;
 }
 
-#[allow(clippy::type_complexity)]
 fn update_active_camera(
     mut fly_cam: Query<
         (Entity, &mut Camera),
