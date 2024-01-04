@@ -4,7 +4,6 @@ use byteorder::{ReadBytesExt, BE};
 use std::io::{self, Read, Seek, SeekFrom};
 use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 
-#[allow(dead_code)]
 #[derive(Display, EnumString, IntoStaticStr, EnumIter)]
 pub enum KclFlag {
     #[strum(serialize = "Road 1")]

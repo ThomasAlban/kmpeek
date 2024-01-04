@@ -1,11 +1,10 @@
-use bevy::prelude::*;
-
 use crate::ui::app_state::AppSettings;
+use bevy::prelude::*;
 
 pub struct NormalizePlugin;
 impl Plugin for NormalizePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, update_normalize);
+        app.add_systems(Update, update_normalize.in_set(UpdateNormalizeSet));
     }
 }
 
@@ -28,15 +27,26 @@ impl Normalize {
     }
 }
 
+#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
+pub struct UpdateNormalizeSet;
+
 fn update_normalize(
     mut query: ParamSet<(
         Query<(&GlobalTransform, &Camera)>,
-        Query<(&mut Transform, &mut GlobalTransform, &Normalize)>,
+        Query<(
+            &mut Transform,
+            &mut GlobalTransform,
+            &Normalize,
+            &ViewVisibility,
+        )>,
     )>,
     settings: Res<AppSettings>,
 ) {
     if !settings.kmp_model.normalize {
-        for (mut transform, _, normalize) in query.p1().iter_mut() {
+        for (mut transform, _, normalize, visibility) in query.p1().iter_mut() {
+            if *visibility == ViewVisibility::HIDDEN {
+                continue;
+            }
             let scale_before = transform.scale;
             transform.scale = Vec3::ONE * settings.kmp_model.point_scale;
 
@@ -67,7 +77,10 @@ fn update_normalize(
 
     let view = camera_position.compute_matrix().inverse();
 
-    for (mut transform, mut global_transform, normalize) in query.p1().iter_mut() {
+    for (mut transform, mut global_transform, normalize, visibility) in query.p1().iter_mut() {
+        if *visibility == ViewVisibility::HIDDEN {
+            continue;
+        }
         let distance = view.transform_point3(global_transform.translation()).z;
         let gt = global_transform.compute_transform();
 

@@ -65,7 +65,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
         Camera3dBundle {
             camera: Camera {
                 // render to the image
-                target: RenderTarget::Image(viewport.clone()),
+                target: RenderTarget::Image(viewport.handle.clone()),
                 is_active: false,
                 ..default()
             },
@@ -123,7 +123,7 @@ fn topdown_cam(
                 projection.scale -= (scroll * projection.scale)
                     * 0.001
                     * settings.camera.top_down.scroll_sensitivity;
-                projection.scale = projection.scale.clamp(1., 1000.);
+                projection.scale = projection.scale.clamp(1., 500.);
             }
         }
     }

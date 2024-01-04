@@ -76,7 +76,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
         Camera3dBundle {
             camera: Camera {
                 // render to the image
-                target: RenderTarget::Image(viewport.clone()),
+                target: RenderTarget::Image(viewport.handle.clone()),
                 is_active: false,
                 ..default()
             },
@@ -189,7 +189,7 @@ fn orbit_cam(
             orbit_cam.radius -=
                 scroll * orbit_cam.radius * 0.002 * settings.camera.orbit.scroll_sensitivity;
             // dont allow zoom to reach zero or you get stuck
-            orbit_cam.radius = orbit_cam.radius.clamp(1., 1000000.);
+            orbit_cam.radius = orbit_cam.radius.clamp(1., 500000.);
         }
 
         if any {

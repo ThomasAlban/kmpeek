@@ -1,16 +1,10 @@
 use bevy::{
-    math::vec2,
     prelude::*,
     render::render_resource::{
         Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
     },
 };
-use bevy_egui::{
-    egui::{self, TextureId},
-    EguiUserTextures,
-};
-
-use super::app_state::AppState;
+use bevy_egui::{egui::TextureId, EguiUserTextures};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 pub struct SetupViewportSet;
@@ -30,8 +24,11 @@ impl Plugin for ViewportPlugin {
 }
 
 // stores the image which the camera renders to, so that we can display a viewport inside a tab
-#[derive(Deref, Resource)]
-pub struct ViewportImage(Handle<Image>);
+#[derive(Resource)]
+pub struct ViewportImage {
+    pub handle: Handle<Image>,
+    pub tex_id: TextureId,
+}
 
 fn setup_viewport(
     mut commands: Commands,
@@ -60,39 +57,8 @@ fn setup_viewport(
     };
 
     // create a handle to the image
-    let image_handle = images.add(image);
-    egui_user_textures.add_image(image_handle.clone());
+    let handle = images.add(image);
+    let tex_id = egui_user_textures.add_image(handle.clone());
 
-    commands.insert_resource(ViewportImage(image_handle));
-}
-
-// function called inside dock_tree.rs to render the viewport
-pub fn render_viewport(
-    ui: &mut egui::Ui,
-    viewport_image: &mut Image,
-    window: &Window,
-    viewport_tex_id: TextureId,
-    app_state: &mut AppState,
-) {
-    let viewport_size = vec2(ui.available_width(), ui.available_height());
-
-    // resize the viewport if needed
-    if viewport_image.size() != (viewport_size.as_uvec2() * window.scale_factor() as u32) {
-        let size = Extent3d {
-            width: viewport_size.x as u32 * window.scale_factor() as u32,
-            height: viewport_size.y as u32 * window.scale_factor() as u32,
-            ..default()
-        };
-        viewport_image.resize(size);
-    }
-
-    // show the viewport image
-    ui.image(egui::load::SizedTexture::new(
-        viewport_tex_id,
-        viewport_size.to_array(),
-    ));
-
-    app_state.mouse_in_viewport = ui.ui_contains_pointer();
-    let rect = ui.max_rect();
-    app_state.viewport_rect = Rect::new(rect.min.x, rect.min.y, rect.max.x, rect.max.y);
+    commands.insert_resource(ViewportImage { handle, tex_id });
 }

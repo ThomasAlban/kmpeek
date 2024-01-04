@@ -1,15 +1,17 @@
 use self::{
-    app_state::AppStatePlugin, dock_tree::DockTreePlugin, update_ui::UpdateUIPlugin,
-    viewport::ViewportPlugin,
+    app_state::AppStatePlugin, keybinds::KeybindsPlugin, tabs::DockTreePlugin,
+    update_ui::UpdateUIPlugin, viewport::ViewportPlugin,
 };
 use bevy::app::Plugin;
 use bevy_egui::EguiPlugin;
 
 pub mod app_state;
-pub mod dock_tree;
+mod file_dialog;
+mod keybinds;
+mod menu_bar;
+mod tabs;
 pub mod update_ui;
 pub mod viewport;
-
 pub struct UIPlugin;
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
@@ -19,6 +21,7 @@ impl Plugin for UIPlugin {
             DockTreePlugin,
             UpdateUIPlugin,
             ViewportPlugin,
+            KeybindsPlugin,
         ));
     }
 }

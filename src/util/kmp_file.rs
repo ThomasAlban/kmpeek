@@ -13,8 +13,17 @@ pub trait KmpData {
     where
         T: Write + Read + Seek;
 }
-pub trait KmpPoint {
+pub trait KmpPositionPoint {
     fn get_position(&self) -> Vec3;
+}
+pub trait KmpRotationPoint {
+    fn get_rotation(&self) -> Vec3;
+}
+
+macro_rules! invalid_data_error {
+    ($msg:expr) => {
+        Err(io::Error::new(io::ErrorKind::InvalidData, $msg))
+    };
 }
 
 /// stores all the data of the KMP file
@@ -138,26 +147,17 @@ impl KmpData for Header {
         // get the first 4 bytes of the file for file magic
         let file_magic = rdr.read_array::<u8, 4>()?;
         if &file_magic != b"RKMD" {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid file magic",
-            ));
+            return invalid_data_error!("Invalid file magic");
         }
         // convert file magic to string
         let Ok(file_magic) = String::from_utf8(file_magic.to_vec()) else {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "invalid file magic",
-            ));
+            return invalid_data_error!("Invalid file magic");
         };
         let file_len = rdr.read_u32::<BE>()?;
         // check that the number of sections is 15
         let num_sections = rdr.read_u16::<BE>()?;
         if num_sections != 15 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("expected 15 sections but found {num_sections} sections"),
-            ));
+            return invalid_data_error!("Number of sections not equal to 15");
         }
         let header_len = rdr.read_u16::<BE>()?;
         let version_num = rdr.read_u32::<BE>()?;
@@ -177,10 +177,7 @@ impl KmpData for Header {
     {
         let bytes_written = wtr.write(self.file_magic.as_bytes())?;
         if bytes_written != self.file_magic.len() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Could not write file magic",
-            ));
+            return invalid_data_error!("Could not write file magic");
         }
         wtr.write_u32::<BE>(self.file_len)?;
         wtr.write_u16::<BE>(self.num_sections)?;
@@ -297,9 +294,14 @@ impl KmpData for Ktpt {
         Ok(wtr)
     }
 }
-impl KmpPoint for Ktpt {
+impl KmpPositionPoint for Ktpt {
     fn get_position(&self) -> Vec3 {
         self.position
+    }
+}
+impl KmpRotationPoint for Ktpt {
+    fn get_rotation(&self) -> Vec3 {
+        self.rotation
     }
 }
 
@@ -339,7 +341,7 @@ impl KmpData for Enpt {
         Ok(wtr)
     }
 }
-impl KmpPoint for Enpt {
+impl KmpPositionPoint for Enpt {
     fn get_position(&self) -> Vec3 {
         self.position
     }
@@ -412,7 +414,7 @@ impl KmpData for Itpt {
         Ok(wtr)
     }
 }
-impl KmpPoint for Itpt {
+impl KmpPositionPoint for Itpt {
     fn get_position(&self) -> Vec3 {
         self.position
     }
@@ -468,11 +470,11 @@ pub struct Gobj {
     /// this is part of the extended presence flags, but the value must be 0 if the object does not use this extension
     padding: u16,
     pub position: Vec3,
-    rotation: Vec3,
-    scale: Vec3,
-    route: u16,
-    settings: [u16; 8],
-    presence_flags: u16,
+    pub rotation: Vec3,
+    pub scale: Vec3,
+    pub route: u16,
+    pub settings: [u16; 8],
+    pub presence_flags: u16,
 }
 impl KmpData for Gobj {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
@@ -510,18 +512,23 @@ impl KmpData for Gobj {
         Ok(wtr)
     }
 }
-impl KmpPoint for Gobj {
+impl KmpPositionPoint for Gobj {
     fn get_position(&self) -> Vec3 {
         self.position
+    }
+}
+impl KmpRotationPoint for Gobj {
+    fn get_rotation(&self) -> Vec3 {
+        self.rotation
     }
 }
 
 /// Each POTI entry can contain a number of POTI entries/points.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct PotiPoint {
-    position: Vec3,
-    setting_1: u16,
-    setting_2: u16,
+pub struct PotiPoint {
+    pub position: Vec3,
+    pub setting_1: u16,
+    pub setting_2: u16,
 }
 impl KmpData for PotiPoint {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
@@ -544,7 +551,7 @@ impl KmpData for PotiPoint {
         Ok(wtr)
     }
 }
-impl KmpPoint for PotiPoint {
+impl KmpPositionPoint for PotiPoint {
     fn get_position(&self) -> Vec3 {
         self.position
     }
@@ -553,10 +560,10 @@ impl KmpPoint for PotiPoint {
 /// The POTI (point information) section describes routes; these are routes for many things including cameras and objects.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Poti {
-    num_points: u16,
-    setting_1: u8,
-    setting_2: u8,
-    routes: Vec<PotiPoint>,
+    pub num_points: u16,
+    pub setting_1: u8,
+    pub setting_2: u8,
+    pub routes: Vec<PotiPoint>,
 }
 impl KmpData for Poti {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
@@ -591,22 +598,28 @@ impl KmpData for Poti {
 /// The AREA (area) section describes areas; used to determine which camera to use, for example. The size is 5000 for both the positive and negative sides of the X and Z-axes, and 10000 for only the positive side of the Y-axis.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Area {
-    shape: u8,
-    kind: u8,
-    came_index: u8,
-    priority: u8,
-    position: Vec3,
-    rotation: Vec3,
-    scale: Vec3,
-    setting_1: u16,
-    setting_2: u16,
-    route: u8,
-    enpt_id: u8,
+    pub shape: u8,
+    pub kind: u8,
+    pub came_index: u8,
+    pub priority: u8,
+    pub position: Vec3,
+    pub rotation: Vec3,
+    pub scale: Vec3,
+    pub setting_1: u16,
+    pub setting_2: u16,
+    pub route: u8,
+    pub enpt_id: u8,
 }
 impl KmpData for Area {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let shape = rdr.read_u8()?;
+        if shape > 1 {
+            return invalid_data_error!("Area shape greater than 1");
+        }
         let kind = rdr.read_u8()?;
+        if kind > 10 {
+            return invalid_data_error!("Area type greater than 10 (0x0A)");
+        }
         let came_index = rdr.read_u8()?;
         let priority = rdr.read_u8()?;
         let position = rdr.read_vec3()?;
@@ -650,31 +663,36 @@ impl KmpData for Area {
         Ok(wtr)
     }
 }
-impl KmpPoint for Area {
+impl KmpPositionPoint for Area {
     fn get_position(&self) -> Vec3 {
         self.position
+    }
+}
+impl KmpRotationPoint for Area {
+    fn get_rotation(&self) -> Vec3 {
+        self.rotation
     }
 }
 
 /// The CAME (camera) section describes cameras; used to determine cameras for starting routes, Time Trial pans, etc.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Came {
-    kind: u8,
-    next_index: u8,
-    shake: u8,
-    route: u8,
-    point_velocity: u16,
-    zoom_velocity: u16,
-    view_velocity: u16,
-    start: u8,
-    movie: u8,
-    position: Vec3,
-    rotation: Vec3,
-    zoom_start: f32,
-    zoom_end: f32,
-    view_start: Vec3,
-    view_end: Vec3,
-    time: f32,
+    pub kind: u8,
+    pub next_index: u8,
+    pub shake: u8,
+    pub route: u8,
+    pub point_velocity: u16,
+    pub zoom_velocity: u16,
+    pub view_velocity: u16,
+    pub start: u8,
+    pub movie: u8,
+    pub position: Vec3,
+    pub rotation: Vec3,
+    pub zoom_start: f32,
+    pub zoom_end: f32,
+    pub view_start: Vec3,
+    pub view_end: Vec3,
+    pub time: f32,
 }
 impl KmpData for Came {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
@@ -736,9 +754,14 @@ impl KmpData for Came {
         Ok(wtr)
     }
 }
-impl KmpPoint for Came {
+impl KmpPositionPoint for Came {
     fn get_position(&self) -> Vec3 {
         self.position
+    }
+}
+impl KmpRotationPoint for Came {
+    fn get_rotation(&self) -> Vec3 {
+        self.rotation
     }
 }
 
@@ -774,9 +797,14 @@ impl KmpData for Jgpt {
         Ok(wtr)
     }
 }
-impl KmpPoint for Jgpt {
+impl KmpPositionPoint for Jgpt {
     fn get_position(&self) -> Vec3 {
         self.position
+    }
+}
+impl KmpRotationPoint for Jgpt {
+    fn get_rotation(&self) -> Vec3 {
+        self.rotation
     }
 }
 
@@ -812,7 +840,7 @@ impl KmpData for Cnpt {
         Ok(wtr)
     }
 }
-impl KmpPoint for Cnpt {
+impl KmpPositionPoint for Cnpt {
     fn get_position(&self) -> Vec3 {
         self.position
     }
@@ -850,7 +878,7 @@ impl KmpData for Mspt {
         Ok(wtr)
     }
 }
-impl KmpPoint for Mspt {
+impl KmpPositionPoint for Mspt {
     fn get_position(&self) -> Vec3 {
         self.position
     }

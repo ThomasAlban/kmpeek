@@ -14,14 +14,18 @@ pub struct KclPlugin;
 
 impl Plugin for KclPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (spawn_model, update_kcl_model));
+        app.add_event::<KclModelUpdated>()
+            .add_systems(Update, (spawn_model, update_kcl_model));
     }
 }
 
-#[derive(Resource, Serialize, Deserialize)]
+#[derive(Event, Default)]
+pub struct KclModelUpdated;
+
+#[derive(Resource, Serialize, Deserialize, Clone, PartialEq)]
 pub struct KclModelSettings {
     pub visible: [bool; 32],
-    pub color: [[f32; 4]; 32],
+    pub color: [Color; 32],
     pub backface_culling: bool,
 }
 impl Default for KclModelSettings {
@@ -29,38 +33,38 @@ impl Default for KclModelSettings {
         Self {
             visible: [true; 32],
             color: [
-                [1.0, 1.0, 1.0, 1.0], // road
-                [1.0, 0.9, 0.8, 1.0], // slippery road (sand/dirt)
-                [0.0, 0.8, 0.0, 1.0], // weak off-road
-                [0.0, 0.6, 0.0, 1.0], // off-road
-                [0.0, 0.4, 0.0, 1.0], // heavy off-road
-                [0.8, 0.9, 1.0, 1.0], // slippery road (ice)
-                [1.0, 0.5, 0.0, 1.0], // boost panel
-                [1.0, 0.6, 0.0, 1.0], // boost ramp
-                [1.0, 0.8, 0.0, 1.0], // slow ramp
-                [0.9, 0.9, 1.0, 0.5], // item road
-                [0.7, 0.1, 0.1, 1.0], // solid fall
-                [0.0, 0.5, 1.0, 1.0], // moving water
-                [0.6, 0.6, 0.6, 1.0], // wall
-                [0.0, 0.0, 0.6, 0.8], // invisible wall
-                [0.6, 0.6, 0.7, 0.5], // item wall
-                [0.6, 0.6, 0.6, 1.0], // wall
-                [0.8, 0.0, 0.0, 0.8], // fall boundary
-                [1.0, 0.0, 0.5, 0.8], // cannon activator
-                [0.5, 0.0, 1.0, 0.5], // force recalculation
-                [0.0, 0.3, 1.0, 1.0], // half-pipe ramp
-                [0.6, 0.6, 0.6, 1.0], // wall (items pass through)
-                [0.9, 0.9, 1.0, 1.0], // moving road
-                [0.9, 0.7, 1.0, 1.0], // sticky road
-                [1.0, 1.0, 1.0, 1.0], // road (alt sfx)
-                [1.0, 0.0, 1.0, 0.8], // sound trigger
-                [1.0, 0.0, 1.0, 0.5], // item state modifier
-                [0.4, 0.6, 0.4, 0.8], // weak wall
-                [0.9, 0.9, 1.0, 1.0], // rotating road
-                [0.8, 0.0, 1.0, 0.8], // effect trigger
-                [0.6, 0.6, 0.6, 1.0], // invisible wall 2
-                [0.0, 0.6, 0.0, 0.8], // half-pipe invis wall
-                [0.8, 0.7, 0.8, 1.0], // special wall
+                Color::rgba(1.0, 1.0, 1.0, 1.0), // road
+                Color::rgba(1.0, 0.9, 0.8, 1.0), // slippery road (sand/dirt)
+                Color::rgba(0.0, 0.8, 0.0, 1.0), // weak off-road
+                Color::rgba(0.0, 0.6, 0.0, 1.0), // off-road
+                Color::rgba(0.0, 0.4, 0.0, 1.0), // heavy off-road
+                Color::rgba(0.8, 0.9, 1.0, 1.0), // slippery road (ice)
+                Color::rgba(1.0, 0.5, 0.0, 1.0), // boost panel
+                Color::rgba(1.0, 0.6, 0.0, 1.0), // boost ramp
+                Color::rgba(1.0, 0.8, 0.0, 1.0), // slow ramp
+                Color::rgba(0.9, 0.9, 1.0, 0.5), // item road
+                Color::rgba(0.7, 0.1, 0.1, 1.0), // solid fall
+                Color::rgba(0.0, 0.5, 1.0, 1.0), // moving water
+                Color::rgba(0.6, 0.6, 0.6, 1.0), // wall
+                Color::rgba(0.0, 0.0, 0.6, 0.8), // invisible wall
+                Color::rgba(0.6, 0.6, 0.7, 0.5), // item wall
+                Color::rgba(0.6, 0.6, 0.6, 1.0), // wall
+                Color::rgba(0.8, 0.0, 0.0, 0.8), // fall boundary
+                Color::rgba(1.0, 0.0, 0.5, 0.8), // cannon activator
+                Color::rgba(0.5, 0.0, 1.0, 0.5), // force recalculation
+                Color::rgba(0.0, 0.3, 1.0, 1.0), // half-pipe ramp
+                Color::rgba(0.6, 0.6, 0.6, 1.0), // wall (items pass through)
+                Color::rgba(0.9, 0.9, 1.0, 1.0), // moving road
+                Color::rgba(0.9, 0.7, 1.0, 1.0), // sticky road
+                Color::rgba(1.0, 1.0, 1.0, 1.0), // road (alt sfx)
+                Color::rgba(1.0, 0.0, 1.0, 0.8), // sound trigger
+                Color::rgba(1.0, 0.0, 1.0, 0.5), // item state modifier
+                Color::rgba(0.4, 0.6, 0.4, 0.8), // weak wall
+                Color::rgba(0.9, 0.9, 1.0, 1.0), // rotating road
+                Color::rgba(0.8, 0.0, 1.0, 0.8), // effect trigger
+                Color::rgba(0.6, 0.6, 0.6, 1.0), // invisible wall 2
+                Color::rgba(0.0, 0.6, 0.0, 0.8), // half-pipe invis wall
+                Color::rgba(0.8, 0.7, 0.8, 1.0), // special wall
             ],
             backface_culling: false,
         }
@@ -100,7 +104,7 @@ pub fn spawn_model(
             mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertex_group.vertices.clone());
             mesh.compute_flat_normals();
 
-            let color: Color = settings.kcl_model.color[i].into();
+            let color = settings.kcl_model.color[i];
 
             commands.spawn((
                 PbrBundle {
@@ -114,7 +118,7 @@ pub fn spawn_model(
                         },
                         double_sided: !settings.kcl_model.backface_culling,
                         alpha_mode: if color.a() < 1. {
-                            AlphaMode::Add
+                            AlphaMode::Blend
                         } else {
                             AlphaMode::Opaque
                         },
@@ -141,14 +145,21 @@ pub fn update_kcl_model(
             &mut Visibility,
             &KCLModelSection,
             &mut Handle<StandardMaterial>,
-            Entity,
         ),
         With<KCLModelSection>,
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
     settings: Res<AppSettings>,
+    mut ev_kcl_model_updated: EventReader<KclModelUpdated>,
 ) {
-    for (mut visibility, kcl_model_section, standard_material, _) in query.iter_mut() {
+    // don't run this function unless the kcl model needs to be updated
+    if ev_kcl_model_updated.is_empty() {
+        return;
+    } else {
+        ev_kcl_model_updated.clear();
+    }
+
+    for (mut visibility, kcl_model_section, standard_material) in query.iter_mut() {
         let i = kcl_model_section.0;
         *visibility = if settings.kcl_model.visible[i] {
             Visibility::Inherited
@@ -156,9 +167,9 @@ pub fn update_kcl_model(
             Visibility::Hidden
         };
         let material = materials.get_mut(standard_material.id()).unwrap();
-        material.base_color = settings.kcl_model.color[i].into();
+        material.base_color = settings.kcl_model.color[i];
         material.alpha_mode = if material.base_color.a() < 1. {
-            AlphaMode::Add
+            AlphaMode::Blend
         } else {
             AlphaMode::Opaque
         };

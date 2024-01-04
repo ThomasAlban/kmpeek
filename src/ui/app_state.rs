@@ -1,12 +1,17 @@
 use crate::{
-    ui::update_ui::{DialogType, KclFileSelected, KmpFileSelected},
+    ui::file_dialog::DialogType,
+    ui::update_ui::{KclFileSelected, KmpFileSelected},
     viewer::kcl_model::KclModelSettings,
     viewer::{
         camera::{CameraModeChanged, CameraSettings},
         kmp::settings::KmpModelSettings,
     },
 };
-use bevy::prelude::*;
+use bevy::{
+    app::AppExit,
+    prelude::*,
+    window::{exit_on_all_closed, exit_on_primary_closed},
+};
 use bevy_pkv::PkvStore;
 use egui_file::*;
 use serde::{Deserialize, Serialize};
@@ -19,7 +24,13 @@ pub struct AppStatePlugin;
 impl Plugin for AppStatePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(PkvStore::new("ThomasAlban", "kmpeek"))
-            .add_systems(Startup, setup_app_state);
+            .add_systems(Startup, setup_app_state)
+            .add_systems(
+                PostUpdate,
+                on_app_exit
+                    .after(exit_on_primary_closed)
+                    .after(exit_on_all_closed),
+            );
     }
 }
 
@@ -120,4 +131,19 @@ pub fn setup_app_state(
 
     commands.insert_resource(app_state);
     commands.insert_resource(settings);
+}
+
+fn on_app_exit(
+    ev_app_will_close: EventReader<AppExit>,
+    settings: Res<AppSettings>,
+    mut pkv: ResMut<PkvStore>,
+) {
+    if ev_app_will_close.is_empty() {
+        return;
+    }
+    println!("i");
+    // the app is about to close
+
+    // save the user settings
+    pkv.set("settings", settings.as_ref()).unwrap();
 }

@@ -79,7 +79,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
         Camera3dBundle {
             camera: Camera {
                 // render to the image
-                target: RenderTarget::Image(viewport.clone()),
+                target: RenderTarget::Image(viewport.handle.clone()),
                 ..default()
             },
             transform: Transform::from_translation(fly_default.start_pos)

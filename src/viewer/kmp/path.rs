@@ -2,11 +2,14 @@ use bevy::prelude::*;
 use std::collections::HashSet;
 
 use crate::{
-    util::kmp_file::{KmpData, KmpPoint, PathGroup},
+    util::kmp_file::{KmpData, KmpPositionPoint, PathGroup, Poti},
     viewer::normalize::Normalize,
 };
 
-use super::{FromKmpPoint, KmpSection};
+use super::{
+    components::{FromKmp, Route},
+    KmpSection, RouteMarker, RoutePoint,
+};
 
 // component attached to kmp entities which are linked to other kmp entities
 #[derive(Component)]
@@ -101,9 +104,9 @@ struct KmpDataGroup<T> {
     next_groups: Vec<u8>,
 }
 
-pub fn spawn_route_section<
-    T: KmpData + KmpPoint + Send + 'static + Clone,
-    U: Component + FromKmpPoint<T>,
+pub fn spawn_path_section<
+    T: KmpData + KmpPositionPoint + Send + 'static + Clone,
+    U: Component + FromKmp<T>,
     V: Component + Default,
 >(
     commands: &mut Commands,
@@ -112,9 +115,9 @@ pub fn spawn_route_section<
 
     sphere_mesh: Handle<Mesh>,
     cylinder_mesh: Handle<Mesh>,
-    cone_mesh: Handle<Mesh>,
+    frustrum_mesh: Handle<Mesh>,
 
-    sphere_material: Handle<StandardMaterial>,
+    point_material: Handle<StandardMaterial>,
     line_material: Handle<StandardMaterial>,
     arrow_material: Handle<StandardMaterial>,
 ) {
@@ -147,15 +150,16 @@ pub fn spawn_route_section<
                 let spawned_entity = world.spawn((
                     PbrBundle {
                         mesh: sphere_mesh.clone(),
-                        material: sphere_material.clone(),
+                        material: point_material.clone(),
                         transform: Transform::from_translation(node.get_position()),
+                        visibility: Visibility::Hidden,
                         ..default()
                     },
                     KmpPathNode::new(),
                     V::default(),
-                    U::from(node),
+                    U::from_kmp(node),
                     KmpSection,
-                    Normalize::new(200., 12., BVec3::TRUE),
+                    Normalize::new(200., 30., BVec3::TRUE),
                 ));
                 entity_group.entities.push(spawned_entity.id());
             }
@@ -173,8 +177,8 @@ pub fn spawn_route_section<
                         prev_entity,
                         *entity,
                         cylinder_mesh.clone(),
+                        frustrum_mesh.clone(),
                         line_material.clone(),
-                        cone_mesh.clone(),
                         arrow_material.clone(),
                     );
                 }
@@ -193,10 +197,75 @@ pub fn spawn_route_section<
                     entity,
                     next_entity,
                     cylinder_mesh.clone(),
+                    frustrum_mesh.clone(),
                     line_material.clone(),
-                    cone_mesh.clone(),
                     arrow_material.clone(),
                 );
+            }
+        }
+    });
+}
+
+pub fn spawn_route_section(
+    commands: &mut Commands,
+    kmp_poti_entries: Vec<Poti>,
+
+    sphere_mesh: Handle<Mesh>,
+    cylinder_mesh: Handle<Mesh>,
+    frustrum_mesh: Handle<Mesh>,
+
+    point_material: Handle<StandardMaterial>,
+    line_material: Handle<StandardMaterial>,
+    arrow_material: Handle<StandardMaterial>,
+) {
+    commands.add(move |world: &mut World| {
+        // spawn all the entities, saving the entity IDs into 'entity_groups'
+        let mut entity_groups: Vec<Vec<Entity>> = Vec::new();
+        for group in kmp_poti_entries {
+            let mut entity_group = Vec::new();
+
+            let mut parent =
+                world.spawn((SpatialBundle::default(), Route::from_kmp(group.clone())));
+
+            parent.with_children(|parent| {
+                for node in group.routes {
+                    let spawned_entity = parent.spawn((
+                        PbrBundle {
+                            mesh: sphere_mesh.clone(),
+                            material: point_material.clone(),
+                            transform: Transform::from_translation(node.position),
+                            visibility: Visibility::Hidden,
+                            ..default()
+                        },
+                        KmpPathNode::new(),
+                        RouteMarker,
+                        RoutePoint::from_kmp(node),
+                        KmpSection,
+                        Normalize::new(200., 30., BVec3::TRUE),
+                    ));
+                    entity_group.push(spawned_entity.id());
+                }
+            });
+            entity_groups.push(entity_group);
+        }
+        // link the entities together
+        for group in entity_groups.iter() {
+            let mut prev_entity: Option<Entity> = None;
+            // in each group, link the previous node to the current node
+            for entity in group.iter() {
+                if let Some(prev_entity) = prev_entity {
+                    KmpPathNode::link_nodes_world_access(prev_entity, *entity, world).unwrap();
+                    spawn_node_link::<RouteMarker>(
+                        world,
+                        prev_entity,
+                        *entity,
+                        cylinder_mesh.clone(),
+                        frustrum_mesh.clone(),
+                        line_material.clone(),
+                        arrow_material.clone(),
+                    );
+                }
+                prev_entity = Some(*entity);
             }
         }
     });
@@ -206,11 +275,11 @@ fn spawn_node_link<T: Component + Default>(
     world: &mut World,
     prev_node: Entity,
     next_node: Entity,
-
     cylinder_mesh: Handle<Mesh>,
-    cylinder_material: Handle<StandardMaterial>,
-    cone_mesh: Handle<Mesh>,
-    cone_material: Handle<StandardMaterial>,
+    frustrum_mesh: Handle<Mesh>,
+
+    line_material: Handle<StandardMaterial>,
+    arrow_material: Handle<StandardMaterial>,
 ) {
     let prev_pos = world.get::<Transform>(prev_node).unwrap().translation;
     let next_pos = world.get::<Transform>(next_node).unwrap().translation;
@@ -242,33 +311,38 @@ fn spawn_node_link<T: Component + Default>(
             parent.spawn((
                 PbrBundle {
                     mesh: cylinder_mesh,
-                    material: cylinder_material,
+                    material: line_material,
                     transform: line_transform,
                     ..default()
                 },
                 KmpSection,
-                Normalize::new(200., 12., BVec3::new(true, false, true)),
+                Normalize::new(200., 30., BVec3::new(true, false, true)),
                 KmpPathNodeLinkLine,
             ));
             parent.spawn((
                 PbrBundle {
-                    mesh: cone_mesh,
-                    material: cone_material,
+                    mesh: frustrum_mesh,
+                    material: arrow_material,
                     ..default()
                 },
                 KmpSection,
-                Normalize::new(200., 12., BVec3::TRUE),
+                Normalize::new(200., 30., BVec3::TRUE),
             ));
         });
 }
 
 pub fn update_node_links(
-    kmp_node_link_query: Query<(Entity, &KmpPathNodeLink, &Children)>,
+    kmp_node_link_query: Query<(Entity, &KmpPathNodeLink, &Children, &ViewVisibility)>,
     mut transform_query: Query<&mut Transform>,
     line_query: Query<&KmpPathNodeLinkLine>,
 ) {
     // go through each node line
-    for (entity, kmp_node_link, children) in kmp_node_link_query.iter() {
+    for (entity, kmp_node_link, children, visibility) in kmp_node_link_query.iter() {
+        // don't bother unless the kmp node link is actually visible
+        if *visibility == ViewVisibility::HIDDEN {
+            continue;
+        }
+
         // get the positions of the previous and next nodes
         let prev_pos = transform_query
             .get(kmp_node_link.prev_node)
