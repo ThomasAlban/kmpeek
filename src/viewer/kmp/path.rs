@@ -1,15 +1,46 @@
-use bevy::prelude::*;
-use std::collections::HashSet;
-
-use crate::{
-    util::kmp_file::{KmpData, KmpPositionPoint, PathGroup, Poti},
-    viewer::normalize::Normalize,
-};
-
 use super::{
     components::{FromKmp, Route},
-    KmpSection, RouteMarker, RoutePoint,
+    settings::PathColor,
+    unlit_material, KmpSection, RouteMarker, RoutePoint,
 };
+use crate::{
+    util::kmp_file::{Kmp, KmpData, KmpPathSectionName, KmpSectionName, PathGroup, Poti, Section},
+    viewer::normalize::Normalize,
+};
+use bevy::prelude::*;
+use std::fmt::Debug;
+use std::{collections::HashSet, sync::Arc};
+
+#[derive(Clone)]
+pub struct PathMeshes {
+    sphere: Handle<Mesh>,
+    cylinder: Handle<Mesh>,
+    frustrum: Handle<Mesh>,
+}
+impl PathMeshes {
+    pub fn new(sphere: Handle<Mesh>, cylinder: Handle<Mesh>, frustrum: Handle<Mesh>) -> Self {
+        Self {
+            sphere,
+            cylinder,
+            frustrum,
+        }
+    }
+}
+
+pub struct PathMaterials {
+    point: Handle<StandardMaterial>,
+    line: Handle<StandardMaterial>,
+    arrow: Handle<StandardMaterial>,
+}
+impl PathMaterials {
+    pub fn from_colors(materials: &mut Assets<StandardMaterial>, colors: &PathColor) -> Self {
+        Self {
+            point: unlit_material(materials, colors.point),
+            line: unlit_material(materials, colors.line),
+            arrow: unlit_material(materials, colors.arrow),
+        }
+    }
+}
 
 // component attached to kmp entities which are linked to other kmp entities
 #[derive(Component)]
@@ -105,25 +136,36 @@ struct KmpDataGroup<T> {
 }
 
 pub fn spawn_path_section<
-    T: KmpData + KmpPositionPoint + Send + 'static + Clone,
+    T: KmpData
+        + KmpSectionName
+        + KmpPathSectionName
+        + Send
+        + 'static
+        + Clone
+        + Reflect
+        + TypePath
+        + FromReflect
+        + Struct,
     U: Component + FromKmp<T>,
     V: Component + Default,
 >(
     commands: &mut Commands,
-    kmp_pathgroup_entries: &[PathGroup],
-    kmp_node_entries: &[T],
-
-    sphere_mesh: Handle<Mesh>,
-    cylinder_mesh: Handle<Mesh>,
-    frustrum_mesh: Handle<Mesh>,
-
-    point_material: Handle<StandardMaterial>,
-    line_material: Handle<StandardMaterial>,
-    arrow_material: Handle<StandardMaterial>,
+    kmp: Arc<Kmp>,
+    meshes: PathMeshes,
+    materials: PathMaterials,
 ) {
+    let pathgroup_entries: &[PathGroup] = &kmp
+        .get_field::<Section<PathGroup>>(&T::path_section_name())
+        .unwrap()
+        .entries;
+    let node_entries: &[T] = &kmp
+        .get_field::<Section<T>>(&T::section_name())
+        .unwrap()
+        .entries;
+
     let mut kmp_data_groups: Vec<KmpDataGroup<T>> = Vec::new();
 
-    for group in kmp_pathgroup_entries.iter() {
+    for group in pathgroup_entries.iter() {
         let mut next_groups = Vec::new();
         for next_group in group.next_group {
             if next_group != 0xff {
@@ -132,7 +174,7 @@ pub fn spawn_path_section<
         }
         let mut nodes = Vec::new();
         for i in group.start..(group.start + group.group_length) {
-            let node = &kmp_node_entries[i as usize];
+            let node = &node_entries[i as usize];
             nodes.push(node.clone());
         }
         kmp_data_groups.push(KmpDataGroup { nodes, next_groups });
@@ -146,12 +188,13 @@ pub fn spawn_path_section<
                 entities: Vec::new(),
                 next_groups: group.next_groups,
             };
-            for node in group.nodes {
+            for node in group.nodes.iter() {
+                let position = node.get_field::<Vec3>("position").unwrap();
                 let spawned_entity = world.spawn((
                     PbrBundle {
-                        mesh: sphere_mesh.clone(),
-                        material: point_material.clone(),
-                        transform: Transform::from_translation(node.get_position()),
+                        mesh: meshes.sphere.clone(),
+                        material: materials.point.clone(),
+                        transform: Transform::from_translation(*position),
                         visibility: Visibility::Hidden,
                         ..default()
                     },
@@ -176,10 +219,10 @@ pub fn spawn_path_section<
                         world,
                         prev_entity,
                         *entity,
-                        cylinder_mesh.clone(),
-                        frustrum_mesh.clone(),
-                        line_material.clone(),
-                        arrow_material.clone(),
+                        meshes.cylinder.clone(),
+                        meshes.frustrum.clone(),
+                        materials.line.clone(),
+                        materials.arrow.clone(),
                     );
                 }
                 prev_entity = Some(*entity);
@@ -196,10 +239,10 @@ pub fn spawn_path_section<
                     world,
                     entity,
                     next_entity,
-                    cylinder_mesh.clone(),
-                    frustrum_mesh.clone(),
-                    line_material.clone(),
-                    arrow_material.clone(),
+                    meshes.cylinder.clone(),
+                    meshes.frustrum.clone(),
+                    materials.line.clone(),
+                    materials.arrow.clone(),
                 );
             }
         }
@@ -208,31 +251,30 @@ pub fn spawn_path_section<
 
 pub fn spawn_route_section(
     commands: &mut Commands,
-    kmp_poti_entries: Vec<Poti>,
-
-    sphere_mesh: Handle<Mesh>,
-    cylinder_mesh: Handle<Mesh>,
-    frustrum_mesh: Handle<Mesh>,
-
-    point_material: Handle<StandardMaterial>,
-    line_material: Handle<StandardMaterial>,
-    arrow_material: Handle<StandardMaterial>,
+    kmp: Arc<Kmp>,
+    meshes: PathMeshes,
+    materials: PathMaterials,
 ) {
+    let poti_entries: Vec<Poti> = kmp
+        .get_field::<Section<Poti>>("poti")
+        .unwrap()
+        .entries
+        .clone();
+
     commands.add(move |world: &mut World| {
         // spawn all the entities, saving the entity IDs into 'entity_groups'
         let mut entity_groups: Vec<Vec<Entity>> = Vec::new();
-        for group in kmp_poti_entries {
+        for group in poti_entries.iter() {
             let mut entity_group = Vec::new();
 
-            let mut parent =
-                world.spawn((SpatialBundle::default(), Route::from_kmp(group.clone())));
+            let mut parent = world.spawn((SpatialBundle::default(), Route::from_kmp(group)));
 
             parent.with_children(|parent| {
-                for node in group.routes {
+                for node in group.routes.iter() {
                     let spawned_entity = parent.spawn((
                         PbrBundle {
-                            mesh: sphere_mesh.clone(),
-                            material: point_material.clone(),
+                            mesh: meshes.sphere.clone(),
+                            material: materials.point.clone(),
                             transform: Transform::from_translation(node.position),
                             visibility: Visibility::Hidden,
                             ..default()
@@ -259,10 +301,10 @@ pub fn spawn_route_section(
                         world,
                         prev_entity,
                         *entity,
-                        cylinder_mesh.clone(),
-                        frustrum_mesh.clone(),
-                        line_material.clone(),
-                        arrow_material.clone(),
+                        meshes.cylinder.clone(),
+                        meshes.frustrum.clone(),
+                        materials.line.clone(),
+                        materials.arrow.clone(),
                     );
                 }
                 prev_entity = Some(*entity);

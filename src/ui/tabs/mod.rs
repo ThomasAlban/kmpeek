@@ -1,3 +1,4 @@
+mod mode;
 mod settings;
 mod view;
 mod viewport;
@@ -6,10 +7,12 @@ pub use settings::*;
 pub use view::*;
 pub use viewport::*;
 
+use self::mode::ShowModeTab;
+
 use super::{
     app_state::AppSettings,
-    tabs::{show_settings_tab, show_viewport_tab, ViewportParams},
-    tabs::{show_view_tab, SettingsParams, ViewParams},
+    tabs::{ShowSettingsTab, ShowViewTab, ShowViewportTab},
+    update_ui::UiSection,
 };
 use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::{egui, EguiContexts};
@@ -42,14 +45,19 @@ impl Default for DockTree {
     fn default() -> Self {
         let mut tree = DockState::new(vec![Tab::Viewport]);
         tree.main_surface_mut()
-            .split_left(NodeIndex::root(), 0.2, vec![Tab::View, Tab::Settings]);
+            .split_left(NodeIndex::root(), 0.2, vec![Tab::Mode]);
         Self(tree)
     }
+}
+
+pub trait UiTabSection {
+    fn show(&mut self, ui: &mut egui::Ui);
 }
 
 #[derive(Display, PartialEq, EnumIter, Serialize, Deserialize, Clone, Copy)]
 pub enum Tab {
     Viewport,
+    Mode,
     View,
     Settings,
 }
@@ -57,13 +65,14 @@ pub enum Tab {
 // this tells egui how to render each tab
 #[derive(SystemParam)]
 pub struct TabViewer<'w, 's> {
-    pub params: ParamSet<
+    pub p: ParamSet<
         'w,
         's,
         (
-            ViewportParams<'w, 's>,
-            ViewParams<'w>,
-            SettingsParams<'w, 's>,
+            ShowViewportTab<'w, 's>,
+            ShowModeTab<'w, 's>,
+            ShowViewTab<'w>,
+            ShowSettingsTab<'w, 's>,
         ),
     >,
 }
@@ -73,9 +82,10 @@ impl egui_dock::TabViewer for TabViewer<'_, '_> {
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
         // we can do different things inside the tab depending on its name
         match tab {
-            Tab::Viewport => show_viewport_tab(ui, &mut self.params.p0()),
-            Tab::View => show_view_tab(ui, &mut self.params.p1()),
-            Tab::Settings => show_settings_tab(ui, &mut self.params.p2()),
+            Tab::Viewport => self.p.p0().show(ui),
+            Tab::Mode => self.p.p1().show(ui),
+            Tab::View => self.p.p2().show(ui),
+            Tab::Settings => self.p.p3().show(ui),
         };
     }
     // show the title of the tab - the 'Tab' type already stores its title anyway
@@ -85,23 +95,24 @@ impl egui_dock::TabViewer for TabViewer<'_, '_> {
 }
 
 #[derive(SystemParam)]
-pub struct DockAreaParams<'w, 's> {
+pub struct ShowDockArea<'w, 's> {
     params: ParamSet<'w, 's, (TabViewer<'w, 's>, ResMut<'w, AppSettings>)>,
     tree: ResMut<'w, DockTree>,
 
     contexts: EguiContexts<'w, 's>,
 }
+impl UiSection for ShowDockArea<'_, '_> {
+    fn show(&mut self) {
+        let ctx = self.contexts.ctx_mut();
 
-pub fn show_dock_area(mut p: DockAreaParams) {
-    let ctx = p.contexts.ctx_mut();
+        // show the actual dock area
+        DockArea::new(&mut self.tree)
+            .style(Style::from_egui(ctx.style().as_ref()))
+            .show(ctx, &mut self.params.p0());
 
-    // show the actual dock area
-    DockArea::new(&mut p.tree)
-        .style(Style::from_egui(ctx.style().as_ref()))
-        .show(ctx, &mut p.params.p0());
-
-    if p.params.p1().reset_tree {
-        *p.tree = DockTree::default();
-        p.params.p1().reset_tree = false;
+        if self.params.p1().reset_tree {
+            *self.tree = DockTree::default();
+            self.params.p1().reset_tree = false;
+        }
     }
 }

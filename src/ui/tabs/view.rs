@@ -1,26 +1,22 @@
-use super::super::app_state::AppSettings;
-use crate::viewer::kmp::{sections::KmpSections, KmpVisibilityUpdated};
+use super::{super::app_state::AppSettings, UiTabSection};
+use crate::viewer::kmp::{sections::KmpSections, KmpVisibilityUpdate};
 use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::egui;
 use strum::IntoEnumIterator;
 
 #[derive(SystemParam)]
-pub struct ViewParams<'w> {
+pub struct ShowViewTab<'w> {
     settings: ResMut<'w, AppSettings>,
-    ev_kmp_visibility_updated: EventWriter<'w, KmpVisibilityUpdated>,
+    ev_kmp_visibility_updated: EventWriter<'w, KmpVisibilityUpdate>,
 }
-
-pub fn show_view_tab(ui: &mut egui::Ui, p: &mut ViewParams) {
-    for (i, section_name) in KmpSections::iter().enumerate() {
-        let Some(section) = p.settings.kmp_model.sections.field_at_mut(i) else {
-            continue;
-        };
-        let Ok(visible) = section.path_mut::<bool>("visible") else {
-            continue;
-        };
-        let changed = ui.checkbox(visible, section_name.to_string()).changed();
-        if changed {
-            p.ev_kmp_visibility_updated.send(KmpVisibilityUpdated);
+impl UiTabSection for ShowViewTab<'_> {
+    fn show(&mut self, ui: &mut egui::Ui) {
+        for (i, section_name) in KmpSections::iter().enumerate() {
+            let visible = &mut self.settings.kmp_model.sections.visible[i];
+            let changed = ui.checkbox(visible, section_name.to_string()).changed();
+            if changed {
+                self.ev_kmp_visibility_updated.send_default();
+            }
         }
     }
 }

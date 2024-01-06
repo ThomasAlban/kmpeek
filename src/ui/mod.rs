@@ -10,7 +10,9 @@ mod file_dialog;
 mod keybinds;
 mod menu_bar;
 mod tabs;
+mod top_bar;
 pub mod update_ui;
+mod util;
 pub mod viewport;
 pub struct UIPlugin;
 impl Plugin for UIPlugin {

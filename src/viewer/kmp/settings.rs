@@ -18,80 +18,77 @@ impl Default for KmpModelSettings {
 }
 
 // stores whether each section is visible, and the relevant colors for each section
-#[derive(Serialize, Deserialize, Reflect)]
+#[derive(Serialize, Deserialize, Reflect, Default)]
 pub struct KmpModelSectionSettings {
-    pub start_points: KmpSectionSettings<PointColor>,
-    pub enemy_paths: KmpSectionSettings<PathColor>,
-    pub item_paths: KmpSectionSettings<PathColor>,
-    pub checkpoints: KmpSectionSettings<()>,
-    pub respawn_points: KmpSectionSettings<()>,
-    pub objects: KmpSectionSettings<PointColor>,
-    pub routes: KmpSectionSettings<PathColor>,
-    pub areas: KmpSectionSettings<PointColor>,
-    pub cameras: KmpSectionSettings<PointColor>,
-    pub cannon_points: KmpSectionSettings<()>,
-    pub battle_finish_points: KmpSectionSettings<()>,
+    pub visible: [bool; 11],
+    pub color: KmpModelColors,
 }
-impl Default for KmpModelSectionSettings {
+
+#[derive(Serialize, Deserialize, Reflect)]
+pub struct KmpModelColors {
+    pub start_points: PointColor,
+    pub enemy_paths: PathColor,
+    pub item_paths: PathColor,
+    pub checkpoints: (),
+    pub respawn_points: PointColor,
+    pub objects: PointColor,
+    pub routes: PathColor,
+    pub areas: PointColor,
+    pub cameras: PointColor,
+    pub cannon_points: (),
+    pub battle_finish_points: (),
+}
+impl Default for KmpModelColors {
     fn default() -> Self {
         Self {
-            start_points: KmpSectionSettings::new(PointColor {
+            start_points: PointColor {
                 point: Color::rgb(0., 0., 0.5),
                 line: Color::rgba(0.4, 0.4, 1., 0.9),
                 arrow: Color::rgb(0., 0., 0.5),
                 up_arrow: Color::rgba(0., 0., 0.7, 0.9),
-            }),
-            enemy_paths: KmpSectionSettings::new(PathColor {
+            },
+            enemy_paths: PathColor {
                 point: Color::rgb(1., 0., 0.),
                 line: Color::rgb(1., 0.5, 0.),
                 arrow: Color::rgb(1., 1., 0.),
-            }),
-            item_paths: KmpSectionSettings::new(PathColor {
+            },
+            item_paths: PathColor {
                 point: Color::rgb(0., 0.6, 0.),
                 line: Color::rgb(0., 1., 0.),
                 arrow: Color::rgb(0., 0.6, 0.),
-            }),
-            checkpoints: KmpSectionSettings::new(()),
-            objects: KmpSectionSettings::new(PointColor {
+            },
+            checkpoints: (),
+            objects: PointColor {
                 point: Color::rgb(0.8, 0., 0.8),
                 line: Color::rgba(1., 0.4, 1., 0.9),
                 arrow: Color::rgb(0.8, 0., 0.8),
                 up_arrow: Color::rgba(1., 0., 1., 0.9),
-            }),
-            routes: KmpSectionSettings::new(PathColor {
+            },
+            routes: PathColor {
                 point: Color::rgb(0., 0.75, 0.75),
                 line: Color::rgb(0.3, 1., 1.),
                 arrow: Color::rgb(0., 0.6, 0.6),
-            }),
-            areas: KmpSectionSettings::new(PointColor {
+            },
+            areas: PointColor {
                 point: Color::rgb(1., 0.5, 0.),
                 line: Color::rgb(1., 0.8, 0.),
                 arrow: Color::rgb(1., 0.2, 0.),
                 up_arrow: Color::rgba(1., 0.8, 0., 0.9),
-            }),
-            cameras: KmpSectionSettings::new(PointColor {
+            },
+            cameras: PointColor {
                 point: Color::rgb(0.6, 0., 1.),
                 line: Color::rgba(0.7, 0.25, 1., 0.9),
                 arrow: Color::rgb(0.6, 0., 1.),
                 up_arrow: Color::rgba(0.7, 0.25, 1., 0.9),
-            }),
-            respawn_points: KmpSectionSettings::new(()),
-            cannon_points: KmpSectionSettings::new(()),
-            battle_finish_points: KmpSectionSettings::new(()),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Reflect)]
-pub struct KmpSectionSettings<T: Reflect> {
-    pub visible: bool,
-    pub color: T,
-}
-impl<T: Reflect> KmpSectionSettings<T> {
-    fn new(color: T) -> Self {
-        Self {
-            visible: false,
-            color,
+            },
+            respawn_points: PointColor {
+                point: Color::rgb(0.5, 0.5, 0.),
+                line: Color::rgba(0.9, 0.9, 0., 0.8),
+                arrow: Color::rgb(0.75, 0.75, 0.1),
+                up_arrow: Color::rgba(0.5, 0.5, 0., 0.9),
+            },
+            cannon_points: (),
+            battle_finish_points: (),
         }
     }
 }

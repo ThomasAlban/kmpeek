@@ -17,7 +17,10 @@ bevy = { version = "0.12.1", default-features = false, features = [
     "zstd",
     "serialize",
 ] }
-bevy_egui = "0.24.0"
+
+bevy_egui = { git = "https://github.com/andriyDev/bevy_egui/", branch = "fix-redraw" }
+# bevy_egui = "0.24.0"
+# using local branch because there's an issue in the main branch where it interferes with parent child visibility
 bevy_infinite_grid = { path = "../bevy_infinite_grid" }
 # bevy_infinite_grid = { git = "https://github.com/ForesightMiningSoftwareCorporation/bevy_infinite_grid", branch = "main" }
 # bevy_mod_outline = "0.6.0"

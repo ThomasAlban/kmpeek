@@ -14,8 +14,13 @@ pub struct KclPlugin;
 
 impl Plugin for KclPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<KclModelUpdated>()
-            .add_systems(Update, (spawn_model, update_kcl_model));
+        app.add_event::<KclModelUpdated>().add_systems(
+            Update,
+            (
+                spawn_model.run_if(on_event::<KclFileSelected>()),
+                update_kcl_model,
+            ),
+        );
     }
 }
 
@@ -83,60 +88,61 @@ pub fn spawn_model(
     mut ev_kcl_file_selected: EventReader<KclFileSelected>,
     settings: Res<AppSettings>,
 ) {
-    for ev in ev_kcl_file_selected.read() {
-        if ev.0.extension() != Some(OsStr::new("kcl")) {
-            continue;
-        }
-        // despawn all entities with KCLModelSection (so that we have a clean slate)
-        for entity in model.iter_mut() {
-            commands.entity(entity).despawn();
-        }
-        commands.remove_resource::<Kcl>();
+    let Some(ev) = ev_kcl_file_selected.read().next() else {
+        return;
+    };
+    if ev.0.extension() != Some(OsStr::new("kcl")) {
+        return;
+    }
+    // despawn all entities with KCLModelSection (so that we have a clean slate)
+    for entity in model.iter_mut() {
+        commands.entity(entity).despawn();
+    }
+    commands.remove_resource::<Kcl>();
 
-        // open the KCL file and read it
-        let kcl_file = File::open(ev.0.clone()).expect("could not open kcl file");
-        let kcl = Kcl::read(kcl_file).expect("could not read kcl file");
-        // spawn the KCL model
-        for i in 0..32 {
-            let vertex_group = kcl.vertex_groups[i].clone();
-            let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+    // open the KCL file and read it
+    let kcl_file = File::open(ev.0.clone()).expect("could not open kcl file");
+    let kcl = Kcl::read(kcl_file).expect("could not read kcl file");
+    // spawn the KCL model
+    for i in 0..32 {
+        let vertex_group = kcl.vertex_groups[i].clone();
+        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
 
-            mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertex_group.vertices.clone());
-            mesh.compute_flat_normals();
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertex_group.vertices.clone());
+        mesh.compute_flat_normals();
 
-            let color = settings.kcl_model.color[i];
+        let color = settings.kcl_model.color[i];
 
-            commands.spawn((
-                PbrBundle {
-                    mesh: meshes.add(mesh),
-                    material: materials.add(StandardMaterial {
-                        base_color: color,
-                        cull_mode: if settings.kcl_model.backface_culling {
-                            Some(Face::Back)
-                        } else {
-                            None
-                        },
-                        double_sided: !settings.kcl_model.backface_culling,
-                        alpha_mode: if color.a() < 1. {
-                            AlphaMode::Blend
-                        } else {
-                            AlphaMode::Opaque
-                        },
-                        ..default()
-                    }),
-                    visibility: if settings.kcl_model.visible[i] {
-                        Visibility::Inherited
+        commands.spawn((
+            PbrBundle {
+                mesh: meshes.add(mesh),
+                material: materials.add(StandardMaterial {
+                    base_color: color,
+                    cull_mode: if settings.kcl_model.backface_culling {
+                        Some(Face::Back)
                     } else {
-                        Visibility::Hidden
+                        None
+                    },
+                    double_sided: !settings.kcl_model.backface_culling,
+                    alpha_mode: if color.a() < 1. {
+                        AlphaMode::Blend
+                    } else {
+                        AlphaMode::Opaque
                     },
                     ..default()
+                }),
+                visibility: if settings.kcl_model.visible[i] {
+                    Visibility::Inherited
+                } else {
+                    Visibility::Hidden
                 },
-                KCLModelSection(i),
-                // RaycastMesh::<KclRaycastSet>::default(),
-            ));
-        }
-        commands.insert_resource(kcl);
+                ..default()
+            },
+            KCLModelSection(i),
+            // RaycastMesh::<KclRaycastSet>::default(),
+        ));
     }
+    commands.insert_resource(kcl);
 }
 
 pub fn update_kcl_model(

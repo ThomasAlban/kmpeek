@@ -6,10 +6,60 @@ use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 pub struct KmpSection;
 
 pub trait FromKmp<T: KmpData> {
-    fn from_kmp(kmp_data: T) -> Self;
+    fn from_kmp(data: &T) -> Self;
 }
 
 // components attached to kmp entities, to store data about them:
+
+// --- TRACK INFO COMPONENTS ---
+#[derive(Component, Default)]
+pub struct TrackInfo {
+    pub track_type: TrackType,
+    pub lap_count: u8,
+    pub speed_mod: f32,
+    pub lens_flare_color: [u8; 4],
+    pub lens_flare_flashing: bool,
+    pub first_player_pos: FirstPlayerPos,
+    pub narrow_player_spacing: bool,
+}
+impl FromKmp<Stgi> for TrackInfo {
+    fn from_kmp(data: &Stgi) -> Self {
+        Self {
+            track_type: TrackType::Race,
+            lap_count: data.lap_count,
+            speed_mod: data.speed_mod,
+            lens_flare_color: data.flare_color,
+            lens_flare_flashing: data.lens_flare_flashing == 1,
+            first_player_pos: data.pole_pos.into(),
+            narrow_player_spacing: data.driver_distance == 1,
+        }
+    }
+}
+
+#[derive(Default, Display, EnumIter, EnumString, IntoStaticStr, PartialEq, Clone)]
+pub enum TrackType {
+    #[default]
+    Race,
+    Battle,
+}
+#[derive(Default, Display, EnumIter, EnumString, IntoStaticStr, PartialEq, Clone)]
+pub enum FirstPlayerPos {
+    #[default]
+    Left,
+    Right,
+}
+impl From<u8> for FirstPlayerPos {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::Left,
+            1 => Self::Right,
+            _ => {
+                warn!("Invalid STGI First Player Pos found, which has been set to Left");
+                Self::Left
+            }
+        }
+    }
+}
 
 // --- START POINT COMPONENTS ---
 #[derive(Component, Default)]
@@ -17,9 +67,9 @@ pub struct StartPoint {
     pub player_index: i16,
 }
 impl FromKmp<Ktpt> for StartPoint {
-    fn from_kmp(kmp_data: Ktpt) -> Self {
+    fn from_kmp(data: &Ktpt) -> Self {
         Self {
-            player_index: kmp_data.player_index,
+            player_index: data.player_index,
         }
     }
 }
@@ -35,12 +85,12 @@ pub struct EnemyPathPoint {
     pub setting_3: u8,
 }
 impl FromKmp<Enpt> for EnemyPathPoint {
-    fn from_kmp(kmp_data: Enpt) -> Self {
+    fn from_kmp(data: &Enpt) -> Self {
         Self {
-            leniency: kmp_data.leniency,
-            setting_1: kmp_data.setting_1,
-            setting_2: kmp_data.setting_2,
-            setting_3: kmp_data.setting_3,
+            leniency: data.leniency,
+            setting_1: data.setting_1,
+            setting_2: data.setting_2,
+            setting_3: data.setting_3,
         }
     }
 }
@@ -55,11 +105,11 @@ pub struct ItemPathPoint {
     pub setting_2: u16,
 }
 impl FromKmp<Itpt> for ItemPathPoint {
-    fn from_kmp(kmp_data: Itpt) -> Self {
+    fn from_kmp(data: &Itpt) -> Self {
         Self {
-            bullet_bill_control: kmp_data.bullet_bill_control,
-            setting_1: kmp_data.setting_1,
-            setting_2: kmp_data.setting_2,
+            bullet_bill_control: data.bullet_bill_control,
+            setting_1: data.setting_1,
+            setting_2: data.setting_2,
         }
     }
 }
@@ -74,13 +124,13 @@ pub struct Object {
     pub presence_flags: u16,
 }
 impl FromKmp<Gobj> for Object {
-    fn from_kmp(kmp_data: Gobj) -> Self {
+    fn from_kmp(data: &Gobj) -> Self {
         Self {
-            object_id: kmp_data.object_id,
-            scale: kmp_data.scale,
-            route: kmp_data.route,
-            settings: kmp_data.settings,
-            presence_flags: kmp_data.presence_flags,
+            object_id: data.object_id,
+            scale: data.scale,
+            route: data.route,
+            settings: data.settings,
+            presence_flags: data.presence_flags,
         }
     }
 }
@@ -92,10 +142,10 @@ pub struct Route {
     pub setting_2: u8,
 }
 impl FromKmp<Poti> for Route {
-    fn from_kmp(kmp_data: Poti) -> Self {
+    fn from_kmp(data: &Poti) -> Self {
         Self {
-            setting_1: kmp_data.setting_1,
-            setting_2: kmp_data.setting_2,
+            setting_1: data.setting_1,
+            setting_2: data.setting_2,
         }
     }
 }
@@ -107,10 +157,10 @@ pub struct RoutePoint {
     pub setting_2: u16,
 }
 impl FromKmp<PotiPoint> for RoutePoint {
-    fn from_kmp(kmp_data: PotiPoint) -> Self {
+    fn from_kmp(data: &PotiPoint) -> Self {
         Self {
-            setting_1: kmp_data.setting_1,
-            setting_2: kmp_data.setting_2,
+            setting_1: data.setting_1,
+            setting_2: data.setting_2,
         }
     }
 }
@@ -124,31 +174,30 @@ pub struct AreaPoint {
     pub scale: Vec3,
 }
 impl FromKmp<Area> for AreaPoint {
-    fn from_kmp(kmp_data: Area) -> Self {
+    fn from_kmp(data: &Area) -> Self {
         Self {
-            shape: kmp_data.shape.into(),
-            priority: kmp_data.priority,
-            scale: kmp_data.scale,
-            kind: match kmp_data.kind {
-                0 => AreaKind::Camera(AreaCameraIndex(kmp_data.came_index)),
-                1 => AreaKind::EnvEffect(kmp_data.setting_1.into()),
-                2 => AreaKind::FogEffect(
-                    AreaBfgEntry(kmp_data.setting_1),
-                    AreaSetting2(kmp_data.setting_2),
-                ),
-                3 => AreaKind::MovingRoad(AreaEnemyPointId(kmp_data.enpt_id)),
+            shape: data.shape.into(),
+            priority: data.priority,
+            scale: data.scale,
+            kind: match data.kind {
+                0 => AreaKind::Camera(AreaCameraIndex(data.came_index)),
+                1 => AreaKind::EnvEffect(data.setting_1.into()),
+                2 => {
+                    AreaKind::FogEffect(AreaBfgEntry(data.setting_1), AreaSetting2(data.setting_2))
+                }
+                3 => AreaKind::MovingRoad(AreaEnemyPointId(data.enpt_id)),
                 4 => AreaKind::ForceRecalc,
                 5 => AreaKind::MinimapControl(
-                    AreaSetting1(kmp_data.setting_1),
-                    AreaSetting2(kmp_data.setting_2),
+                    AreaSetting1(data.setting_1),
+                    AreaSetting2(data.setting_2),
                 ),
                 6 => AreaKind::BloomEffect(
-                    AreaBblmFile(kmp_data.setting_1),
-                    AreaFadeTime(kmp_data.setting_2),
+                    AreaBblmFile(data.setting_1),
+                    AreaFadeTime(data.setting_2),
                 ),
                 7 => AreaKind::EnableBoos,
-                8 => AreaKind::ObjectGroup(AreaGroupId(kmp_data.setting_1)),
-                9 => AreaKind::ObjectUnload(AreaGroupId(kmp_data.setting_1)),
+                8 => AreaKind::ObjectGroup(AreaGroupId(data.setting_1)),
+                9 => AreaKind::ObjectUnload(AreaGroupId(data.setting_1)),
                 10 => AreaKind::FallBoundary,
                 _ => {
                     warn!("Invalid AREA type found, which has been set to Camera");
@@ -261,22 +310,22 @@ pub struct KmpCamera {
     pub time: f32,
 }
 impl FromKmp<Came> for KmpCamera {
-    fn from_kmp(kmp_data: Came) -> Self {
+    fn from_kmp(data: &Came) -> Self {
         Self {
-            kind: kmp_data.kind.into(),
-            next_index: kmp_data.next_index,
-            shake: kmp_data.shake,
-            route: kmp_data.route,
-            point_velocity: kmp_data.point_velocity,
-            zoom_velocity: kmp_data.zoom_velocity,
-            view_velocity: kmp_data.view_velocity,
-            start: kmp_data.start,
-            movie: kmp_data.movie,
-            zoom_start: kmp_data.zoom_start,
-            zoom_end: kmp_data.zoom_end,
-            view_start: kmp_data.view_start,
-            view_end: kmp_data.view_end,
-            time: kmp_data.time,
+            kind: data.kind.into(),
+            next_index: data.next_index,
+            shake: data.shake,
+            route: data.route,
+            point_velocity: data.point_velocity,
+            zoom_velocity: data.zoom_velocity,
+            view_velocity: data.view_velocity,
+            start: data.start,
+            movie: data.movie,
+            zoom_start: data.zoom_start,
+            zoom_end: data.zoom_end,
+            view_start: data.view_start,
+            view_end: data.view_end,
+            time: data.time,
         }
     }
 }

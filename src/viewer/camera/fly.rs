@@ -57,6 +57,7 @@ pub struct FlyKeyBindings {
     pub speed_boost: Vec<KeyCode>,
     pub mouse_button: MouseButton,
 }
+
 impl Default for FlyKeyBindings {
     fn default() -> Self {
         Self {

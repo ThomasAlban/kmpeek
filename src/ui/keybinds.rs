@@ -1,7 +1,4 @@
-use super::{
-    app_state::AppState,
-    file_dialog::{close_file_dialog, open_kmp_kcl_file_dialog},
-};
+use super::{app_state::AppState, file_dialog::ShowFileDialog};
 use bevy::prelude::*;
 
 pub struct KeybindsPlugin;
@@ -27,9 +24,9 @@ fn keybinds(keys: Res<Input<KeyCode>>, mut app_state: ResMut<AppState>) {
         // keybinds without shift held
         } else if keys.just_pressed(KeyCode::O) {
             if app_state.file_dialog.is_none() {
-                open_kmp_kcl_file_dialog(&mut app_state);
+                ShowFileDialog::open_kmp_kcl(&mut app_state);
             } else {
-                close_file_dialog(&mut app_state);
+                ShowFileDialog::close(&mut app_state);
             }
         }
         // } else if keys.just_pressed(KeyCode::S) {

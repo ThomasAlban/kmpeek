@@ -19,23 +19,29 @@ use std::{
     env,
     path::{Path, PathBuf},
 };
+use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
+
+use super::tabs::DockTree;
 
 pub struct AppStatePlugin;
 impl Plugin for AppStatePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(PkvStore::new("ThomasAlban", "kmpeek"))
+            .add_event::<AppModeChanged>()
             .add_systems(Startup, setup_app_state)
             .add_systems(
                 PostUpdate,
                 on_app_exit
                     .after(exit_on_primary_closed)
-                    .after(exit_on_all_closed),
+                    .after(exit_on_all_closed)
+                    .run_if(on_event::<AppExit>()),
             );
     }
 }
 
 #[derive(Resource)]
 pub struct AppState {
+    pub mode: AppMode,
     pub customise_kcl_open: bool,
     pub camera_settings_open: bool,
 
@@ -44,19 +50,42 @@ pub struct AppState {
     pub kmp_file_path: Option<PathBuf>,
     pub mouse_in_viewport: bool,
     pub viewport_rect: Rect,
+    pub show_modes_collapsed: Option<f32>,
 }
 impl Default for AppState {
     fn default() -> Self {
         AppState {
+            mode: AppMode::TrackInfo,
             customise_kcl_open: false,
             camera_settings_open: false,
             file_dialog: None,
             kmp_file_path: None,
             mouse_in_viewport: false,
             viewport_rect: Rect::from_corners(Vec2::ZERO, Vec2::ZERO),
+            show_modes_collapsed: None,
         }
     }
 }
+
+#[derive(Display, EnumString, IntoStaticStr, EnumIter, PartialEq, Clone, Copy)]
+pub enum AppMode {
+    #[strum(serialize = "Track Info")]
+    TrackInfo,
+    #[strum(serialize = "Start/Finish Points")]
+    StartFinishPoints,
+    Paths,
+    #[strum(serialize = "Checkpoints & Respawns")]
+    CheckpointsRespawns,
+    Objects,
+    Cameras,
+    #[strum(serialize = "Routes & Areas")]
+    RoutesAreas,
+    #[strum(serialize = "Free Edit")]
+    FreeEdit,
+}
+
+#[derive(Event, Default)]
+pub struct AppModeChanged;
 
 #[derive(Serialize, Deserialize, Resource)]
 pub struct AppSettings {
@@ -65,6 +94,7 @@ pub struct AppSettings {
     pub kmp_model: KmpModelSettings,
     pub open_course_kcl_in_directory: bool,
     pub reset_tree: bool,
+    pub increment: u32,
 }
 impl Default for AppSettings {
     fn default() -> Self {
@@ -74,6 +104,7 @@ impl Default for AppSettings {
             kmp_model: KmpModelSettings::default(),
             open_course_kcl_in_directory: true,
             reset_tree: false,
+            increment: 1,
         }
     }
 }
@@ -133,17 +164,9 @@ pub fn setup_app_state(
     commands.insert_resource(settings);
 }
 
-fn on_app_exit(
-    ev_app_will_close: EventReader<AppExit>,
-    settings: Res<AppSettings>,
-    mut pkv: ResMut<PkvStore>,
-) {
-    if ev_app_will_close.is_empty() {
-        return;
-    }
-    println!("i");
-    // the app is about to close
-
+fn on_app_exit(settings: Res<AppSettings>, tree: Res<DockTree>, mut pkv: ResMut<PkvStore>) {
     // save the user settings
     pkv.set("settings", settings.as_ref()).unwrap();
+    // save the dock tree
+    pkv.set("tree", tree.as_ref()).unwrap();
 }

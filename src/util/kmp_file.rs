@@ -13,11 +13,12 @@ pub trait KmpData {
     where
         T: Write + Read + Seek;
 }
-pub trait KmpPositionPoint {
-    fn get_position(&self) -> Vec3;
+
+pub trait KmpSectionName {
+    fn section_name() -> String;
 }
-pub trait KmpRotationPoint {
-    fn get_rotation(&self) -> Vec3;
+pub trait KmpPathSectionName {
+    fn path_section_name() -> String;
 }
 
 macro_rules! invalid_data_error {
@@ -27,7 +28,7 @@ macro_rules! invalid_data_error {
 }
 
 /// stores all the data of the KMP file
-#[derive(Debug, Serialize, Deserialize, Resource, Clone)]
+#[derive(Debug, Serialize, Deserialize, Resource, Clone, Reflect)]
 pub struct Kmp {
     pub header: Header,
     pub ktpt: Section<Ktpt>,
@@ -133,7 +134,7 @@ impl Kmp {
 }
 
 /// The header, which contains general information about the KMP
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Reflect)]
 pub struct Header {
     file_magic: String,
     file_len: u32,
@@ -187,9 +188,14 @@ impl KmpData for Header {
         Ok(wtr)
     }
 }
+impl KmpSectionName for Header {
+    fn section_name() -> String {
+        "header".into()
+    }
+}
 
 /// Each section has a header containing its info (like the name and number of entries)
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Reflect)]
 struct SectionHeader {
     section_name: String,
     num_entries: u16,
@@ -225,17 +231,17 @@ impl KmpData for SectionHeader {
 }
 
 /// A generic type for a section of a KMP - each section contains a header, and a number of entries.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Reflect)]
 pub struct Section<T>
 where
-    T: KmpData,
+    T: KmpData + Reflect,
 {
     section_header: SectionHeader,
     pub entries: Vec<T>,
 }
 impl<T> KmpData for Section<T>
 where
-    T: KmpData,
+    T: KmpData + Reflect,
 {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         // make a read section header object
@@ -265,7 +271,7 @@ where
 }
 
 /// The KTPT (kart point) section describes kart points; the starting position for racers.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Reflect)]
 pub struct Ktpt {
     pub position: Vec3,
     pub rotation: Vec3,
@@ -294,19 +300,14 @@ impl KmpData for Ktpt {
         Ok(wtr)
     }
 }
-impl KmpPositionPoint for Ktpt {
-    fn get_position(&self) -> Vec3 {
-        self.position
-    }
-}
-impl KmpRotationPoint for Ktpt {
-    fn get_rotation(&self) -> Vec3 {
-        self.rotation
+impl KmpSectionName for Ktpt {
+    fn section_name() -> String {
+        "ktpt".into()
     }
 }
 
 /// The ENPT (enemy point) section describes enemy points; the routes of CPU racers. The CPU racers attempt to follow the path described by each group of points (as determined by ENPH). More than 0xFF (255) entries will force a console freeze while loading the track.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Reflect)]
 pub struct Enpt {
     pub position: Vec3,
     pub leniency: f32,
@@ -341,13 +342,18 @@ impl KmpData for Enpt {
         Ok(wtr)
     }
 }
-impl KmpPositionPoint for Enpt {
-    fn get_position(&self) -> Vec3 {
-        self.position
+impl KmpSectionName for Enpt {
+    fn section_name() -> String {
+        "enpt".into()
+    }
+}
+impl KmpPathSectionName for Enpt {
+    fn path_section_name() -> String {
+        "enph".into()
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Reflect)]
 pub struct PathGroup {
     pub start: u8,
     pub group_length: u8,
@@ -382,14 +388,13 @@ impl KmpData for PathGroup {
 }
 
 /// The ITPT (item point) section describes item points; the Red Shell and Bullet Bill routes. The items attempt to follow the path described by each group of points (as determined by ITPH). More than 0xFF (255) entries will force a console freeze while loading the track.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Reflect)]
 pub struct Itpt {
     pub position: Vec3,
     pub bullet_bill_control: f32,
     pub setting_1: u16,
     pub setting_2: u16,
 }
-
 impl KmpData for Itpt {
     fn read(mut rdr: impl Read) -> io::Result<Self> {
         let position = rdr.read_vec3()?;
@@ -414,14 +419,19 @@ impl KmpData for Itpt {
         Ok(wtr)
     }
 }
-impl KmpPositionPoint for Itpt {
-    fn get_position(&self) -> Vec3 {
-        self.position
+impl KmpSectionName for Itpt {
+    fn section_name() -> String {
+        "itpt".into()
+    }
+}
+impl KmpPathSectionName for Itpt {
+    fn path_section_name() -> String {
+        "itph".into()
     }
 }
 
 /// The CKPT (checkpoint) section describes checkpoints; the routes players must follow to count laps. The racers must follow the path described by each group of points (as determined by CKPH). More than 0xFF (255) entries are possible if the last group begins at index ≤254. This is not recommended because Lakitu will always appear on-screen.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Reflect)]
 pub struct Ckpt {
     cp_left: [f32; 2],
     cp_right: [f32; 2],
@@ -462,9 +472,19 @@ impl KmpData for Ckpt {
         Ok(wtr)
     }
 }
+impl KmpSectionName for Ckpt {
+    fn section_name() -> String {
+        "ckpt".into()
+    }
+}
+impl KmpPathSectionName for Ckpt {
+    fn path_section_name() -> String {
+        "ckph".into()
+    }
+}
 
 /// The GOBJ (geo object) section describes objects; things such as item boxes, pipes and also controlled objects such as sound triggers.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Reflect)]
 pub struct Gobj {
     pub object_id: u16,
     /// this is part of the extended presence flags, but the value must be 0 if the object does not use this extension
@@ -512,19 +532,14 @@ impl KmpData for Gobj {
         Ok(wtr)
     }
 }
-impl KmpPositionPoint for Gobj {
-    fn get_position(&self) -> Vec3 {
-        self.position
-    }
-}
-impl KmpRotationPoint for Gobj {
-    fn get_rotation(&self) -> Vec3 {
-        self.rotation
+impl KmpSectionName for Gobj {
+    fn section_name() -> String {
+        "gobj".into()
     }
 }
 
 /// Each POTI entry can contain a number of POTI entries/points.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Reflect)]
 pub struct PotiPoint {
     pub position: Vec3,
     pub setting_1: u16,
@@ -551,14 +566,9 @@ impl KmpData for PotiPoint {
         Ok(wtr)
     }
 }
-impl KmpPositionPoint for PotiPoint {
-    fn get_position(&self) -> Vec3 {
-        self.position
-    }
-}
 
 /// The POTI (point information) section describes routes; these are routes for many things including cameras and objects.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Reflect)]
 pub struct Poti {
     pub num_points: u16,
     pub setting_1: u8,
@@ -594,9 +604,14 @@ impl KmpData for Poti {
         Ok(wtr)
     }
 }
+impl KmpSectionName for Poti {
+    fn section_name() -> String {
+        "poti".into()
+    }
+}
 
 /// The AREA (area) section describes areas; used to determine which camera to use, for example. The size is 5000 for both the positive and negative sides of the X and Z-axes, and 10000 for only the positive side of the Y-axis.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Reflect)]
 pub struct Area {
     pub shape: u8,
     pub kind: u8,
@@ -663,19 +678,14 @@ impl KmpData for Area {
         Ok(wtr)
     }
 }
-impl KmpPositionPoint for Area {
-    fn get_position(&self) -> Vec3 {
-        self.position
-    }
-}
-impl KmpRotationPoint for Area {
-    fn get_rotation(&self) -> Vec3 {
-        self.rotation
+impl KmpSectionName for Area {
+    fn section_name() -> String {
+        "area".into()
     }
 }
 
 /// The CAME (camera) section describes cameras; used to determine cameras for starting routes, Time Trial pans, etc.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Reflect)]
 pub struct Came {
     pub kind: u8,
     pub next_index: u8,
@@ -754,19 +764,14 @@ impl KmpData for Came {
         Ok(wtr)
     }
 }
-impl KmpPositionPoint for Came {
-    fn get_position(&self) -> Vec3 {
-        self.position
-    }
-}
-impl KmpRotationPoint for Came {
-    fn get_rotation(&self) -> Vec3 {
-        self.rotation
+impl KmpSectionName for Came {
+    fn section_name() -> String {
+        "came".into()
     }
 }
 
 /// The JGPT (jugem point) section describes "Jugem" points; the respawn positions. The index is relevant for the link of the CKPT section.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Reflect)]
 pub struct Jgpt {
     position: Vec3,
     rotation: Vec3,
@@ -797,19 +802,14 @@ impl KmpData for Jgpt {
         Ok(wtr)
     }
 }
-impl KmpPositionPoint for Jgpt {
-    fn get_position(&self) -> Vec3 {
-        self.position
-    }
-}
-impl KmpRotationPoint for Jgpt {
-    fn get_rotation(&self) -> Vec3 {
-        self.rotation
+impl KmpSectionName for Jgpt {
+    fn section_name() -> String {
+        "jgpt".into()
     }
 }
 
 /// The CNPT (cannon point) section describes cannon points; the cannon target positions.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Reflect)]
 pub struct Cnpt {
     position: Vec3,
     angle: Vec3,
@@ -840,14 +840,14 @@ impl KmpData for Cnpt {
         Ok(wtr)
     }
 }
-impl KmpPositionPoint for Cnpt {
-    fn get_position(&self) -> Vec3 {
-        self.position
+impl KmpSectionName for Cnpt {
+    fn section_name() -> String {
+        "cnpt".into()
     }
 }
 
 /// The MSPT (mission success point) section describes end positions. After battles and tournaments have ended, the players are placed on this point(s).
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Reflect)]
 pub struct Mspt {
     position: Vec3,
     angle: Vec3,
@@ -878,14 +878,14 @@ impl KmpData for Mspt {
         Ok(wtr)
     }
 }
-impl KmpPositionPoint for Mspt {
-    fn get_position(&self) -> Vec3 {
-        self.position
+impl KmpSectionName for Mspt {
+    fn section_name() -> String {
+        "mspt".into()
     }
 }
 
 /// The STGI (stage info) section describes stage information; information about a track.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Reflect)]
 pub struct Stgi {
     pub lap_count: u8,
     pub pole_pos: u8,
@@ -935,5 +935,10 @@ impl KmpData for Stgi {
         let bytes = self.speed_mod.to_be_bytes();
         wtr.write_array([bytes[0], bytes[1]])?;
         Ok(wtr)
+    }
+}
+impl KmpSectionName for Stgi {
+    fn section_name() -> String {
+        "stgi".into()
     }
 }
