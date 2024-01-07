@@ -18,16 +18,18 @@ bevy = { version = "0.12.1", default-features = false, features = [
     "serialize",
 ] }
 
-bevy_egui = { git = "https://github.com/andriyDev/bevy_egui/", branch = "fix-redraw" }
-# bevy_egui = "0.24.0"
+bevy_egui = { git = "https://github.com/mvlabat/bevy_egui", branch = "main" }
+bevy_gizmos = "0.12.1"
 # using local branch because there's an issue in the main branch where it interferes with parent child visibility
 bevy_infinite_grid = { path = "../bevy_infinite_grid" }
+bevy_mod_outline = "0.6.0"
+bevy_mod_raycast = "0.16.0"
 # bevy_infinite_grid = { git = "https://github.com/ForesightMiningSoftwareCorporation/bevy_infinite_grid", branch = "main" }
-# bevy_mod_outline = "0.6.0"
 # bevy_mod_raycast = { git = "https://github.com/aevyrie/bevy_mod_raycast" }
 bevy_pkv = "0.9.0"
 bytemuck = "1.13.1"
 byteorder = "1.4.3"
+egui-gizmo = "0.13.0"
 egui_dock = { version = "0.9.1", features = ["serde"] }
 egui_file = "0.13.0"
 num-traits = "0.2.15"

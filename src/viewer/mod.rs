@@ -2,13 +2,14 @@ use bevy::app::Plugin;
 
 use self::{
     camera::CameraPlugin, grid::GridPlugin, kcl_model::KclPlugin, kmp::KmpPlugin,
-    normalize::NormalizePlugin,
+    mouse_picking::MousePickingPlugin, normalize::NormalizePlugin,
 };
 
 pub mod camera;
 mod grid;
 pub mod kcl_model;
 pub mod kmp;
+mod mouse_picking;
 mod normalize;
 pub struct ViewerPlugin;
 impl Plugin for ViewerPlugin {
@@ -19,6 +20,7 @@ impl Plugin for ViewerPlugin {
             KclPlugin,
             NormalizePlugin,
             GridPlugin,
+            MousePickingPlugin,
         ));
     }
 }

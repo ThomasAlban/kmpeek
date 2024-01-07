@@ -3,7 +3,6 @@ mod util;
 mod viewer;
 
 use bevy::{prelude::*, window::PresentMode, winit::WinitSettings};
-
 use ui::UIPlugin;
 use viewer::ViewerPlugin;
 

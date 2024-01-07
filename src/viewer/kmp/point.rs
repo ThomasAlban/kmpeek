@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use bevy::{math::vec3, prelude::*};
+use bevy_mod_outline::{OutlineBundle, OutlineVolume};
 
 use crate::{
     util::kmp_file::{Jgpt, Kmp, KmpData, KmpSectionName, Section},
@@ -77,6 +78,14 @@ pub fn spawn_point_section<
                 U::from_kmp(node),
                 KmpSection,
                 Normalize::new(200., 30., BVec3::TRUE),
+                OutlineBundle {
+                    outline: OutlineVolume {
+                        visible: false,
+                        colour: Color::rgba(1.0, 1.0, 1.0, 0.3),
+                        width: 7.0,
+                    },
+                    ..default()
+                },
             ))
             .with_children(|parent| {
                 let line_length = 750.;

@@ -105,9 +105,11 @@ impl UiSection for ShowDockArea<'_, '_> {
     fn show(&mut self) {
         let ctx = self.contexts.ctx_mut();
 
+        let style = Style::from_egui(ctx.style().as_ref());
+
         // show the actual dock area
         DockArea::new(&mut self.tree)
-            .style(Style::from_egui(ctx.style().as_ref()))
+            .style(style)
             .show(ctx, &mut self.params.p0());
 
         if self.params.p1().reset_tree {
