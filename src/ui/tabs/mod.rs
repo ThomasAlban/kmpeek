@@ -8,9 +8,8 @@ pub use view::*;
 pub use viewport::*;
 
 use self::mode::ShowModeTab;
-
 use super::{
-    app_state::AppSettings,
+    settings::AppSettings,
     tabs::{ShowSettingsTab, ShowViewTab, ShowViewportTab},
     update_ui::UiSection,
 };
@@ -50,7 +49,7 @@ impl Default for DockTree {
     }
 }
 
-pub trait UiTabSection {
+pub trait UiSubSection {
     fn show(&mut self, ui: &mut egui::Ui);
 }
 
@@ -77,12 +76,14 @@ pub struct TabViewer<'w, 's> {
     >,
 }
 impl egui_dock::TabViewer for TabViewer<'_, '_> {
-    // each tab will be distinguished by a string - its name
+    // each tab will be distinguished by an enum which can be converted to a string using strum
     type Tab = Tab;
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
         // we can do different things inside the tab depending on its name
         match tab {
-            Tab::Viewport => self.p.p0().show(ui),
+            Tab::Viewport => {
+                self.p.p0().show(ui);
+            }
             Tab::Mode => self.p.p1().show(ui),
             Tab::View => self.p.p2().show(ui),
             Tab::Settings => self.p.p3().show(ui),

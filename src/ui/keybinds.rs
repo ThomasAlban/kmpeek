@@ -1,4 +1,6 @@
-use super::{app_state::AppState, file_dialog::ShowFileDialog};
+use crate::viewer::transform::TransformMode;
+
+use super::{file_dialog::ShowFileDialog, ui_state::FileDialogRes};
 use bevy::prelude::*;
 
 pub struct KeybindsPlugin;
@@ -8,7 +10,11 @@ impl Plugin for KeybindsPlugin {
     }
 }
 
-fn keybinds(keys: Res<Input<KeyCode>>, mut app_state: ResMut<AppState>) {
+fn keybinds(
+    keys: Res<Input<KeyCode>>,
+    mut file_dialog: ResMut<FileDialogRes>,
+    mut transform_mode: ResMut<TransformMode>,
+) {
     // keybinds
     // if the control/command key is pressed
     if (!cfg!(target_os = "macos")
@@ -23,10 +29,10 @@ fn keybinds(keys: Res<Input<KeyCode>>, mut app_state: ResMut<AppState>) {
             }
         // keybinds without shift held
         } else if keys.just_pressed(KeyCode::O) {
-            if app_state.file_dialog.is_none() {
-                ShowFileDialog::open_kmp_kcl(&mut app_state);
+            if file_dialog.0.is_none() {
+                ShowFileDialog::open_kmp_kcl(&mut file_dialog);
             } else {
-                ShowFileDialog::close(&mut app_state);
+                ShowFileDialog::close(&mut file_dialog);
             }
         }
         // } else if keys.just_pressed(KeyCode::S) {
@@ -34,5 +40,12 @@ fn keybinds(keys: Res<Input<KeyCode>>, mut app_state: ResMut<AppState>) {
         // } else if keys.just_pressed(KeyCode::Z) {
         //     // undo!();
         // }
+    }
+    if keys.just_pressed(KeyCode::G) {
+        *transform_mode = match *transform_mode {
+            TransformMode::KclSnap => TransformMode::GizmoTranslate,
+            TransformMode::GizmoTranslate => TransformMode::GizmoRotate,
+            TransformMode::GizmoRotate => TransformMode::KclSnap,
+        }
     }
 }

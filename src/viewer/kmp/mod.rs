@@ -15,7 +15,8 @@ use self::{
 use super::normalize::UpdateNormalizeSet;
 use crate::{
     ui::{
-        app_state::{AppMode, AppModeChanged, AppSettings, AppState},
+        settings::AppSettings,
+        ui_state::{AppMode, AppModeChanged},
         update_ui::KmpFileSelected,
     },
     util::kmp_file::*,
@@ -140,6 +141,7 @@ pub fn spawn_model(
         kmp.clone(),
         point_meshes.clone(),
         PointMaterials::from_colors(&mut materials, &sections.color.start_points),
+        settings.kmp_model.outline.clone(),
     );
 
     // --- ENEMY PATHS ---
@@ -149,6 +151,7 @@ pub fn spawn_model(
         kmp.clone(),
         path_meshes.clone(),
         PathMaterials::from_colors(&mut materials, &sections.color.enemy_paths),
+        settings.kmp_model.outline.clone(),
     );
 
     // --- ITEM POINTS ---
@@ -158,6 +161,7 @@ pub fn spawn_model(
         kmp.clone(),
         path_meshes.clone(),
         PathMaterials::from_colors(&mut materials, &sections.color.item_paths),
+        settings.kmp_model.outline.clone(),
     );
 
     // --- CHECKPOINTS ---
@@ -169,6 +173,7 @@ pub fn spawn_model(
         kmp.clone(),
         point_meshes.clone(),
         PointMaterials::from_colors(&mut materials, &sections.color.objects),
+        settings.kmp_model.outline.clone(),
     );
 
     // --- ROUTES ---
@@ -187,6 +192,7 @@ pub fn spawn_model(
         kmp.clone(),
         point_meshes.clone(),
         PointMaterials::from_colors(&mut materials, &sections.color.areas),
+        settings.kmp_model.outline.clone(),
     );
 
     // --- CAMREAS ---
@@ -196,6 +202,7 @@ pub fn spawn_model(
         kmp.clone(),
         point_meshes.clone(),
         PointMaterials::from_colors(&mut materials, &sections.color.cameras),
+        settings.kmp_model.outline.clone(),
     );
 
     // --- RESPAWN POINTS ---
@@ -205,6 +212,7 @@ pub fn spawn_model(
         kmp.clone(),
         point_meshes.clone(),
         PointMaterials::from_colors(&mut materials, &sections.color.respawn_points),
+        settings.kmp_model.outline.clone(),
     );
 
     // --- CANNON POINTS ---
@@ -216,12 +224,12 @@ pub fn spawn_model(
 
 fn set_visible_for_app_mode(
     mut settings: ResMut<AppSettings>,
-    app_state: Res<AppState>,
+    mode: Res<AppMode>,
     mut ev_kmp_visibility_update: EventWriter<KmpVisibilityUpdate>,
 ) {
     let sections = &mut settings.kmp_model.sections;
 
-    sections.visible = match app_state.mode {
+    sections.visible = match *mode {
         AppMode::StartFinishPoints => {
             // show all start and finish points
             let mut array = [false; 11];

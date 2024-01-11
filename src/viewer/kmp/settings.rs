@@ -6,6 +6,7 @@ pub struct KmpModelSettings {
     pub normalize: bool,
     pub point_scale: f32,
     pub sections: KmpModelSectionSettings,
+    pub outline: OutlineSettings,
 }
 impl Default for KmpModelSettings {
     fn default() -> Self {
@@ -13,6 +14,7 @@ impl Default for KmpModelSettings {
             normalize: true,
             point_scale: 1.,
             sections: KmpModelSectionSettings::default(),
+            outline: OutlineSettings::default(),
         }
     }
 }
@@ -106,4 +108,18 @@ pub struct PointColor {
     pub line: Color,
     pub arrow: Color,
     pub up_arrow: Color,
+}
+
+#[derive(Serialize, Deserialize, Reflect, Clone)]
+pub struct OutlineSettings {
+    pub color: Color,
+    pub width: f32,
+}
+impl Default for OutlineSettings {
+    fn default() -> Self {
+        Self {
+            color: Color::rgba(1.0, 1.0, 1.0, 0.3),
+            width: 7.0,
+        }
+    }
 }

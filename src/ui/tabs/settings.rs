@@ -1,6 +1,6 @@
-use super::{super::app_state::AppSettings, UiTabSection};
+use super::UiSubSection;
 use crate::{
-    ui::{app_state::AppState, file_dialog::ShowFileDialog},
+    ui::{file_dialog::ShowFileDialog, ui_state::FileDialogRes, settings::AppSettings},
     util::kcl_file::KclFlag,
     viewer::{
         camera::{
@@ -18,7 +18,6 @@ use strum::IntoEnumIterator;
 #[derive(SystemParam)]
 pub struct ShowSettingsTab<'w, 's> {
     settings: ResMut<'w, AppSettings>,
-    app_state: ResMut<'w, AppState>,
     ev_kcl_model_updated: EventWriter<'w, KclModelUpdated>,
     cams: (
         // fly cam
@@ -44,8 +43,9 @@ pub struct ShowSettingsTab<'w, 's> {
         >,
     ),
     pkv: ResMut<'w, PkvStore>,
+    file_dialog_res: ResMut<'w, FileDialogRes>,
 }
-impl UiTabSection for ShowSettingsTab<'_, '_> {
+impl UiSubSection for ShowSettingsTab<'_, '_> {
     fn show(&mut self, ui: &mut egui::Ui) {
         let mut fly_cam = self.cams.0.get_single_mut().unwrap();
         let mut orbit_cam = self.cams.1.get_single_mut().unwrap();
@@ -287,11 +287,11 @@ impl UiTabSection for ShowSettingsTab<'_, '_> {
     
         ui.horizontal(|ui| {
             if ui.button("Export Settings").clicked() {
-                ShowFileDialog::export_settings(&mut self.app_state);
+                ShowFileDialog::export_settings(&mut self.file_dialog_res);
             }
     
             if ui.button("Import Settings").clicked() {
-                ShowFileDialog::import_settings(&mut self.app_state);
+                ShowFileDialog::import_settings(&mut self.file_dialog_res);
             }
         });
         ui.horizontal(|ui| {

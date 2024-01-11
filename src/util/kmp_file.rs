@@ -1,4 +1,4 @@
-use crate::util::{ReadArrays, WriteArrays};
+use crate::util::read_write_arrays::{ReadArrays, WriteArrays};
 use bevy::{math::Vec3, prelude::*};
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 use serde::{Deserialize, Serialize};

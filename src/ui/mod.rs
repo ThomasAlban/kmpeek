@@ -1,16 +1,17 @@
 use self::{
-    app_state::AppStatePlugin, keybinds::KeybindsPlugin, tabs::DockTreePlugin,
-    update_ui::UpdateUIPlugin, viewport::ViewportPlugin,
+    keybinds::KeybindsPlugin, settings::AppSettingsPlugin, tabs::DockTreePlugin,
+    ui_state::UiStatePlugin, update_ui::UpdateUIPlugin, viewport::ViewportPlugin,
 };
 use bevy::app::Plugin;
 use bevy_egui::EguiPlugin;
 
-pub mod app_state;
 mod file_dialog;
 mod keybinds;
 mod menu_bar;
-mod tabs;
+pub mod settings;
+pub mod tabs;
 mod top_bar;
+pub mod ui_state;
 pub mod update_ui;
 mod util;
 pub mod viewport;
@@ -19,11 +20,12 @@ impl Plugin for UIPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app.add_plugins((
             EguiPlugin,
-            AppStatePlugin,
+            UiStatePlugin,
             DockTreePlugin,
             UpdateUIPlugin,
             ViewportPlugin,
             KeybindsPlugin,
+            AppSettingsPlugin,
         ));
     }
 }

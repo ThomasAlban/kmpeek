@@ -1,7 +1,8 @@
-use super::UiTabSection;
+use super::UiSubSection;
 use crate::{
     ui::{
-        app_state::{AppMode, AppSettings, AppState},
+        settings::AppSettings,
+        ui_state::AppMode,
         util::{combobox_enum, num_edit},
     },
     viewer::kmp::{components::TrackInfo, sections::KmpSections, KmpVisibilityUpdate},
@@ -12,7 +13,7 @@ use std::ops::RangeInclusive;
 
 #[derive(SystemParam)]
 pub struct ShowModeTab<'w, 's> {
-    app_state: ResMut<'w, AppState>,
+    mode: Res<'w, AppMode>,
     p: ParamSet<
         'w,
         's,
@@ -28,11 +29,11 @@ pub struct ShowModeTab<'w, 's> {
         ),
     >,
 }
-impl UiTabSection for ShowModeTab<'_, '_> {
+impl UiSubSection for ShowModeTab<'_, '_> {
     fn show(&mut self, ui: &mut egui::Ui) {
-        ui.heading(self.app_state.mode.to_string());
+        ui.heading(self.mode.to_string());
         ui.separator();
-        match self.app_state.mode {
+        match *self.mode {
             AppMode::TrackInfo => self.p.p0().show(ui),
             AppMode::StartFinishPoints => self.p.p1().show(ui),
             AppMode::Paths => self.p.p2().show(ui),
@@ -50,7 +51,7 @@ pub struct ShowTrackInfoMode<'w, 's> {
     query: Query<'w, 's, &'static mut TrackInfo>,
     settings: Res<'w, AppSettings>,
 }
-impl UiTabSection for ShowTrackInfoMode<'_, '_> {
+impl UiSubSection for ShowTrackInfoMode<'_, '_> {
     fn show(&mut self, ui: &mut egui::Ui) {
         let Ok(mut track_info) = self.query.get_single_mut() else {
             return;
@@ -99,7 +100,7 @@ impl UiTabSection for ShowTrackInfoMode<'_, '_> {
 pub struct ShowStartFinishPointsMode<'w, 's> {
     track_info: Query<'w, 's, &'static mut TrackInfo>,
 }
-impl UiTabSection for ShowStartFinishPointsMode<'_, '_> {
+impl UiSubSection for ShowStartFinishPointsMode<'_, '_> {
     fn show(&mut self, ui: &mut egui::Ui) {
         let Ok(mut track_info) = self.track_info.get_single_mut() else {
             return;
@@ -126,27 +127,41 @@ pub struct ShowPathsMode<'w> {
     settings: ResMut<'w, AppSettings>,
     ev_kmp_visibility_update: EventWriter<'w, KmpVisibilityUpdate>,
 }
-impl UiTabSection for ShowPathsMode<'_> {
+impl UiSubSection for ShowPathsMode<'_> {
     fn show(&mut self, ui: &mut egui::Ui) {
-        let enemy_paths_visible = ui.checkbox(
-            &mut self.settings.kmp_model.sections.visible[usize::from(KmpSections::EnemyPaths)],
-            "Show Enemy Paths",
-        );
-        let item_paths_visible = ui.checkbox(
-            &mut self.settings.kmp_model.sections.visible[usize::from(KmpSections::ItemPaths)],
-            "Show Item Paths",
-        );
+        #[derive(PartialEq)]
+        enum PathView {
+            Enemy,
+            Item,
+        }
+        let mut path_view =
+            if self.settings.kmp_model.sections.visible[usize::from(KmpSections::ItemPaths)] {
+                PathView::Item
+            } else {
+                PathView::Enemy
+            };
+        let enemy_paths_visible =
+            ui.selectable_value(&mut path_view, PathView::Enemy, "Enemy Paths");
+        let item_paths_visible = ui.selectable_value(&mut path_view, PathView::Item, "Item Paths");
+
+        if path_view == PathView::Enemy {
+            self.settings.kmp_model.sections.visible[usize::from(KmpSections::EnemyPaths)] = true;
+            self.settings.kmp_model.sections.visible[usize::from(KmpSections::ItemPaths)] = false;
+        }
+        if path_view == PathView::Item {
+            self.settings.kmp_model.sections.visible[usize::from(KmpSections::EnemyPaths)] = false;
+            self.settings.kmp_model.sections.visible[usize::from(KmpSections::ItemPaths)] = true;
+        }
+
         if enemy_paths_visible.changed() || item_paths_visible.changed() {
             self.ev_kmp_visibility_update.send_default();
         }
-        ui.button("Copy Enemy to Item").clicked();
-        ui.button("Copy Item to Enemy").clicked();
     }
 }
 
 #[derive(SystemParam)]
 pub struct ShowCheckpointsRespawnsMode;
-impl UiTabSection for ShowCheckpointsRespawnsMode {
+impl UiSubSection for ShowCheckpointsRespawnsMode {
     fn show(&mut self, ui: &mut egui::Ui) {
         ui.label("Checkpoints & Respawns");
     }
@@ -154,7 +169,7 @@ impl UiTabSection for ShowCheckpointsRespawnsMode {
 
 #[derive(SystemParam)]
 pub struct ShowObjectsMode;
-impl UiTabSection for ShowObjectsMode {
+impl UiSubSection for ShowObjectsMode {
     fn show(&mut self, ui: &mut egui::Ui) {
         ui.label("Objects");
     }
@@ -162,7 +177,7 @@ impl UiTabSection for ShowObjectsMode {
 
 #[derive(SystemParam)]
 pub struct ShowCamerasMode;
-impl UiTabSection for ShowCamerasMode {
+impl UiSubSection for ShowCamerasMode {
     fn show(&mut self, ui: &mut egui::Ui) {
         ui.label("Cameras");
     }
@@ -170,7 +185,7 @@ impl UiTabSection for ShowCamerasMode {
 
 #[derive(SystemParam)]
 pub struct ShowRoutesAreasMode;
-impl UiTabSection for ShowRoutesAreasMode {
+impl UiSubSection for ShowRoutesAreasMode {
     fn show(&mut self, ui: &mut egui::Ui) {
         ui.label("Routes & Areas");
     }
@@ -178,7 +193,7 @@ impl UiTabSection for ShowRoutesAreasMode {
 
 #[derive(SystemParam)]
 pub struct ShowFreeEditMode;
-impl UiTabSection for ShowFreeEditMode {
+impl UiSubSection for ShowFreeEditMode {
     fn show(&mut self, ui: &mut egui::Ui) {
         ui.label("Free Edit");
     }

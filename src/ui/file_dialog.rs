@@ -1,5 +1,6 @@
 use super::{
-    app_state::{AppSettings, AppState},
+    settings::AppSettings,
+    ui_state::{FileDialogRes, KmpFilePath},
     update_ui::{KclFileSelected, KmpFileSelected, UiSection},
 };
 use bevy::{ecs::system::SystemParam, prelude::*};
@@ -8,7 +9,6 @@ use egui_file::FileDialog;
 use std::{
     fs::{read_to_string, File},
     io::Write,
-    path::PathBuf,
 };
 
 pub enum DialogType {
@@ -24,22 +24,22 @@ pub struct ShowFileDialog<'w, 's> {
     contexts: EguiContexts<'w, 's>,
     ev_kmp_file_selected: EventWriter<'w, KmpFileSelected>,
     ev_kcl_file_selected: EventWriter<'w, KclFileSelected>,
-    app_state: ResMut<'w, AppState>,
     settings: ResMut<'w, AppSettings>,
+    file_dialog: ResMut<'w, FileDialogRes>,
+    kmp_file_path: ResMut<'w, KmpFilePath>,
 }
 impl UiSection for ShowFileDialog<'_, '_> {
     fn show(&mut self) {
         let ctx = self.contexts.ctx_mut();
 
-        let mut kmp_file_path: Option<PathBuf> = None;
-        if let Some(dialog) = &mut self.app_state.file_dialog {
+        if let Some(dialog) = &mut self.file_dialog.0 {
             if dialog.0.show(ctx).selected() {
                 if let Some(file) = dialog.0.path() {
                     match dialog.1 {
                         DialogType::OpenKmpKcl => {
                             if let Some(file_ext) = file.extension() {
                                 if file_ext == "kmp" {
-                                    kmp_file_path = Some(file.into());
+                                    self.kmp_file_path.0 = Some(file.into());
                                     self.ev_kmp_file_selected.send(KmpFileSelected(file.into()));
                                     if self.settings.open_course_kcl_in_directory {
                                         let mut course_kcl_path = file.to_owned();
@@ -76,12 +76,10 @@ impl UiSection for ShowFileDialog<'_, '_> {
                 }
             }
         }
-
-        self.app_state.kmp_file_path = kmp_file_path;
     }
 }
 impl ShowFileDialog<'_, '_> {
-    pub fn open_kmp_kcl(app_state: &mut AppState) {
+    pub fn open_kmp_kcl(file_dialog: &mut FileDialogRes) {
         let mut dialog = FileDialog::open_file(None)
             .default_size(FILE_DIALOG_SIZE)
             .show_files_filter(Box::new(move |path| {
@@ -93,9 +91,9 @@ impl ShowFileDialog<'_, '_> {
                 false
             }));
         dialog.open();
-        app_state.file_dialog = Some((dialog, DialogType::OpenKmpKcl));
+        file_dialog.0 = Some((dialog, DialogType::OpenKmpKcl));
     }
-    pub fn import_settings(app_state: &mut AppState) {
+    pub fn import_settings(file_dialog: &mut FileDialogRes) {
         let mut dialog = FileDialog::open_file(None)
             .default_size(FILE_DIALOG_SIZE)
             .show_files_filter(Box::new(|path| {
@@ -107,17 +105,17 @@ impl ShowFileDialog<'_, '_> {
                 false
             }));
         dialog.open();
-        app_state.file_dialog = Some((dialog, DialogType::ImportSettings));
+        file_dialog.0 = Some((dialog, DialogType::ImportSettings));
     }
-    pub fn export_settings(app_state: &mut AppState) {
+    pub fn export_settings(file_dialog: &mut FileDialogRes) {
         let mut dialog = FileDialog::save_file(None)
             .default_size(FILE_DIALOG_SIZE)
             .default_filename("kmpeek_settings.json");
         dialog.open();
 
-        app_state.file_dialog = Some((dialog, DialogType::ExportSettings));
+        file_dialog.0 = Some((dialog, DialogType::ExportSettings));
     }
-    pub fn close(app_state: &mut AppState) {
-        app_state.file_dialog = None;
+    pub fn close(file_dialog: &mut FileDialogRes) {
+        file_dialog.0 = None;
     }
 }

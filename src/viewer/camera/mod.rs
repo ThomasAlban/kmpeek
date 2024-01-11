@@ -4,7 +4,7 @@ pub use self::{
     orbit::{OrbitCam, OrbitSettings},
     topdown::{TopDownCam, TopDownSettings},
 };
-use crate::ui::app_state::{AppSettings, AppState};
+use crate::ui::{settings::AppSettings, ui_state::MouseInViewport};
 use bevy::{
     prelude::*,
     window::{CursorGrabMode, PrimaryWindow},
@@ -58,10 +58,10 @@ fn add_ambient_light(mut commands: Commands) {
 fn cursor_grab(
     mouse_buttons: Res<Input<MouseButton>>,
     mut window: Query<&mut Window, With<PrimaryWindow>>,
-    app_state: Res<AppState>,
     settings: Res<AppSettings>,
+    mouse_in_viewport: Res<MouseInViewport>,
 ) {
-    if !app_state.mouse_in_viewport {
+    if !mouse_in_viewport.0 {
         return;
     }
     let mut window = window.get_single_mut().unwrap();

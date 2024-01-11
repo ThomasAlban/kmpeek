@@ -1,6 +1,8 @@
 use super::CameraMode;
 use crate::ui::{
-    app_state::{AppSettings, AppState},
+    settings::AppSettings,
+    ui_state::MouseInViewport,
+    update_ui::UpdateUiSet,
     viewport::{SetupViewportSet, ViewportImage},
 };
 use bevy::{
@@ -16,7 +18,7 @@ pub struct OrbitCamPlugin;
 impl Plugin for OrbitCamPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, camera_setup.after(SetupViewportSet))
-            .add_systems(Update, orbit_cam);
+            .add_systems(Update, orbit_cam.before(UpdateUiSet));
     }
 }
 
@@ -100,10 +102,10 @@ fn orbit_cam(
     mouse_buttons: Res<Input<MouseButton>>,
     mut query: Query<(&mut OrbitCam, &mut Transform, &Projection)>,
     keys: Res<Input<KeyCode>>,
-    app_state: Res<AppState>,
     settings: Res<AppSettings>,
+    mouse_in_viewport: Res<MouseInViewport>,
 ) {
-    if !app_state.mouse_in_viewport || settings.camera.mode != CameraMode::Orbit {
+    if !mouse_in_viewport.0 || settings.camera.mode != CameraMode::Orbit {
         return;
     }
 

@@ -17,27 +17,29 @@ bevy = { version = "0.12.1", default-features = false, features = [
     "zstd",
     "serialize",
 ] }
-
-bevy_egui = { git = "https://github.com/mvlabat/bevy_egui", branch = "main" }
-bevy_gizmos = "0.12.1"
-# using local branch because there's an issue in the main branch where it interferes with parent child visibility
-bevy_infinite_grid = { path = "../bevy_infinite_grid" }
+# pending egui update
+bevy_egui = { git = "https://github.com/MickHarrigan/bevy_egui", branch = "main" }
+# bevy_egui = { git = "https://github.com/mvlabat/bevy_egui", branch = "main" }
+# using my own fork because there's an issue in the main branch where it interferes with parent child visibility
+bevy_infinite_grid = { git = "https://github.com/ThomasAlban/bevy_infinite_grid" }
 bevy_mod_outline = "0.6.0"
 bevy_mod_raycast = "0.16.0"
-# bevy_infinite_grid = { git = "https://github.com/ForesightMiningSoftwareCorporation/bevy_infinite_grid", branch = "main" }
-# bevy_mod_raycast = { git = "https://github.com/aevyrie/bevy_mod_raycast" }
 bevy_pkv = "0.9.0"
 bytemuck = "1.13.1"
 byteorder = "1.4.3"
-egui-gizmo = "0.13.0"
-egui_dock = { version = "0.9.1", features = ["serde"] }
-egui_file = "0.13.0"
+egui-gizmo = "0.14.1"
+egui_dock = { version = "0.10.0", features = ["serde"] }
+egui_extras = { version = "0.25.0", default-features = false, features = [
+    "all_loaders",
+] }
+egui_file = "0.14.0"
+image = { version = "0.24.7", features = ["png"] }
 num-traits = "0.2.15"
 serde = { version = "1.0.163", features = ["derive"] }
 serde_json = "1.0.96"
 strum = "0.25.0"
 strum_macros = "0.25.1"
-# undo_2 = "0.2.0"
+
 
 # Enable a small amount of optimization in debug mode
 [profile.dev]

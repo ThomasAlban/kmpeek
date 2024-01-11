@@ -2,7 +2,7 @@ mod ui;
 mod util;
 mod viewer;
 
-use bevy::{prelude::*, window::PresentMode, winit::WinitSettings};
+use bevy::{prelude::*, winit::WinitSettings};
 use ui::UIPlugin;
 use viewer::ViewerPlugin;
 
@@ -12,7 +12,6 @@ fn main() {
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "KMPeek".into(),
-                present_mode: PresentMode::AutoNoVsync,
                 ..default()
             }),
             ..default()

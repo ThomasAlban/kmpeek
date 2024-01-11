@@ -1,5 +1,6 @@
-use crate::ui::app_state::AppSettings;
-use bevy::prelude::*;
+use bevy::{prelude::*, window::PrimaryWindow};
+
+use crate::ui::settings::AppSettings;
 
 pub struct NormalizePlugin;
 impl Plugin for NormalizePlugin {
@@ -35,12 +36,13 @@ fn update_normalize(
         Query<(&GlobalTransform, &Camera)>,
         Query<(
             &mut Transform,
-            &mut GlobalTransform,
+            &GlobalTransform,
             &Normalize,
             &ViewVisibility,
         )>,
     )>,
     settings: Res<AppSettings>,
+    window: Query<&Window, With<PrimaryWindow>>,
 ) {
     if !settings.kmp_model.normalize {
         for (mut transform, _, normalize, visibility) in query.p1().iter_mut() {
@@ -62,6 +64,7 @@ fn update_normalize(
         }
         return;
     }
+    let window = window.single();
 
     let (mut camera_position, mut camera) = (None, None);
     for cam in query.p0().iter() {
@@ -77,7 +80,7 @@ fn update_normalize(
 
     let view = camera_position.compute_matrix().inverse();
 
-    for (mut transform, mut global_transform, normalize, visibility) in query.p1().iter_mut() {
+    for (mut transform, global_transform, normalize, visibility) in query.p1().iter_mut() {
         if *visibility == ViewVisibility::HIDDEN {
             continue;
         }
@@ -104,7 +107,7 @@ fn update_normalize(
 
         let scale_before = transform.scale; // save what the scale was before we change it
 
-        transform.scale = gt.scale * Vec3::splat(required_scale); // change the scale
+        transform.scale = gt.scale * required_scale * window.scale_factor() as f32 / 2.; // change the scale
 
         // reset the scale if we didn't want to affect any axes
         if !normalize.axes.x {
@@ -117,6 +120,6 @@ fn update_normalize(
             transform.scale.z = scale_before.z;
         }
 
-        *global_transform = (*transform).into();
+        // *global_transform = (*transform).into();
     }
 }

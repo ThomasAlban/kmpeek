@@ -1,5 +1,5 @@
 use crate::{
-    ui::{app_state::AppSettings, update_ui::KclFileSelected},
+    ui::{settings::AppSettings, update_ui::KclFileSelected},
     util::kcl_file::Kcl,
 };
 use bevy::{
@@ -106,6 +106,7 @@ pub fn spawn_model(
     // spawn the KCL model
     for i in 0..32 {
         let vertex_group = kcl.vertex_groups[i].clone();
+
         let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
 
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertex_group.vertices.clone());

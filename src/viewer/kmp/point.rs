@@ -8,7 +8,11 @@ use crate::{
     viewer::normalize::Normalize,
 };
 
-use super::{components::RespawnPoint, settings::PointColor, unlit_material, FromKmp, KmpSection};
+use super::{
+    components::RespawnPoint,
+    settings::{OutlineSettings, PointColor},
+    unlit_material, FromKmp, KmpSection,
+};
 
 #[derive(Clone)]
 pub struct PointMeshes {
@@ -51,6 +55,7 @@ pub fn spawn_point_section<
     kmp: Arc<Kmp>,
     meshes: PointMeshes,
     materials: PointMaterials,
+    outline: OutlineSettings,
 ) {
     let node_entries: &[T] = &kmp
         .get_field::<Section<T>>(&T::section_name())
@@ -81,8 +86,8 @@ pub fn spawn_point_section<
                 OutlineBundle {
                     outline: OutlineVolume {
                         visible: false,
-                        colour: Color::rgba(1.0, 1.0, 1.0, 0.3),
-                        width: 7.0,
+                        colour: outline.color,
+                        width: outline.width,
                     },
                     ..default()
                 },
@@ -126,6 +131,7 @@ pub fn spawn_respawn_point_section(
     kmp: Arc<Kmp>,
     meshes: PointMeshes,
     materials: PointMaterials,
+    outline: OutlineSettings,
 ) {
     let node_entries: &[Jgpt] = &kmp.get_field::<Section<Jgpt>>("jgpt").unwrap().entries;
 
@@ -163,6 +169,14 @@ pub fn spawn_respawn_point_section(
                             ..default()
                         },
                         Normalize::new(200., 30., BVec3::TRUE),
+                        OutlineBundle {
+                            outline: OutlineVolume {
+                                visible: false,
+                                colour: outline.color,
+                                width: outline.width,
+                            },
+                            ..default()
+                        },
                     ))
                     .with_children(|parent| {
                         // line

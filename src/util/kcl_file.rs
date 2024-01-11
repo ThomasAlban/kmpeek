@@ -1,4 +1,4 @@
-use crate::util::ReadArrays;
+use crate::util::read_write_arrays::ReadArrays;
 use bevy::{math::vec3, prelude::*};
 use byteorder::{ReadBytesExt, BE};
 use std::io::{self, Read, Seek, SeekFrom};

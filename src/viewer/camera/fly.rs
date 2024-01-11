@@ -1,5 +1,7 @@
 use crate::ui::{
-    app_state::{AppSettings, AppState},
+    settings::AppSettings,
+    ui_state::MouseInViewport,
+    update_ui::UpdateUiSet,
     viewport::{SetupViewportSet, ViewportImage},
 };
 use bevy::{
@@ -17,7 +19,7 @@ pub struct FlyCamPlugin;
 impl Plugin for FlyCamPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, camera_setup.after(SetupViewportSet))
-            .add_systems(Update, (fly_cam_look, fly_cam_move));
+            .add_systems(Update, (fly_cam_look, fly_cam_move).before(UpdateUiSet));
     }
 }
 
@@ -95,11 +97,11 @@ fn fly_cam_move(
     keys: Res<Input<KeyCode>>,
     window: Query<&Window, With<PrimaryWindow>>,
     mut fly_cam: Query<&mut Transform, With<FlyCam>>,
-    app_state: Res<AppState>,
     mut ev_request_redraw: EventWriter<RequestRedraw>,
     settings: Res<AppSettings>,
+    mouse_in_viewport: Res<MouseInViewport>,
 ) {
-    if !app_state.mouse_in_viewport || settings.camera.mode != CameraMode::Fly {
+    if !mouse_in_viewport.0 || settings.camera.mode != CameraMode::Fly {
         return;
     }
     // if we are pressing the control / cmd key, return
@@ -152,17 +154,18 @@ fn fly_cam_move(
         velocity *= settings.camera.fly.speed_boost;
     }
 
-    fly_cam_transform.translation += velocity * 100. * settings.camera.fly.speed;
+    fly_cam_transform.translation +=
+        velocity * 200. * settings.camera.fly.speed / window.scale_factor() as f32;
 }
 
 fn fly_cam_look(
     window: Query<&Window, With<PrimaryWindow>>,
     mut mouse_motion: EventReader<MouseMotion>,
     mut fly_cam: Query<&mut Transform, With<FlyCam>>,
-    app_state: Res<AppState>,
     settings: Res<AppSettings>,
+    mouse_in_viewport: Res<MouseInViewport>,
 ) {
-    if !app_state.mouse_in_viewport || settings.camera.mode != CameraMode::Fly {
+    if !mouse_in_viewport.0 || settings.camera.mode != CameraMode::Fly {
         return;
     }
 

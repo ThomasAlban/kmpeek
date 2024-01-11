@@ -1,6 +1,6 @@
 use super::{
     components::{FromKmp, Route},
-    settings::PathColor,
+    settings::{OutlineSettings, PathColor},
     unlit_material, KmpSection, RouteMarker, RoutePoint,
 };
 use crate::{
@@ -8,6 +8,7 @@ use crate::{
     viewer::normalize::Normalize,
 };
 use bevy::prelude::*;
+use bevy_mod_outline::{OutlineBundle, OutlineVolume};
 use std::fmt::Debug;
 use std::{collections::HashSet, sync::Arc};
 
@@ -153,6 +154,7 @@ pub fn spawn_path_section<
     kmp: Arc<Kmp>,
     meshes: PathMeshes,
     materials: PathMaterials,
+    outline: OutlineSettings,
 ) {
     let pathgroup_entries: &[PathGroup] = &kmp
         .get_field::<Section<PathGroup>>(&T::path_section_name())
@@ -203,6 +205,14 @@ pub fn spawn_path_section<
                     U::from_kmp(node),
                     KmpSection,
                     Normalize::new(200., 30., BVec3::TRUE),
+                    OutlineBundle {
+                        outline: OutlineVolume {
+                            visible: false,
+                            colour: outline.color,
+                            width: outline.width,
+                        },
+                        ..default()
+                    },
                 ));
                 entity_group.entities.push(spawned_entity.id());
             }

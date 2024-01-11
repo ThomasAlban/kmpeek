@@ -1,6 +1,8 @@
 use super::CameraMode;
 use crate::ui::{
-    app_state::{AppSettings, AppState},
+    settings::AppSettings,
+    ui_state::MouseInViewport,
+    update_ui::UpdateUiSet,
     viewport::{SetupViewportSet, ViewportImage},
 };
 use bevy::{
@@ -16,7 +18,7 @@ pub struct TopDownCamPlugin;
 impl Plugin for TopDownCamPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, camera_setup.after(SetupViewportSet))
-            .add_systems(Update, topdown_cam);
+            .add_systems(Update, topdown_cam.before(UpdateUiSet));
     }
 }
 
@@ -89,10 +91,10 @@ fn topdown_cam(
     mut mouse_scroll: EventReader<MouseWheel>,
     mouse_buttons: Res<Input<MouseButton>>,
     mut query: Query<(&TopDownCam, &mut Transform, &mut Projection)>,
-    app_state: Res<AppState>,
     settings: Res<AppSettings>,
+    mouse_in_viewport: Res<MouseInViewport>,
 ) {
-    if !app_state.mouse_in_viewport || settings.camera.mode != CameraMode::TopDown {
+    if !mouse_in_viewport.0 || settings.camera.mode != CameraMode::TopDown {
         return;
     }
 
