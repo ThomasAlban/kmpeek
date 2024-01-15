@@ -48,12 +48,12 @@ impl UiSubSection for ShowModeTab<'_, '_> {
 
 #[derive(SystemParam)]
 pub struct ShowTrackInfoMode<'w, 's> {
-    query: Query<'w, 's, &'static mut TrackInfo>,
+    q_track_info: Query<'w, 's, &'static mut TrackInfo>,
     settings: Res<'w, AppSettings>,
 }
 impl UiSubSection for ShowTrackInfoMode<'_, '_> {
     fn show(&mut self, ui: &mut egui::Ui) {
-        let Ok(mut track_info) = self.query.get_single_mut() else {
+        let Ok(mut track_info) = self.q_track_info.get_single_mut() else {
             return;
         };
 
@@ -98,11 +98,11 @@ impl UiSubSection for ShowTrackInfoMode<'_, '_> {
 
 #[derive(SystemParam)]
 pub struct ShowStartFinishPointsMode<'w, 's> {
-    track_info: Query<'w, 's, &'static mut TrackInfo>,
+    q_track_info: Query<'w, 's, &'static mut TrackInfo>,
 }
 impl UiSubSection for ShowStartFinishPointsMode<'_, '_> {
     fn show(&mut self, ui: &mut egui::Ui) {
-        let Ok(mut track_info) = self.track_info.get_single_mut() else {
+        let Ok(mut track_info) = self.q_track_info.get_single_mut() else {
             return;
         };
         combobox_enum(

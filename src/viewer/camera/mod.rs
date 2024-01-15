@@ -57,14 +57,14 @@ fn add_ambient_light(mut commands: Commands) {
 
 fn cursor_grab(
     mouse_buttons: Res<Input<MouseButton>>,
-    mut window: Query<&mut Window, With<PrimaryWindow>>,
+    mut q_window: Query<&mut Window, With<PrimaryWindow>>,
     settings: Res<AppSettings>,
     mouse_in_viewport: Res<MouseInViewport>,
 ) {
     if !mouse_in_viewport.0 {
         return;
     }
-    let mut window = window.get_single_mut().unwrap();
+    let mut window = q_window.get_single_mut().unwrap();
 
     if (settings.camera.mode == CameraMode::Fly
         && !mouse_buttons.pressed(settings.camera.fly.key_bindings.mouse_button))
@@ -83,15 +83,15 @@ fn cursor_grab(
 }
 
 fn update_active_camera(
-    mut fly_cam: Query<
+    mut q_fly_cam: Query<
         (Entity, &mut Camera),
         (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>),
     >,
-    mut orbit_cam: Query<
+    mut q_orbit_cam: Query<
         (Entity, &mut Camera),
         (With<OrbitCam>, Without<FlyCam>, Without<TopDownCam>),
     >,
-    mut topdown_cam: Query<
+    mut q_topdown_cam: Query<
         (Entity, &mut Camera),
         (With<TopDownCam>, Without<FlyCam>, Without<OrbitCam>),
     >,
@@ -99,9 +99,9 @@ fn update_active_camera(
     mut ev_camera_mode_changed: EventReader<CameraModeChanged>,
 ) {
     for ev in ev_camera_mode_changed.read() {
-        let mut fly_cam = fly_cam.get_single_mut().unwrap();
-        let mut orbit_cam = orbit_cam.get_single_mut().unwrap();
-        let mut topdown_cam = topdown_cam.get_single_mut().unwrap();
+        let mut fly_cam = q_fly_cam.get_single_mut().unwrap();
+        let mut orbit_cam = q_orbit_cam.get_single_mut().unwrap();
+        let mut topdown_cam = q_topdown_cam.get_single_mut().unwrap();
 
         match ev.0 {
             CameraMode::Fly => {

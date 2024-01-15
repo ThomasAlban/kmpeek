@@ -1,6 +1,6 @@
 use super::UiSubSection;
 use crate::{
-    ui::{file_dialog::ShowFileDialog, ui_state::FileDialogRes, settings::AppSettings},
+    ui::{file_dialog::ShowFileDialog, settings::AppSettings, ui_state::FileDialogRes},
     util::kcl_file::KclFlag,
     viewer::{
         camera::{
@@ -19,7 +19,7 @@ use strum::IntoEnumIterator;
 pub struct ShowSettingsTab<'w, 's> {
     settings: ResMut<'w, AppSettings>,
     ev_kcl_model_updated: EventWriter<'w, KclModelUpdated>,
-    cams: (
+    q_cams: (
         // fly cam
         Query<
             'w,
@@ -47,12 +47,12 @@ pub struct ShowSettingsTab<'w, 's> {
 }
 impl UiSubSection for ShowSettingsTab<'_, '_> {
     fn show(&mut self, ui: &mut egui::Ui) {
-        let mut fly_cam = self.cams.0.get_single_mut().unwrap();
-        let mut orbit_cam = self.cams.1.get_single_mut().unwrap();
-        let mut topdown_cam = self.cams.2.get_single_mut().unwrap();
-    
+        let mut fly_cam = self.q_cams.0.get_single_mut().unwrap();
+        let mut orbit_cam = self.q_cams.1.get_single_mut().unwrap();
+        let mut topdown_cam = self.q_cams.2.get_single_mut().unwrap();
+
         ui.label("These settings will be saved when you close the app.");
-    
+
         egui::CollapsingHeader::new("KMP Viewer")
             .default_open(true)
             .show(ui, |ui| {
@@ -61,14 +61,13 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
                         .text("Point Scale"),
                 );
                 ui.checkbox(&mut self.settings.kmp_model.normalize, "Normalize points");
-    
                 ui.checkbox(
                     &mut self.settings.open_course_kcl_in_directory,
                     "Auto open course.kcl",
                 ).on_hover_text("If enabled, when opening a KMP file, if there is a 'course.kcl' file in the same directory, it will also be opened");
 
             });
-    
+
         egui::CollapsingHeader::new("Collision Model")
             .default_open(true)
             .show(ui, |ui| {
@@ -78,13 +77,14 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
                 )
                 .on_hover_text("Whether or not the back faces of the collision model are shown");
                 let kcl_model_settings_before = self.settings.kcl_model.clone();
-    
+
                 let visible = &mut self.settings.kcl_model.visible;
-    
+
                 use KclFlag::*;
-    
-                let mut show_walls =
-                    visible[Wall1 as usize] && visible[Wall2 as usize] && visible[WeakWall as usize];
+
+                let mut show_walls = visible[Wall1 as usize]
+                    && visible[Wall2 as usize]
+                    && visible[WeakWall as usize];
                 let mut show_invis_walls =
                     visible[InvisibleWall1 as usize] && visible[InvisibleWall2 as usize];
                 let mut show_death_barriers =
@@ -93,7 +93,7 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
                     && visible[EffectTrigger as usize]
                     && visible[SoundTrigger as usize]
                     && visible[KclFlag::CannonTrigger as usize];
-    
+
                 let show_walls_changed = ui.checkbox(&mut show_walls, "Show Walls").changed();
                 let show_invis_walls_changed = ui
                     .checkbox(&mut show_invis_walls, "Show Invisible Walls")
@@ -104,7 +104,7 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
                 let show_effects_triggers_changed = ui
                     .checkbox(&mut show_effects_triggers, "Show Effects & Triggers")
                     .changed();
-    
+
                 if show_walls_changed {
                     [
                         visible[Wall1 as usize],
@@ -112,7 +112,7 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
                         visible[WeakWall as usize],
                     ] = [show_walls; 3];
                 }
-    
+
                 if show_invis_walls_changed {
                     [
                         visible[InvisibleWall1 as usize],
@@ -131,7 +131,7 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
                         visible[CannonTrigger as usize],
                     ] = [show_effects_triggers; 4];
                 }
-    
+
                 ui.collapsing("Customise Colours", |ui| {
                     ui.horizontal(|ui| {
                         if ui.button("Check All").clicked() {
@@ -150,7 +150,10 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
                             let mut color = self.settings.kcl_model.color[i].as_rgba_f32();
                             ui.color_edit_button_rgba_unmultiplied(&mut color);
                             self.settings.kcl_model.color[i] = color.into();
-                            ui.checkbox(&mut self.settings.kcl_model.visible[i], kcl_flag.to_string());
+                            ui.checkbox(
+                                &mut self.settings.kcl_model.visible[i],
+                                kcl_flag.to_string(),
+                            );
                         });
                     }
                 });
@@ -158,7 +161,7 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
                     self.ev_kcl_model_updated.send_default();
                 }
             });
-    
+
         egui::CollapsingHeader::new("Camera").default_open(true).show(ui, |ui| {
                 ui.horizontal(|ui| {
                     if ui.button("Reset Positions").clicked() {
@@ -202,7 +205,6 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
                     });
                     ui.checkbox(&mut self.settings.camera.fly.hold_mouse_to_move, "Hold Mouse To Move")
                         .on_hover_text("Whether or not the mouse button needs to be pressed in order to move the camera");
-    
                     ui.horizontal(|ui| {
                         ui.label("Mouse Button").on_hover_text("The mouse button that needs to be pressed to move the camera");
                         egui::ComboBox::from_id_source("Mouse Button")
@@ -214,7 +216,6 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
                             ui.selectable_value(&mut self.settings.camera.fly.key_bindings.mouse_button, MouseButton::Right, "Right");
                         });
                     });
-    
                 });
                 ui.collapsing("Orbit Camera", |ui| {
                     ui.horizontal(|ui| {
@@ -232,7 +233,6 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
                             egui::DragValue::new(&mut self.settings.camera.orbit.pan_sensitivity).speed(0.1),
                         );
                     });
-    
                     ui.horizontal(|ui| {
                         ui.label("Scroll Sensitivity")
                             .on_hover_text("How sensitive the camera zoom is to scrolling");
@@ -241,7 +241,6 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
                                 .speed(0.1),
                         );
                     });
-    
                     ui.horizontal(|ui| {
                         ui.label("Mouse Button").on_hover_text("The mouse button that needs to be pressed to move the camera");
                         egui::ComboBox::from_id_source("Mouse Button")
@@ -284,12 +283,12 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
                     });
                 });
             });
-    
+
         ui.horizontal(|ui| {
             if ui.button("Export Settings").clicked() {
                 ShowFileDialog::export_settings(&mut self.file_dialog_res);
             }
-    
+
             if ui.button("Import Settings").clicked() {
                 ShowFileDialog::import_settings(&mut self.file_dialog_res);
             }

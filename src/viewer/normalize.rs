@@ -1,11 +1,16 @@
 use bevy::{prelude::*, window::PrimaryWindow};
 
-use crate::ui::settings::AppSettings;
+use crate::ui::{settings::AppSettings, update_ui::UpdateUiSet};
 
 pub struct NormalizePlugin;
 impl Plugin for NormalizePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, update_normalize.in_set(UpdateNormalizeSet));
+        app.add_systems(
+            Update,
+            (update_normalize, apply_deferred)
+                .in_set(UpdateNormalizeSet)
+                .before(UpdateUiSet),
+        );
     }
 }
 
@@ -32,20 +37,20 @@ impl Normalize {
 pub struct UpdateNormalizeSet;
 
 fn update_normalize(
-    mut query: ParamSet<(
+    mut q_normalize: ParamSet<(
         Query<(&GlobalTransform, &Camera)>,
         Query<(
             &mut Transform,
-            &GlobalTransform,
+            &mut GlobalTransform,
             &Normalize,
             &ViewVisibility,
         )>,
     )>,
     settings: Res<AppSettings>,
-    window: Query<&Window, With<PrimaryWindow>>,
+    q_window: Query<&Window, With<PrimaryWindow>>,
 ) {
     if !settings.kmp_model.normalize {
-        for (mut transform, _, normalize, visibility) in query.p1().iter_mut() {
+        for (mut transform, _, normalize, visibility) in q_normalize.p1().iter_mut() {
             if *visibility == ViewVisibility::HIDDEN {
                 continue;
             }
@@ -64,10 +69,10 @@ fn update_normalize(
         }
         return;
     }
-    let window = window.single();
+    let window = q_window.single();
 
     let (mut camera_position, mut camera) = (None, None);
-    for cam in query.p0().iter() {
+    for cam in q_normalize.p0().iter() {
         if cam.1.is_active {
             if camera.is_some() {
                 panic!("More than one active camera");
@@ -80,7 +85,8 @@ fn update_normalize(
 
     let view = camera_position.compute_matrix().inverse();
 
-    for (mut transform, global_transform, normalize, visibility) in query.p1().iter_mut() {
+    for (mut transform, mut global_transform, normalize, visibility) in q_normalize.p1().iter_mut()
+    {
         if *visibility == ViewVisibility::HIDDEN {
             continue;
         }
@@ -120,6 +126,6 @@ fn update_normalize(
             transform.scale.z = scale_before.z;
         }
 
-        // *global_transform = (*transform).into();
+        *global_transform = (*transform).into();
     }
 }

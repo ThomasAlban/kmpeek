@@ -24,6 +24,7 @@ use crate::{
     viewer::kmp::sections::KmpSections,
 };
 use bevy::{prelude::*, window::RequestRedraw};
+use binrw::BinRead;
 use std::{ffi::OsStr, fs::File, sync::Arc};
 
 pub struct KmpPlugin;
@@ -64,9 +65,9 @@ pub fn spawn_model(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut ev_kmp_file_selected: EventReader<KmpFileSelected>,
-    kmp_section_query: Query<Entity, With<KmpSection>>,
+    q_kmp_section: Query<Entity, With<KmpSection>>,
     settings: Res<AppSettings>,
-    mut ev_kmp_visibility_updated: EventWriter<KmpVisibilityUpdate>,
+    mut ev_kmp_visibility_update: EventWriter<KmpVisibilityUpdate>,
 ) {
     // if there is no kmp file selected event return
     let Some(ev) = ev_kmp_file_selected.read().next() else {
@@ -78,13 +79,13 @@ pub fn spawn_model(
     }
 
     // open the KMP file and read it
-    let kmp_file = File::open(ev.0.clone()).expect("could not open kmp file");
-    let kmp = Kmp::read(kmp_file).expect("could not read kmp file");
+    let mut kmp_file = File::open(ev.0.clone()).expect("could not open kmp file");
+    let kmp = Kmp::read(&mut kmp_file).expect("could not read kmp file");
     // allocate the KMP on the heap so that we can access it in commands which execute after this function
     let kmp = Arc::new(kmp);
 
     // despawn all kmp entities so we have a clean slate
-    for entity in kmp_section_query.iter() {
+    for entity in q_kmp_section.iter() {
         commands.entity(entity).despawn();
     }
 
@@ -219,7 +220,7 @@ pub fn spawn_model(
 
     // --- FINISH POINTS ---
 
-    ev_kmp_visibility_updated.send_default();
+    ev_kmp_visibility_update.send_default();
 }
 
 fn set_visible_for_app_mode(

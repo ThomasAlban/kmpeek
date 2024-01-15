@@ -95,8 +95,8 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
 
 fn fly_cam_move(
     keys: Res<Input<KeyCode>>,
-    window: Query<&Window, With<PrimaryWindow>>,
-    mut fly_cam: Query<&mut Transform, With<FlyCam>>,
+    q_window: Query<&Window, With<PrimaryWindow>>,
+    mut q_fly_cam: Query<&mut Transform, With<FlyCam>>,
     mut ev_request_redraw: EventWriter<RequestRedraw>,
     settings: Res<AppSettings>,
     mouse_in_viewport: Res<MouseInViewport>,
@@ -113,13 +113,13 @@ fn fly_cam_move(
         return;
     }
 
-    let window = window.get_single().unwrap();
+    let window = q_window.get_single().unwrap();
     // if we need to be holding the mouse to move but we aren't, return
     if settings.camera.fly.hold_mouse_to_move && window.cursor.grab_mode == CursorGrabMode::None {
         return;
     }
 
-    let mut fly_cam_transform = fly_cam.get_single_mut().unwrap();
+    let mut fly_cam_transform = q_fly_cam.get_single_mut().unwrap();
 
     let mut velocity = Vec3::ZERO;
     let local_z = fly_cam_transform.local_z();
@@ -159,9 +159,9 @@ fn fly_cam_move(
 }
 
 fn fly_cam_look(
-    window: Query<&Window, With<PrimaryWindow>>,
-    mut mouse_motion: EventReader<MouseMotion>,
-    mut fly_cam: Query<&mut Transform, With<FlyCam>>,
+    q_window: Query<&Window, With<PrimaryWindow>>,
+    mut ev_mouse_motion: EventReader<MouseMotion>,
+    mut q_fly_cam: Query<&mut Transform, With<FlyCam>>,
     settings: Res<AppSettings>,
     mouse_in_viewport: Res<MouseInViewport>,
 ) {
@@ -169,10 +169,10 @@ fn fly_cam_look(
         return;
     }
 
-    let window = window.get_single().unwrap();
-    let mut fly_cam_transform = fly_cam.get_single_mut().unwrap();
+    let window = q_window.get_single().unwrap();
+    let mut fly_cam_transform = q_fly_cam.get_single_mut().unwrap();
 
-    for ev in mouse_motion.read() {
+    for ev in ev_mouse_motion.read() {
         let (mut yaw, mut pitch, _) = fly_cam_transform.rotation.to_euler(EulerRot::YXZ);
         match window.cursor.grab_mode {
             CursorGrabMode::None => (),

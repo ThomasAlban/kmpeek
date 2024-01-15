@@ -1,4 +1,4 @@
-use crate::viewer::transform::TransformMode;
+use crate::viewer::transform::EditMode;
 
 use super::{file_dialog::ShowFileDialog, ui_state::FileDialogRes};
 use bevy::prelude::*;
@@ -13,7 +13,7 @@ impl Plugin for KeybindsPlugin {
 fn keybinds(
     keys: Res<Input<KeyCode>>,
     mut file_dialog: ResMut<FileDialogRes>,
-    mut transform_mode: ResMut<TransformMode>,
+    mut edit_mode: ResMut<EditMode>,
 ) {
     // keybinds
     // if the control/command key is pressed
@@ -42,10 +42,11 @@ fn keybinds(
         // }
     }
     if keys.just_pressed(KeyCode::G) {
-        *transform_mode = match *transform_mode {
-            TransformMode::KclSnap => TransformMode::GizmoTranslate,
-            TransformMode::GizmoTranslate => TransformMode::GizmoRotate,
-            TransformMode::GizmoRotate => TransformMode::KclSnap,
+        *edit_mode = match *edit_mode {
+            EditMode::Tweak => EditMode::SelectBox,
+            EditMode::SelectBox => EditMode::Translate,
+            EditMode::Translate => EditMode::Rotate,
+            EditMode::Rotate => EditMode::Tweak,
         }
     }
 }

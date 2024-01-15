@@ -4,7 +4,7 @@ use super::{
     unlit_material, KmpSection, RouteMarker, RoutePoint,
 };
 use crate::{
-    util::kmp_file::{Kmp, KmpData, KmpPathSectionName, KmpSectionName, PathGroup, Poti, Section},
+    util::kmp_file::{Kmp, KmpGetPathSection, KmpGetSection, KmpPositionPoint, Poti},
     viewer::normalize::Normalize,
 };
 use bevy::prelude::*;
@@ -71,17 +71,17 @@ impl KmpPathNode {
         }
     }
     #[allow(dead_code)]
-    pub fn delete_self(&mut self, mut kmp_node_query: Query<&mut KmpPathNode>) {
+    pub fn delete_self(&mut self, mut q_kmp_node: Query<&mut KmpPathNode>) {
         // for all next nodes
         for e in self.next_nodes.iter() {
             // delete all references to self
-            let mut next_node = kmp_node_query.get_mut(*e).unwrap();
+            let mut next_node = q_kmp_node.get_mut(*e).unwrap();
             next_node.prev_nodes.retain(|x| x != e);
         }
         // for all previous nodes
         for e in self.prev_nodes.iter() {
             // delete all references to self
-            let mut prev_node = kmp_node_query.get_mut(*e).unwrap();
+            let mut prev_node = q_kmp_node.get_mut(*e).unwrap();
             prev_node.next_nodes.retain(|x| x != e);
         }
     }
@@ -89,15 +89,15 @@ impl KmpPathNode {
     fn link_nodes(
         prev_node_entity: Entity,
         next_node_entity: Entity,
-        kmp_node_query: &mut Query<&mut KmpPathNode>,
+        q_kmp_node: &mut Query<&mut KmpPathNode>,
     ) -> Result<(), LinkPathNodeError> {
-        let mut next_node = match kmp_node_query.get_mut(next_node_entity) {
+        let mut next_node = match q_kmp_node.get_mut(next_node_entity) {
             Ok(next_node) => next_node,
             Err(_) => return Err(LinkPathNodeError),
         };
         next_node.prev_nodes.insert(prev_node_entity);
 
-        let mut prev_node = match kmp_node_query.get_mut(prev_node_entity) {
+        let mut prev_node = match q_kmp_node.get_mut(prev_node_entity) {
             Ok(prev_node) => prev_node,
             Err(_) => return Err(LinkPathNodeError),
         };
@@ -137,16 +137,7 @@ struct KmpDataGroup<T> {
 }
 
 pub fn spawn_path_section<
-    T: KmpData
-        + KmpSectionName
-        + KmpPathSectionName
-        + Send
-        + 'static
-        + Clone
-        + Reflect
-        + TypePath
-        + FromReflect
-        + Struct,
+    T: KmpGetSection + KmpGetPathSection + KmpPositionPoint + Send + 'static + Clone,
     U: Component + FromKmp<T>,
     V: Component + Default,
 >(
@@ -156,14 +147,8 @@ pub fn spawn_path_section<
     materials: PathMaterials,
     outline: OutlineSettings,
 ) {
-    let pathgroup_entries: &[PathGroup] = &kmp
-        .get_field::<Section<PathGroup>>(&T::path_section_name())
-        .unwrap()
-        .entries;
-    let node_entries: &[T] = &kmp
-        .get_field::<Section<T>>(&T::section_name())
-        .unwrap()
-        .entries;
+    let pathgroup_entries = &T::get_path_section(kmp.as_ref()).entries;
+    let node_entries = &T::get_section(kmp.as_ref()).entries;
 
     let mut kmp_data_groups: Vec<KmpDataGroup<T>> = Vec::new();
 
@@ -191,12 +176,12 @@ pub fn spawn_path_section<
                 next_groups: group.next_groups,
             };
             for node in group.nodes.iter() {
-                let position = node.get_field::<Vec3>("position").unwrap();
+                let position: Vec3 = node.get_position().into();
                 let spawned_entity = world.spawn((
                     PbrBundle {
                         mesh: meshes.sphere.clone(),
                         material: materials.point.clone(),
-                        transform: Transform::from_translation(*position),
+                        transform: Transform::from_translation(position),
                         visibility: Visibility::Hidden,
                         ..default()
                     },
@@ -265,11 +250,7 @@ pub fn spawn_route_section(
     meshes: PathMeshes,
     materials: PathMaterials,
 ) {
-    let poti_entries: Vec<Poti> = kmp
-        .get_field::<Section<Poti>>("poti")
-        .unwrap()
-        .entries
-        .clone();
+    let poti_entries = Poti::get_section(kmp.as_ref()).entries.clone();
 
     commands.add(move |world: &mut World| {
         // spawn all the entities, saving the entity IDs into 'entity_groups'
@@ -285,7 +266,7 @@ pub fn spawn_route_section(
                         PbrBundle {
                             mesh: meshes.sphere.clone(),
                             material: materials.point.clone(),
-                            transform: Transform::from_translation(node.position),
+                            transform: Transform::from_translation(node.position.into()),
                             visibility: Visibility::Hidden,
                             ..default()
                         },
@@ -384,23 +365,23 @@ fn spawn_node_link<T: Component + Default>(
 }
 
 pub fn update_node_links(
-    kmp_node_link_query: Query<(Entity, &KmpPathNodeLink, &Children, &ViewVisibility)>,
-    mut transform_query: Query<&mut Transform>,
-    line_query: Query<&KmpPathNodeLinkLine>,
+    q_kmp_node_link: Query<(Entity, &KmpPathNodeLink, &Children, &ViewVisibility)>,
+    mut q_transform: Query<&mut Transform>,
+    q_line: Query<&KmpPathNodeLinkLine>,
 ) {
     // go through each node line
-    for (entity, kmp_node_link, children, visibility) in kmp_node_link_query.iter() {
+    for (entity, kmp_node_link, children, visibility) in q_kmp_node_link.iter() {
         // don't bother unless the kmp node link is actually visible
         if *visibility == ViewVisibility::HIDDEN {
             continue;
         }
 
         // get the positions of the previous and next nodes
-        let prev_pos = transform_query
+        let prev_pos = q_transform
             .get(kmp_node_link.prev_node)
             .unwrap()
             .translation;
-        let next_pos = transform_query
+        let next_pos = q_transform
             .get(kmp_node_link.next_node)
             .unwrap()
             .translation;
@@ -413,13 +394,13 @@ pub fn update_node_links(
         new_line_transform.scale.y = prev_pos.distance(next_pos);
 
         // set the transform of the parent
-        let mut parent_transform = transform_query.get_mut(entity).unwrap();
+        let mut parent_transform = q_transform.get_mut(entity).unwrap();
         *parent_transform = new_parent_transform;
 
         // find the child of the kmp node link that has KmpNodeLinkLine, and set its transform
         for child in children {
-            if line_query.get(*child).is_ok() {
-                let mut line_transform = transform_query.get_mut(*child).unwrap();
+            if q_line.get(*child).is_ok() {
+                let mut line_transform = q_transform.get_mut(*child).unwrap();
                 *line_transform = new_line_transform;
                 break;
             }

@@ -86,11 +86,11 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
 }
 
 fn topdown_cam(
-    primary_window: Query<&mut Window, With<PrimaryWindow>>,
-    mut mouse_motion: EventReader<MouseMotion>,
-    mut mouse_scroll: EventReader<MouseWheel>,
+    q_window: Query<&mut Window, With<PrimaryWindow>>,
+    mut ev_mouse_motion: EventReader<MouseMotion>,
+    mut ev_mouse_scroll: EventReader<MouseWheel>,
     mouse_buttons: Res<Input<MouseButton>>,
-    mut query: Query<(&TopDownCam, &mut Transform, &mut Projection)>,
+    mut q_topdown_cam: Query<(&TopDownCam, &mut Transform, &mut Projection)>,
     settings: Res<AppSettings>,
     mouse_in_viewport: Res<MouseInViewport>,
 ) {
@@ -98,23 +98,23 @@ fn topdown_cam(
         return;
     }
 
-    let window = primary_window.get_single().unwrap();
+    let window = q_window.get_single().unwrap();
 
     let mut pan = Vec2::ZERO;
     let mut scroll = 0.;
 
     if mouse_buttons.pressed(settings.camera.orbit.key_bindings.mouse_button) {
-        for ev in mouse_motion.read() {
+        for ev in ev_mouse_motion.read() {
             pan += ev.delta;
         }
     }
-    for ev in mouse_scroll.read() {
+    for ev in ev_mouse_scroll.read() {
         scroll += ev.y;
     }
 
     let window_size = Vec2::new(window.width(), window.height());
 
-    for (_, mut transform, mut projection) in query.iter_mut() {
+    for (_, mut transform, mut projection) in q_topdown_cam.iter_mut() {
         if let Projection::Orthographic(projection) = &*projection {
             pan *= Vec2::new(projection.area.width(), projection.area.height()) / window_size;
         }
@@ -129,5 +129,5 @@ fn topdown_cam(
             }
         }
     }
-    mouse_motion.clear();
+    ev_mouse_motion.clear();
 }

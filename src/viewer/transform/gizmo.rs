@@ -2,7 +2,7 @@ use bevy::{ecs::system::SystemParam, prelude::*};
 use egui_gizmo::{Gizmo, GizmoMode, GizmoOrientation, GizmoResult, GizmoVisuals};
 use strum_macros::{Display, EnumIter};
 
-use super::{select::Selected, TransformMode};
+use super::{select::Selected, EditMode};
 use crate::ui::tabs::UiSubSection;
 
 pub struct TransformGizmoPlugin;
@@ -42,14 +42,14 @@ impl Default for GizmoOptions {
 #[derive(SystemParam)]
 pub struct ShowGizmo<'w, 's> {
     keys: Res<'w, Input<KeyCode>>,
-    selected_q: Query<'w, 's, &'static mut Transform, (With<Selected>, Without<Camera>)>,
-    camera_q: Query<'w, 's, (&'static Camera, &'static Transform)>,
-    transform_mode: Res<'w, TransformMode>,
+    q_selected: Query<'w, 's, &'static mut Transform, (With<Selected>, Without<Camera>)>,
+    q_camera: Query<'w, 's, (&'static Camera, &'static Transform)>,
+    edit_mode: Res<'w, EditMode>,
     gizmo_options: ResMut<'w, GizmoOptions>,
 }
 impl UiSubSection for ShowGizmo<'_, '_> {
     fn show(&mut self, ui: &mut bevy_egui::egui::Ui) {
-        if *self.transform_mode == TransformMode::KclSnap {
+        if *self.edit_mode == EditMode::Tweak || *self.edit_mode == EditMode::SelectBox {
             return;
         }
         ui.allocate_ui_at_rect(ui.max_rect(), |ui| {
@@ -57,7 +57,7 @@ impl UiSubSection for ShowGizmo<'_, '_> {
 
             // get the active camera
             let (camera, transform) = self
-                .camera_q
+                .q_camera
                 .iter()
                 .filter(|cam| cam.0.is_active)
                 .collect::<Vec<(&Camera, &Transform)>>()[0];
@@ -90,7 +90,7 @@ impl UiSubSection for ShowGizmo<'_, '_> {
 
             let gizmo_transform_point: Transform;
             let mut single_selected = false;
-            if let Ok(selected) = self.selected_q.get_single() {
+            if let Ok(selected) = self.q_selected.get_single() {
                 // if we only have a single point selected, then pass the transform of that single point to the gizmo
                 gizmo_transform_point = *selected;
                 single_selected = true;
@@ -100,7 +100,7 @@ impl UiSubSection for ShowGizmo<'_, '_> {
                         // if we have multiple selected, calculate the average transform (ignoring rotation / scale) and pass that to the gizmo
                         let mut avg_transform = Transform::default();
                         let mut count = 0.;
-                        for selected in self.selected_q.iter() {
+                        for selected in self.q_selected.iter() {
                             avg_transform.translation += selected.translation;
                             count += 1.;
                         }
@@ -108,7 +108,7 @@ impl UiSubSection for ShowGizmo<'_, '_> {
                         avg_transform
                     }
                     _ => {
-                        let Some(first_selected_transform) = self.selected_q.iter().next() else {
+                        let Some(first_selected_transform) = self.q_selected.iter().next() else {
                             return;
                         };
                         Transform {
@@ -120,9 +120,9 @@ impl UiSubSection for ShowGizmo<'_, '_> {
             }
             let model_matrix = gizmo_transform_point.compute_matrix();
 
-            let mode = match *self.transform_mode {
-                TransformMode::GizmoTranslate => GizmoMode::Translate,
-                TransformMode::GizmoRotate => GizmoMode::Rotate,
+            let mode = match *self.edit_mode {
+                EditMode::Translate => GizmoMode::Translate,
+                EditMode::Rotate => GizmoMode::Rotate,
                 _ => GizmoMode::Translate,
             };
 
@@ -146,17 +146,18 @@ impl UiSubSection for ShowGizmo<'_, '_> {
 
                 if single_selected {
                     // if we have a single point selected assign the gizmo response directly
-                    *self.selected_q.single_mut() = gizmo_transform;
+                    *self.q_selected.single_mut() = gizmo_transform;
                 } else {
                     // otherwise, calculate the delta, and apply that delta to each selected point
                     let translation_delta =
                         gizmo_transform.translation - gizmo_transform_point.translation;
 
-                    for mut selected in self.selected_q.iter_mut() {
+                    for mut selected in self.q_selected.iter_mut() {
                         selected.translation += translation_delta;
-
                         if self.gizmo_options.gizmo_origin == GizmoOrigin::Individual {
-                            selected.rotate_local(gizmo_transform.rotation);
+                            selected.rotate(gizmo_transform.rotation);
+                            // this prevents a weird issue where the points would slowly squash
+                            selected.rotation = selected.rotation.normalize();
                         } else {
                             selected.rotate_around(
                                 gizmo_transform.translation,

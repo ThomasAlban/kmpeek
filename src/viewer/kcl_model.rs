@@ -84,7 +84,7 @@ pub fn spawn_model(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut model: Query<Entity, With<KCLModelSection>>,
+    mut q_model: Query<Entity, With<KCLModelSection>>,
     mut ev_kcl_file_selected: EventReader<KclFileSelected>,
     settings: Res<AppSettings>,
 ) {
@@ -95,7 +95,7 @@ pub fn spawn_model(
         return;
     }
     // despawn all entities with KCLModelSection (so that we have a clean slate)
-    for entity in model.iter_mut() {
+    for entity in q_model.iter_mut() {
         commands.entity(entity).despawn();
     }
     commands.remove_resource::<Kcl>();
@@ -147,7 +147,7 @@ pub fn spawn_model(
 }
 
 pub fn update_kcl_model(
-    mut query: Query<
+    mut q_kcl: Query<
         (
             &mut Visibility,
             &KCLModelSection,
@@ -166,7 +166,7 @@ pub fn update_kcl_model(
         ev_kcl_model_updated.clear();
     }
 
-    for (mut visibility, kcl_model_section, standard_material) in query.iter_mut() {
+    for (mut visibility, kcl_model_section, standard_material) in q_kcl.iter_mut() {
         let i = kcl_model_section.0;
         *visibility = if settings.kcl_model.visible[i] {
             Visibility::Inherited

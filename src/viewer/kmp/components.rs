@@ -1,11 +1,11 @@
-use crate::util::kmp_file::*;
+use crate::util::kmp_file::{Area, Came, Enpt, Gobj, Itpt, Ktpt, Poti, PotiPoint, Stgi};
 use bevy::prelude::*;
 use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 
 #[derive(Component, Default)]
 pub struct KmpSection;
 
-pub trait FromKmp<T: KmpData> {
+pub trait FromKmp<T> {
     fn from_kmp(data: &T) -> Self;
 }
 
@@ -27,7 +27,7 @@ impl FromKmp<Stgi> for TrackInfo {
         Self {
             track_type: TrackType::Race,
             lap_count: data.lap_count,
-            speed_mod: data.speed_mod,
+            speed_mod: 0.,
             lens_flare_color: data.flare_color,
             lens_flare_flashing: data.lens_flare_flashing == 1,
             first_player_pos: data.pole_pos.into(),
@@ -127,7 +127,7 @@ impl FromKmp<Gobj> for Object {
     fn from_kmp(data: &Gobj) -> Self {
         Self {
             object_id: data.object_id,
-            scale: data.scale,
+            scale: data.scale.into(),
             route: data.route,
             settings: data.settings,
             presence_flags: data.presence_flags,
@@ -178,7 +178,7 @@ impl FromKmp<Area> for AreaPoint {
         Self {
             shape: data.shape.into(),
             priority: data.priority,
-            scale: data.scale,
+            scale: data.scale.into(),
             kind: match data.kind {
                 0 => AreaKind::Camera(AreaCameraIndex(data.came_index)),
                 1 => AreaKind::EnvEffect(data.setting_1.into()),
@@ -323,8 +323,8 @@ impl FromKmp<Came> for KmpCamera {
             movie: data.movie,
             zoom_start: data.zoom_start,
             zoom_end: data.zoom_end,
-            view_start: data.view_start,
-            view_end: data.view_end,
+            view_start: data.view_start.into(),
+            view_end: data.view_end.into(),
             time: data.time,
         }
     }

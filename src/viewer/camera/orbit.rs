@@ -96,11 +96,11 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
 }
 
 fn orbit_cam(
-    primary_window: Query<&mut Window, With<PrimaryWindow>>,
-    mut mouse_motion: EventReader<MouseMotion>,
-    mut mouse_scroll: EventReader<MouseWheel>,
+    q_window: Query<&mut Window, With<PrimaryWindow>>,
+    mut ev_mouse_motion: EventReader<MouseMotion>,
+    mut ev_mouse_scroll: EventReader<MouseWheel>,
     mouse_buttons: Res<Input<MouseButton>>,
-    mut query: Query<(&mut OrbitCam, &mut Transform, &Projection)>,
+    mut q_orbit_cam: Query<(&mut OrbitCam, &mut Transform, &Projection)>,
     keys: Res<Input<KeyCode>>,
     settings: Res<AppSettings>,
     mouse_in_viewport: Res<MouseInViewport>,
@@ -109,7 +109,7 @@ fn orbit_cam(
         return;
     }
 
-    let window = primary_window.get_single().unwrap();
+    let window = q_window.get_single().unwrap();
 
     let mut pan = Vec2::ZERO;
     let mut rotation_move = Vec2::ZERO;
@@ -126,17 +126,17 @@ fn orbit_cam(
             }
         }
         if rotate {
-            for ev in mouse_motion.read() {
+            for ev in ev_mouse_motion.read() {
                 rotation_move += ev.delta * settings.camera.orbit.rotate_sensitivity;
             }
         } else {
-            for ev in mouse_motion.read() {
+            for ev in ev_mouse_motion.read() {
                 pan += ev.delta * settings.camera.orbit.pan_sensitivity;
             }
         }
     }
 
-    for ev in mouse_scroll.read() {
+    for ev in ev_mouse_scroll.read() {
         scroll += ev.y;
     }
 
@@ -146,7 +146,7 @@ fn orbit_cam(
         orbit_button_changed = true;
     }
 
-    for (mut orbit_cam, mut transform, projection) in query.iter_mut() {
+    for (mut orbit_cam, mut transform, projection) in q_orbit_cam.iter_mut() {
         if orbit_button_changed {
             // only check for upside down when orbiting started or ended this frame
             // if the camera is "upside" down, panning horizontally would be inverted, so invert the input to make it correct
@@ -205,5 +205,5 @@ fn orbit_cam(
     }
     // consume any remaining events, so they don't pile up if we don't need them
     // (and also to avoid Bevy warning us about not checking events every frame update)
-    mouse_motion.clear();
+    ev_mouse_motion.clear();
 }

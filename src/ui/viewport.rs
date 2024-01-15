@@ -39,11 +39,10 @@ fn setup_viewport(
     let image: Image = Image {
         texture_descriptor: TextureDescriptor {
             label: None,
-            size: Extent3d {
-                width: 0,
-                height: 0,
-                ..default()
-            },
+            // initialised as a 1x1 texture (the default extent 3d). This will be immediately updated in the update viewport ui function
+            // when we know how large the image should be.
+            // can't set this to 0x0 as otherwise it works fine on macos but crashes on windows
+            size: Extent3d::default(),
             dimension: TextureDimension::D2,
             format: TextureFormat::Bgra8UnormSrgb,
             mip_level_count: 1,

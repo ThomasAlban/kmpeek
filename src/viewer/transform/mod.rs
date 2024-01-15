@@ -5,7 +5,7 @@ pub mod select;
 use self::{
     gizmo::TransformGizmoPlugin,
     kcl_snap::snap_to_kcl,
-    select::{deselect_on_mode_change, select, SelectSet},
+    select::{deselect_on_mode_change, select, select_box, SelectBox, SelectSet},
 };
 use crate::ui::{ui_state::AppModeChanged, update_ui::UpdateUiSet};
 use bevy::prelude::*;
@@ -19,10 +19,11 @@ pub struct MousePickingPlugin;
 impl Plugin for MousePickingPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((DefaultRaycastingPlugin, OutlinePlugin, TransformGizmoPlugin))
-            .init_resource::<TransformMode>()
+            .init_resource::<EditMode>()
+            .init_resource::<SelectBox>()
             .add_systems(
                 Update,
-                (apply_deferred, select, apply_deferred)
+                (select, select_box)
                     .chain()
                     .in_set(SelectSet)
                     .after(UpdateUiSet)
@@ -36,10 +37,11 @@ impl Plugin for MousePickingPlugin {
     }
 }
 
-#[derive(Resource, Default, PartialEq, EnumIter)]
-pub enum TransformMode {
+#[derive(Resource, Default, PartialEq, EnumIter, Debug)]
+pub enum EditMode {
     #[default]
-    KclSnap,
-    GizmoTranslate,
-    GizmoRotate,
+    Tweak,
+    SelectBox,
+    Translate,
+    Rotate,
 }

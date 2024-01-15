@@ -1,27 +1,27 @@
 use super::{
     select::{cast_ray_from_cam, get_ray_from_cam, scale_viewport_pos, Selected},
-    TransformMode,
+    EditMode,
 };
 use crate::{ui::ui_state::ViewportRect, viewer::kcl_model::KCLModelSection};
 use bevy::{prelude::*, utils::HashMap, window::PrimaryWindow};
 use bevy_mod_raycast::prelude::*;
 
 pub fn snap_to_kcl(
-    mut selected: Query<(&mut Transform, Entity), With<Selected>>,
+    mut q_selected: Query<(&mut Transform, Entity), With<Selected>>,
     mouse_buttons: Res<Input<MouseButton>>,
-    camera_query: Query<(&Camera, &GlobalTransform)>,
-    window: Query<&Window, With<PrimaryWindow>>,
+    q_camera: Query<(&Camera, &GlobalTransform)>,
+    q_window: Query<&Window, With<PrimaryWindow>>,
     viewport_rect: Res<ViewportRect>,
     mut raycast: Raycast,
-    kcl_q: Query<&KCLModelSection>,
-    transform_mode: Res<TransformMode>,
+    q_kcl: Query<&KCLModelSection>,
+    edit_mode: Res<EditMode>,
 
     mut initial_offset: Local<Vec2>,
     mut initial_intersection_distance: Local<f32>,
     mut initial_mouse_pos: Local<Vec2>,
     mut position_differences: Local<HashMap<Entity, Vec3>>,
 ) {
-    if *transform_mode != TransformMode::KclSnap {
+    if *edit_mode != EditMode::Tweak {
         return;
     }
 
@@ -29,12 +29,12 @@ pub fn snap_to_kcl(
     if !mouse_buttons.pressed(MouseButton::Left) {
         return;
     };
-    let window = window.get_single().unwrap();
+    let window = q_window.get_single().unwrap();
     let Some(mouse_pos) = window.cursor_position() else {
         return;
     };
     // get the active camera
-    let cam = camera_query
+    let cam = q_camera
         .iter()
         .filter(|cam| cam.0.is_active)
         .collect::<Vec<(&Camera, &GlobalTransform)>>()[0];
@@ -45,13 +45,13 @@ pub fn snap_to_kcl(
         *initial_mouse_pos = mouse_pos;
         // get the transform of the thing the mouse has just clicked on
         let mouse_over = cast_ray_from_cam(cam, scaled_mouse_pos, &mut raycast, |e| {
-            selected.contains(e)
+            q_selected.contains(e)
         });
         let mouse_over = mouse_over.first();
         let Some((mouse_over, _)) = mouse_over else {
             return;
         };
-        let (main_point_transform, _) = selected.get(*mouse_over).unwrap();
+        let (main_point_transform, _) = q_selected.get(*mouse_over).unwrap();
 
         // get the position of the entity we are going to start dragging
         let pos = main_point_transform.translation;
@@ -67,7 +67,7 @@ pub fn snap_to_kcl(
             .distance(main_point_transform.translation);
 
         // go through and set the position differences of each selected entity relative to this one
-        for selected in selected.iter() {
+        for selected in q_selected.iter() {
             let position_difference = selected.0.translation - main_point_transform.translation;
             position_differences.insert(selected.1, position_difference);
         }
@@ -83,12 +83,12 @@ pub fn snap_to_kcl(
     // so that when an entity is initially clicked, it's transform doesn't change even though they weren't perfectly accurate with the click
     let intersections =
         cast_ray_from_cam(cam, scaled_mouse_pos + *initial_offset, &mut raycast, |e| {
-            kcl_q.contains(e)
+            q_kcl.contains(e)
         });
 
     if let Some(intersection) = intersections.first() {
         // if there is an intersection with the kcl, snap to the kcl
-        for mut selected in selected.iter_mut() {
+        for mut selected in q_selected.iter_mut() {
             let Some(position_difference) = position_differences.get(&selected.1) else {
                 return;
             };
@@ -97,7 +97,7 @@ pub fn snap_to_kcl(
     } else {
         // if there is no intersection with the kcl, keep the same distance from the camera as when we started dragging the point
         let ray = get_ray_from_cam(cam, scaled_mouse_pos + *initial_offset);
-        for mut selected in selected.iter_mut() {
+        for mut selected in q_selected.iter_mut() {
             selected.0.translation = ray.position(*initial_intersection_distance)
                 + *position_differences.get(&selected.1).unwrap();
         }

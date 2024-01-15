@@ -4,7 +4,7 @@ use bevy::{math::vec3, prelude::*};
 use bevy_mod_outline::{OutlineBundle, OutlineVolume};
 
 use crate::{
-    util::kmp_file::{Jgpt, Kmp, KmpData, KmpSectionName, Section},
+    util::kmp_file::{Jgpt, Kmp, KmpGetSection, KmpPositionPoint, KmpRotationPoint},
     viewer::normalize::Normalize,
 };
 
@@ -48,7 +48,7 @@ impl PointMaterials {
 }
 
 pub fn spawn_point_section<
-    T: KmpData + KmpSectionName + Send + 'static + Clone + Reflect + TypePath + FromReflect + Struct,
+    T: KmpGetSection + KmpPositionPoint + KmpRotationPoint + Send + 'static + Clone,
     U: Component + FromKmp<T>,
 >(
     commands: &mut Commands,
@@ -57,14 +57,11 @@ pub fn spawn_point_section<
     materials: PointMaterials,
     outline: OutlineSettings,
 ) {
-    let node_entries: &[T] = &kmp
-        .get_field::<Section<T>>(&T::section_name())
-        .unwrap()
-        .entries;
+    let node_entries = &T::get_section(kmp.as_ref()).entries;
 
     for node in node_entries.iter() {
-        let position = node.get_field::<Vec3>("position").unwrap();
-        let euler_rot = node.get_field::<Vec3>("rotation").unwrap();
+        let position: Vec3 = node.get_position().into();
+        let euler_rot: Vec3 = node.get_rotation().into();
         let rotation = Quat::from_euler(
             EulerRot::XYZ,
             euler_rot.x.to_radians(),
@@ -76,7 +73,7 @@ pub fn spawn_point_section<
                 PbrBundle {
                     mesh: meshes.sphere.clone(),
                     material: materials.point.clone(),
-                    transform: Transform::from_translation(*position).with_rotation(rotation),
+                    transform: Transform::from_translation(position).with_rotation(rotation),
                     visibility: Visibility::Hidden,
                     ..default()
                 },
@@ -133,11 +130,11 @@ pub fn spawn_respawn_point_section(
     materials: PointMaterials,
     outline: OutlineSettings,
 ) {
-    let node_entries: &[Jgpt] = &kmp.get_field::<Section<Jgpt>>("jgpt").unwrap().entries;
+    let node_entries = &Jgpt::get_section(kmp.as_ref()).entries;
 
     for node in node_entries.iter() {
-        let position = node.get_field::<Vec3>("position").unwrap();
-        let euler_rot = node.get_field::<Vec3>("rotation").unwrap();
+        let position: Vec3 = node.position.into();
+        let euler_rot: Vec3 = node.rotation.into();
         let rotation = Quat::from_euler(
             EulerRot::XYZ,
             euler_rot.x.to_radians(),
@@ -152,7 +149,7 @@ pub fn spawn_respawn_point_section(
         commands
             .spawn((
                 SpatialBundle {
-                    transform: Transform::from_translation(*position).with_rotation(rotation),
+                    transform: Transform::from_translation(position).with_rotation(rotation),
                     visibility: Visibility::Hidden,
                     ..default()
                 },
