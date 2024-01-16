@@ -1,4 +1,4 @@
-mod mode;
+mod edit;
 mod settings;
 mod view;
 mod viewport;
@@ -7,12 +7,11 @@ pub use settings::*;
 pub use view::*;
 pub use viewport::*;
 
-use self::mode::ShowModeTab;
-use super::{
-    settings::AppSettings,
-    tabs::{ShowSettingsTab, ShowViewTab, ShowViewportTab},
-    update_ui::UiSection,
+use self::{
+    edit::ShowEditTab, settings::ShowSettingsTab, view::ShowViewTab, viewport::ShowViewportTab,
 };
+
+use super::{settings::AppSettings, update_ui::UiSection};
 use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::{egui, EguiContexts};
 use bevy_pkv::PkvStore;
@@ -43,8 +42,11 @@ pub struct DockTree(DockState<Tab>);
 impl Default for DockTree {
     fn default() -> Self {
         let mut tree = DockState::new(vec![Tab::Viewport]);
+        let right_index =
+            tree.main_surface_mut()
+                .split_right(NodeIndex::root(), 0.8, vec![Tab::View]);
         tree.main_surface_mut()
-            .split_left(NodeIndex::root(), 0.2, vec![Tab::Mode]);
+            .split_below(right_index[1], 0.45, vec![Tab::Edit]);
         Self(tree)
     }
 }
@@ -56,8 +58,9 @@ pub trait UiSubSection {
 #[derive(Display, PartialEq, EnumIter, Serialize, Deserialize, Clone, Copy)]
 pub enum Tab {
     Viewport,
-    Mode,
     View,
+    Edit,
+    // Mode,
     Settings,
 }
 
@@ -69,8 +72,8 @@ pub struct TabViewer<'w, 's> {
         's,
         (
             ShowViewportTab<'w, 's>,
-            ShowModeTab<'w, 's>,
             ShowViewTab<'w>,
+            ShowEditTab,
             ShowSettingsTab<'w, 's>,
         ),
     >,
@@ -81,11 +84,9 @@ impl egui_dock::TabViewer for TabViewer<'_, '_> {
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
         // we can do different things inside the tab depending on its name
         match tab {
-            Tab::Viewport => {
-                self.p.p0().show(ui);
-            }
-            Tab::Mode => self.p.p1().show(ui),
-            Tab::View => self.p.p2().show(ui),
+            Tab::Viewport => self.p.p0().show(ui),
+            Tab::View => self.p.p1().show(ui),
+            Tab::Edit => self.p.p2().show(ui),
             Tab::Settings => self.p.p3().show(ui),
         };
     }

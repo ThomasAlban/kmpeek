@@ -5,15 +5,15 @@ pub mod select;
 use self::{
     gizmo::TransformGizmoPlugin,
     kcl_snap::snap_to_kcl,
-    select::{deselect_on_mode_change, select, select_box, SelectBox, SelectSet},
+    select::{deselect_if_not_visible, select, select_box, SelectBox, SelectSet},
 };
-use crate::ui::{ui_state::AppModeChanged, update_ui::UpdateUiSet};
+use crate::ui::update_ui::UpdateUiSet;
 use bevy::prelude::*;
 use bevy_mod_outline::OutlinePlugin;
 use bevy_mod_raycast::DefaultRaycastingPlugin;
 use strum_macros::EnumIter;
 
-use super::normalize::UpdateNormalizeSet;
+use super::{kmp::KmpVisibilityUpdate, normalize::UpdateNormalizeSet};
 
 pub struct MousePickingPlugin;
 impl Plugin for MousePickingPlugin {
@@ -32,7 +32,7 @@ impl Plugin for MousePickingPlugin {
             .add_systems(Update, snap_to_kcl.after(SelectSet))
             .add_systems(
                 Update,
-                deselect_on_mode_change.run_if(on_event::<AppModeChanged>()),
+                deselect_if_not_visible.run_if(on_event::<KmpVisibilityUpdate>()),
             );
     }
 }

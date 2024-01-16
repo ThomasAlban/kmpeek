@@ -11,7 +11,6 @@ use std::{
     env,
     path::{Path, PathBuf},
 };
-use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 
 pub struct UiStatePlugin;
 impl Plugin for UiStatePlugin {
@@ -24,8 +23,6 @@ impl Plugin for UiStatePlugin {
             .insert_resource(MouseInViewport(false))
             .insert_resource(ViewportRect(Rect::from_corners(Vec2::ZERO, Vec2::ZERO)))
             .insert_resource(ShowModesCollapsed(None))
-            .insert_resource(AppMode::TrackInfo)
-            .add_event::<AppModeChanged>()
             .add_systems(
                 Startup,
                 (apply_deferred, check_cmd_args)
@@ -49,26 +46,6 @@ pub struct MouseInViewport(pub bool);
 pub struct ViewportRect(pub Rect);
 #[derive(Resource)]
 pub struct ShowModesCollapsed(pub Option<f32>);
-
-#[derive(Display, EnumString, IntoStaticStr, EnumIter, PartialEq, Clone, Copy, Resource)]
-pub enum AppMode {
-    #[strum(serialize = "Track Info")]
-    TrackInfo,
-    #[strum(serialize = "Start/Finish Points")]
-    StartFinishPoints,
-    Paths,
-    #[strum(serialize = "Checkpoints & Respawns")]
-    CheckpointsRespawns,
-    Objects,
-    Cameras,
-    #[strum(serialize = "Routes & Areas")]
-    RoutesAreas,
-    #[strum(serialize = "Free Edit")]
-    FreeEdit,
-}
-
-#[derive(Event, Default)]
-pub struct AppModeChanged;
 
 #[derive(Serialize, Deserialize, Resource, Deref, DerefMut)]
 pub struct Increment(pub u32);

@@ -1,6 +1,4 @@
-use super::{
-    file_dialog::ShowFileDialog, menu_bar::ShowMenuBar, tabs::ShowDockArea, top_bar::ShowTopBar,
-};
+use super::{file_dialog::ShowFileDialog, menu_bar::ShowMenuBar, tabs::ShowDockArea};
 use bevy::prelude::*;
 use bevy_egui::{egui::TextureId, EguiContexts};
 use std::path::PathBuf;
@@ -37,9 +35,8 @@ fn setup_ui_images(mut contexts: EguiContexts) {
     egui_extras::install_image_loaders(contexts.ctx_mut());
 }
 
-fn update_ui(mut p: ParamSet<(ShowMenuBar, ShowTopBar, ShowDockArea, ShowFileDialog)>) {
+fn update_ui(mut p: ParamSet<(ShowMenuBar, ShowDockArea, ShowFileDialog)>) {
     p.p0().show();
     p.p1().show();
     p.p2().show();
-    p.p3().show();
 }

@@ -98,8 +98,11 @@ pub fn snap_to_kcl(
         // if there is no intersection with the kcl, keep the same distance from the camera as when we started dragging the point
         let ray = get_ray_from_cam(cam, scaled_mouse_pos + *initial_offset);
         for mut selected in q_selected.iter_mut() {
-            selected.0.translation = ray.position(*initial_intersection_distance)
-                + *position_differences.get(&selected.1).unwrap();
+            let Some(position_difference) = position_differences.get(&selected.1) else {
+                continue;
+            };
+            selected.0.translation =
+                ray.position(*initial_intersection_distance) + *position_difference;
         }
     }
 }

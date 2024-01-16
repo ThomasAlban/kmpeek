@@ -32,6 +32,7 @@ pub struct AppSettings {
     pub open_course_kcl_in_directory: bool,
     pub reset_tree: bool,
     pub increment: u32,
+    pub view_multiple: bool,
 }
 impl Default for AppSettings {
     fn default() -> Self {
@@ -42,6 +43,7 @@ impl Default for AppSettings {
             open_course_kcl_in_directory: true,
             reset_tree: false,
             increment: 1,
+            view_multiple: false,
         }
     }
 }

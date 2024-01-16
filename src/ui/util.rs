@@ -1,9 +1,11 @@
+#![allow(dead_code)]
+
 use std::{
     fmt::Display,
     ops::{AddAssign, RangeInclusive, SubAssign},
 };
 
-use bevy_egui::egui::{self, emath::Numeric, Button, Ui, Vec2};
+use bevy_egui::egui::{self, emath::Numeric, Button, ImageButton, ImageSource, Response, Ui, Vec2};
 
 pub fn combobox_enum<T>(
     ui: &mut Ui,
@@ -36,19 +38,15 @@ pub fn num_edit<Num>(
     ui: &mut Ui,
     value: &mut Num,
     label: Option<&'static str>,
-    hover: Option<&'static str>,
     range: Option<RangeInclusive<Num>>,
     increment: Option<Num>,
-) where
+) -> Response
+where
     Num: Numeric + AddAssign + SubAssign,
 {
     ui.horizontal(|ui| {
         if let Some(label) = label {
-            if let Some(hover) = hover {
-                ui.label(label).on_hover_text(hover);
-            } else {
-                ui.label(label);
-            }
+            ui.label(label);
         }
 
         let mut drag_value = egui::DragValue::new(value).speed(0.05);
@@ -60,7 +58,8 @@ pub fn num_edit<Num>(
         if let Some(increment) = increment {
             increment_buttons(ui, value, &increment);
         }
-    });
+    })
+    .response
 }
 
 pub fn increment_buttons<Num>(ui: &mut Ui, value: &mut Num, increment: &Num)
@@ -80,4 +79,29 @@ where
     {
         *value += *increment;
     }
+}
+
+pub fn image_selectable_value<'a, Value: PartialEq>(
+    ui: &mut egui::Ui,
+    size: f32,
+    current: &mut Value,
+    selected: Value,
+    img: impl Into<ImageSource<'a>>,
+) -> Response {
+    let img = egui::Image::new(img);
+    // scale up the svg image by the window scale factor so it doesn't look blurry on lower resolution screens
+    img.load_for_size(
+        ui.ctx(),
+        egui::Vec2::splat(size) * ui.ctx().pixels_per_point(),
+    )
+    .unwrap();
+
+    let res = ui.allocate_ui(egui::Vec2::splat(size), |ui| {
+        let btn = ui.add(ImageButton::new(img).selected(*current == selected));
+        if btn.clicked() {
+            *current = selected;
+        };
+        btn
+    });
+    res.inner
 }

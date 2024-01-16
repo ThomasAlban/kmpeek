@@ -10,7 +10,6 @@ mod keybinds;
 mod menu_bar;
 pub mod settings;
 pub mod tabs;
-mod top_bar;
 pub mod ui_state;
 pub mod update_ui;
 mod util;

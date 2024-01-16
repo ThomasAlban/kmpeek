@@ -119,15 +119,19 @@ pub fn select(
     }
 }
 
-pub fn deselect_on_mode_change(
+pub fn deselect_if_not_visible(
     mut commands: Commands,
-    q_selected: Query<Entity, With<Selected>>,
+    q_selected: Query<(Entity, &Visibility), With<Selected>>,
     mut q_outline: Query<&mut OutlineVolume>,
 ) {
-    for selected in q_selected.iter() {
-        commands.entity(selected).remove::<Selected>();
-        if let Ok(mut outline) = q_outline.get_mut(selected) {
-            outline.visible = false;
+    // deselect any entity that isn't visible
+    for (e, selected) in q_selected.iter() {
+        if selected != Visibility::Visible {
+            commands.entity(e).remove::<Selected>();
+            // remove the outline
+            if let Ok(mut outline) = q_outline.get_mut(e) {
+                outline.visible = false;
+            }
         }
     }
 }

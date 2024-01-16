@@ -1,6 +1,7 @@
 use crate::{
     ui::{
         ui_state::{MouseInViewport, ViewportRect},
+        util::image_selectable_value,
         viewport::ViewportImage,
     },
     viewer::transform::{
@@ -15,9 +16,7 @@ use bevy::{
     ecs::system::SystemParam, math::vec2, prelude::*, render::render_resource::Extent3d,
     window::PrimaryWindow,
 };
-use bevy_egui::egui::{
-    self, include_image, Color32, ImageButton, ImageSource, Margin, Response, Rounding, Stroke,
-};
+use bevy_egui::egui::{self, include_image, Color32, Margin, Rounding, Stroke};
 use egui_gizmo::GizmoOrientation;
 
 #[derive(SystemParam)]
@@ -42,7 +41,6 @@ impl UiSubSection for ShowViewportTab<'_, '_> {
         let viewport_image = p.image_assets.get_mut(p.viewport.handle.id()).unwrap();
         // let viewport_tex_id = p.contexts.image_id(&p.viewport).unwrap();
         let window = p.q_window.get_single().unwrap();
-        let window_sf = window.scale_factor() as f32;
 
         let rect = ui.min_rect();
 
@@ -213,29 +211,4 @@ impl UiSubSection for ShowViewportTab<'_, '_> {
                 });
         });
     }
-}
-
-fn image_selectable_value<'a, Value: PartialEq>(
-    ui: &mut egui::Ui,
-    size: f32,
-    current: &mut Value,
-    selected: Value,
-    img: impl Into<ImageSource<'a>>,
-) -> Response {
-    let img = egui::Image::new(img);
-    // scale up the svg image by the window scale factor so it doesn't look blurry on lower resolution screens
-    img.load_for_size(
-        ui.ctx(),
-        egui::Vec2::splat(size) * ui.ctx().pixels_per_point(),
-    )
-    .unwrap();
-
-    let res = ui.allocate_ui(egui::Vec2::splat(size), |ui| {
-        let btn = ui.add(ImageButton::new(img).selected(*current == selected));
-        if btn.clicked() {
-            *current = selected;
-        };
-        btn
-    });
-    res.inner
 }

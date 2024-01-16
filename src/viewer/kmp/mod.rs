@@ -11,17 +11,14 @@ use self::{
         PathMeshes,
     },
     point::{spawn_point_section, spawn_respawn_point_section, PointMaterials, PointMeshes},
+    sections::KmpEditMode,
 };
 use super::normalize::UpdateNormalizeSet;
 use crate::{
-    ui::{
-        settings::AppSettings,
-        ui_state::{AppMode, AppModeChanged},
-        update_ui::KmpFileSelected,
-    },
+    ui::{settings::AppSettings, update_ui::KmpFileSelected},
     util::kmp_file::*,
     util::shapes::{Cone, Cylinder},
-    viewer::kmp::sections::KmpSections,
+    viewer::kmp::sections::KmpModelSections,
 };
 use bevy::{prelude::*, window::RequestRedraw};
 use binrw::BinRead;
@@ -31,16 +28,17 @@ pub struct KmpPlugin;
 
 impl Plugin for KmpPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<KmpVisibilityUpdate>().add_systems(
-            Update,
-            (
-                spawn_model.run_if(on_event::<KmpFileSelected>()),
-                // run update node links before update normalize so that the updated positions are normalized
-                update_node_links.before(UpdateNormalizeSet),
-                update_visible.run_if(on_event::<KmpVisibilityUpdate>()),
-                set_visible_for_app_mode.run_if(on_event::<AppModeChanged>()),
-            ),
-        );
+        app.add_event::<KmpVisibilityUpdate>()
+            .init_resource::<KmpEditMode>()
+            .add_systems(
+                Update,
+                (
+                    spawn_model.run_if(on_event::<KmpFileSelected>()),
+                    // run update node links before update normalize so that the updated positions are normalized
+                    update_node_links.before(UpdateNormalizeSet),
+                    update_visible.run_if(on_event::<KmpVisibilityUpdate>()),
+                ),
+            );
     }
 }
 
@@ -223,55 +221,6 @@ pub fn spawn_model(
     ev_kmp_visibility_update.send_default();
 }
 
-fn set_visible_for_app_mode(
-    mut settings: ResMut<AppSettings>,
-    mode: Res<AppMode>,
-    mut ev_kmp_visibility_update: EventWriter<KmpVisibilityUpdate>,
-) {
-    let sections = &mut settings.kmp_model.sections;
-
-    sections.visible = match *mode {
-        AppMode::StartFinishPoints => {
-            // show all start and finish points
-            let mut array = [false; 11];
-            array[0] = true;
-            array[10] = true;
-            array
-        }
-        AppMode::Paths => {
-            // hide other sections, leave enemy and item paths untouched
-            let mut array = [false; 11];
-            array[1] = true;
-            array[2] = true;
-            array
-        }
-        AppMode::CheckpointsRespawns => {
-            let mut array = [false; 11];
-            array[3] = true;
-            array[4] = true;
-            array
-        }
-        AppMode::Objects => {
-            let mut array = [false; 11];
-            array[5] = true;
-            array
-        }
-        AppMode::Cameras => {
-            let mut array = [false; 11];
-            array[8] = true;
-            array
-        }
-        AppMode::RoutesAreas => {
-            let mut array = [false; 11];
-            array[6] = true;
-            array[7] = true;
-            array
-        }
-        _ => [false; 11],
-    };
-    ev_kmp_visibility_update.send_default();
-}
-
 #[derive(Event, Default)]
 pub struct KmpVisibilityUpdate;
 
@@ -321,29 +270,32 @@ fn update_visible(
         };
     }
 
-    set_visibility!(q.p0().p0(), usize::from(KmpSections::StartPoints));
-    set_visibility!(q.p0().p1(), usize::from(KmpSections::EnemyPaths));
-    set_visibility!(q.p0().p2(), usize::from(KmpSections::ItemPaths));
-    set_visibility!(q.p0().p3(), usize::from(KmpSections::Objects));
-    set_visibility!(q.p0().p4(), usize::from(KmpSections::Routes));
-    set_visibility!(q.p0().p5(), usize::from(KmpSections::Area));
-    set_visibility!(q.p1().p0(), usize::from(KmpSections::Cameras));
-    set_visibility!(q.p1().p1(), usize::from(KmpSections::RespawnPoints));
-    set_visibility!(q.p1().p2(), usize::from(KmpSections::CannonPoints));
-    set_visibility!(q.p1().p3(), usize::from(KmpSections::BattleFinishPoints));
+    set_visibility!(q.p0().p0(), usize::from(KmpModelSections::StartPoints));
+    set_visibility!(q.p0().p1(), usize::from(KmpModelSections::EnemyPaths));
+    set_visibility!(q.p0().p2(), usize::from(KmpModelSections::ItemPaths));
+    set_visibility!(q.p0().p3(), usize::from(KmpModelSections::Objects));
+    set_visibility!(q.p0().p4(), usize::from(KmpModelSections::Routes));
+    set_visibility!(q.p0().p5(), usize::from(KmpModelSections::Area));
+    set_visibility!(q.p1().p0(), usize::from(KmpModelSections::Cameras));
+    set_visibility!(q.p1().p1(), usize::from(KmpModelSections::RespawnPoints));
+    set_visibility!(q.p1().p2(), usize::from(KmpModelSections::CannonPoints));
+    set_visibility!(
+        q.p1().p3(),
+        usize::from(KmpModelSections::BattleFinishPoints)
+    );
 
     for (mut visibility, enemy_route, item_route) in q.p1().p4().iter_mut() {
         if enemy_route.is_some() {
             // if it is an enemy path node link
             set_visibility(
                 &mut visibility,
-                sections.visible[usize::from(KmpSections::EnemyPaths)],
+                sections.visible[usize::from(KmpModelSections::EnemyPaths)],
             );
         } else if item_route.is_some() {
             // if it is an item path node link
             set_visibility(
                 &mut visibility,
-                sections.visible[usize::from(KmpSections::ItemPaths)],
+                sections.visible[usize::from(KmpModelSections::ItemPaths)],
             );
         }
     }
