@@ -32,12 +32,7 @@ impl UiSubSection for ShowViewTab<'_> {
         }
 
         for (i, section) in KmpModelSections::iter().enumerate() {
-            egui::collapsing_header::CollapsingState::load_with_default_open(
-                ui.ctx(),
-                section.to_string().into(),
-                false,
-            )
-            .show_header(ui, |ui| {
+            ui.horizontal(|ui| {
                 let mut visible_changed = false;
                 if self.settings.view_multiple {
                     visible_changed = ui
@@ -56,8 +51,7 @@ impl UiSubSection for ShowViewTab<'_> {
                 if visible_changed {
                     self.ev_kmp_visibility_updated.send_default();
                 }
-            })
-            .body(|ui| ui.label("WIP: Show each item in the section"));
+            });
         }
     }
 }

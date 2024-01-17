@@ -2,6 +2,7 @@ use super::gizmo::GizmoOptions;
 use super::EditMode;
 use crate::ui::ui_state::{MouseInViewport, ViewportRect};
 use crate::viewer::kmp::components::KmpSection;
+use bevy::render::view::visibility;
 use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_egui::EguiContexts;
 use bevy_mod_outline::*;
@@ -92,10 +93,6 @@ pub fn select(
     if intersection.is_some() && !shift_key_down {
         for selected in q_selected.iter() {
             commands.entity(selected).remove::<Selected>();
-            // remove the outline
-            if let Ok(mut outline) = q_outline.get_mut(selected) {
-                outline.visible = false;
-            }
         }
     }
     // select the entity
@@ -111,10 +108,6 @@ pub fn select(
         // if we just randomly clicked on nothing then deselect everything
         for selected in q_selected.iter() {
             commands.entity(selected).remove::<Selected>();
-            // remove the outline
-            if let Ok(mut outline) = q_outline.get_mut(selected) {
-                outline.visible = false;
-            }
         }
     }
 }
@@ -122,16 +115,11 @@ pub fn select(
 pub fn deselect_if_not_visible(
     mut commands: Commands,
     q_selected: Query<(Entity, &Visibility), With<Selected>>,
-    mut q_outline: Query<&mut OutlineVolume>,
 ) {
     // deselect any entity that isn't visible
     for (e, selected) in q_selected.iter() {
         if selected != Visibility::Visible {
             commands.entity(e).remove::<Selected>();
-            // remove the outline
-            if let Ok(mut outline) = q_outline.get_mut(e) {
-                outline.visible = false;
-            }
         }
     }
 }
@@ -150,7 +138,6 @@ pub fn select_box(
     mouse_in_viewport: Res<MouseInViewport>,
     q_selectable: Query<(&Transform, Entity, &Visibility), With<KmpSection>>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
-    mut q_outline: Query<&mut OutlineVolume>,
     mut commands: Commands,
     mut select_box: ResMut<SelectBox>,
 
@@ -214,15 +201,26 @@ pub fn select_box(
 
             if select_rect.contains(viewport_pos) {
                 commands.entity(selectable.1).insert(Selected);
-                // add the outline
-                if let Ok(mut outline) = q_outline.get_mut(selectable.1) {
-                    outline.visible = true;
-                }
             }
         }
         *select_box = SelectBox {
             scaled: None,
             unscaled: None,
         };
+    }
+}
+
+pub fn update_outlines(
+    q_entities: Query<(Entity, Has<Selected>, &Visibility), With<KmpSection>>,
+    mut q_outline: Query<&mut OutlineVolume>,
+) {
+    for (entity, is_selected, visibility) in q_entities.iter() {
+        let Ok(mut outline) = q_outline.get_mut(entity) else {
+            continue;
+        };
+        outline.visible = is_selected;
+        if visibility != Visibility::Visible {
+            outline.visible = false;
+        }
     }
 }

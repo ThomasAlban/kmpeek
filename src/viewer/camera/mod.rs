@@ -95,7 +95,6 @@ fn update_active_camera(
         (Entity, &mut Camera),
         (With<TopDownCam>, Without<FlyCam>, Without<OrbitCam>),
     >,
-    // mut commands: Commands,
     mut ev_camera_mode_changed: EventReader<CameraModeChanged>,
 ) {
     for ev in ev_camera_mode_changed.read() {
@@ -105,54 +104,18 @@ fn update_active_camera(
 
         match ev.0 {
             CameraMode::Fly => {
-                // commands
-                //     .entity(fly_cam.0)
-                //     .insert(RaycastSource::<KmpRaycastSet>::new())
-                //     .insert(RaycastSource::<KclRaycastSet>::new());
                 fly_cam.1.is_active = true;
-                // commands
-                //     .entity(orbit_cam.0)
-                //     .remove::<RaycastSource<KmpRaycastSet>>()
-                //     .remove::<RaycastSource<KclRaycastSet>>();
                 orbit_cam.1.is_active = false;
-                // commands
-                //     .entity(topdown_cam.0)
-                //     .remove::<RaycastSource<KmpRaycastSet>>()
-                //     .remove::<RaycastSource<KclRaycastSet>>();
                 topdown_cam.1.is_active = false;
             }
             CameraMode::Orbit => {
-                // commands
-                //     .entity(fly_cam.0)
-                //     .remove::<RaycastSource<KmpRaycastSet>>()
-                //     .remove::<RaycastSource<KclRaycastSet>>();
                 fly_cam.1.is_active = false;
-                // commands
-                //     .entity(orbit_cam.0)
-                //     .insert(RaycastSource::<KmpRaycastSet>::new())
-                //     .insert(RaycastSource::<KclRaycastSet>::new());
                 orbit_cam.1.is_active = true;
-                // commands
-                //     .entity(topdown_cam.0)
-                //     .remove::<RaycastSource<KmpRaycastSet>>()
-                //     .remove::<RaycastSource<KclRaycastSet>>();
                 topdown_cam.1.is_active = false;
             }
             CameraMode::TopDown => {
-                // commands
-                //     .entity(fly_cam.0)
-                //     .remove::<RaycastSource<KmpRaycastSet>>()
-                //     .remove::<RaycastSource<KclRaycastSet>>();
                 fly_cam.1.is_active = false;
-                // commands
-                //     .entity(orbit_cam.0)
-                //     .remove::<RaycastSource<KmpRaycastSet>>()
-                //     .remove::<RaycastSource<KclRaycastSet>>();
                 orbit_cam.1.is_active = false;
-                // commands
-                //     .entity(topdown_cam.0)
-                //     .insert(RaycastSource::<KmpRaycastSet>::new())
-                //     .insert(RaycastSource::<KclRaycastSet>::new());
                 topdown_cam.1.is_active = true;
             }
         }

@@ -5,7 +5,7 @@ pub mod select;
 use self::{
     gizmo::TransformGizmoPlugin,
     kcl_snap::snap_to_kcl,
-    select::{deselect_if_not_visible, select, select_box, SelectBox, SelectSet},
+    select::{deselect_if_not_visible, select, select_box, update_outlines, SelectBox, SelectSet},
 };
 use crate::ui::update_ui::UpdateUiSet;
 use bevy::prelude::*;
@@ -23,7 +23,7 @@ impl Plugin for MousePickingPlugin {
             .init_resource::<SelectBox>()
             .add_systems(
                 Update,
-                (select, select_box)
+                (select, select_box, update_outlines)
                     .chain()
                     .in_set(SelectSet)
                     .after(UpdateUiSet)

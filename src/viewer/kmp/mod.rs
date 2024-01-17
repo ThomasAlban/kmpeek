@@ -135,6 +135,8 @@ pub fn spawn_model(
 
     // --- START POINTS ---
 
+    dbg!(&kmp.ktpt.entries[0].rotation);
+
     spawn_point_section::<Ktpt, StartPoint>(
         &mut commands,
         kmp.clone(),

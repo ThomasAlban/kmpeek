@@ -27,6 +27,10 @@ pub fn snap_to_kcl(
 
     // only snap to kcl if we are currently pressing left click
     if !mouse_buttons.pressed(MouseButton::Left) {
+        // clear the position differences
+        // if mouse_buttons.just_released(MouseButton::Left) {
+        //     // position_differences.clear();
+        // }
         return;
     };
     let window = q_window.get_single().unwrap();

@@ -1,5 +1,6 @@
 mod edit;
 mod settings;
+mod table;
 mod view;
 mod viewport;
 
@@ -8,7 +9,8 @@ pub use view::*;
 pub use viewport::*;
 
 use self::{
-    edit::ShowEditTab, settings::ShowSettingsTab, view::ShowViewTab, viewport::ShowViewportTab,
+    edit::ShowEditTab, settings::ShowSettingsTab, table::ShowTableTab, view::ShowViewTab,
+    viewport::ShowViewportTab,
 };
 
 use super::{settings::AppSettings, update_ui::UiSection};
@@ -60,7 +62,7 @@ pub enum Tab {
     Viewport,
     View,
     Edit,
-    // Mode,
+    Table,
     Settings,
 }
 
@@ -74,6 +76,7 @@ pub struct TabViewer<'w, 's> {
             ShowViewportTab<'w, 's>,
             ShowViewTab<'w>,
             ShowEditTab,
+            ShowTableTab<'w, 's>,
             ShowSettingsTab<'w, 's>,
         ),
     >,
@@ -87,7 +90,8 @@ impl egui_dock::TabViewer for TabViewer<'_, '_> {
             Tab::Viewport => self.p.p0().show(ui),
             Tab::View => self.p.p1().show(ui),
             Tab::Edit => self.p.p2().show(ui),
-            Tab::Settings => self.p.p3().show(ui),
+            Tab::Table => self.p.p3().show(ui),
+            Tab::Settings => self.p.p4().show(ui),
         };
     }
     // show the title of the tab - the 'Tab' type already stores its title anyway
