@@ -1,26 +1,14 @@
-use super::tabs::DockTree;
 use crate::viewer::{
     camera::CameraSettings, kcl_model::KclModelSettings, kmp::settings::KmpModelSettings,
 };
-use bevy::{
-    app::AppExit,
-    prelude::*,
-    window::{exit_on_all_closed, exit_on_primary_closed},
-};
+use bevy::prelude::*;
 use bevy_pkv::PkvStore;
 use serde::{Deserialize, Serialize};
 
 pub struct AppSettingsPlugin;
 impl Plugin for AppSettingsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_app_settings.in_set(SetupAppSettingsSet))
-            .add_systems(
-                PostUpdate,
-                on_app_exit
-                    .after(exit_on_primary_closed)
-                    .after(exit_on_all_closed)
-                    .run_if(on_event::<AppExit>()),
-            );
+        app.add_systems(Startup, setup_app_settings.in_set(SetupAppSettingsSet));
     }
 }
 
@@ -62,11 +50,4 @@ pub fn setup_app_settings(mut commands: Commands, mut pkv: ResMut<PkvStore>) {
     };
 
     commands.insert_resource(settings);
-}
-
-fn on_app_exit(settings: Res<AppSettings>, tree: Res<DockTree>, mut pkv: ResMut<PkvStore>) {
-    // save the user settings
-    pkv.set("settings", settings.as_ref()).unwrap();
-    // save the dock tree
-    pkv.set("tree", tree.as_ref()).unwrap();
 }

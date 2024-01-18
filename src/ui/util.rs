@@ -2,68 +2,39 @@
 
 use std::{
     fmt::Display,
-    ops::{AddAssign, RangeInclusive, SubAssign},
+    ops::{AddAssign, SubAssign},
 };
 
 use bevy::{
     math::{vec3, EulerRot, Quat, Vec3},
     transform::components::Transform,
 };
-use bevy_egui::egui::{self, emath::Numeric, Button, ImageButton, ImageSource, Response, Ui, Vec2};
+use bevy_egui::egui::{
+    self, emath::Numeric, Button, ImageButton, ImageSource, Layout, Response, Ui, Vec2,
+};
 
 pub fn combobox_enum<T>(
     ui: &mut Ui,
     value: &mut T,
-    label: &'static str,
-    hover: Option<&'static str>,
+    id: impl std::hash::Hash,
     width: Option<f32>,
-) where
+) -> Response
+where
     T: strum::IntoEnumIterator + Display + PartialEq + Clone,
 {
-    ui.horizontal(|ui| {
-        if let Some(hover) = hover {
-            ui.label(label).on_hover_text(hover);
-        } else {
-            ui.label(label);
-        }
-        let mut combobox = egui::ComboBox::from_id_source(label).selected_text(value.to_string());
-        if let Some(width) = width {
-            combobox = combobox.width(width);
-        }
-        combobox.show_ui(ui, |ui| {
+    let mut combobox = egui::ComboBox::from_id_source(id).selected_text(value.to_string());
+    combobox = if let Some(width) = width {
+        combobox.width(width)
+    } else {
+        combobox.width(ui.available_width())
+    };
+    combobox
+        .show_ui(ui, |ui| {
             for variant in T::iter() {
                 ui.selectable_value(value, variant.clone(), variant.to_string());
             }
-        });
-    });
-}
-
-pub fn num_edit<Num>(
-    ui: &mut Ui,
-    value: &mut Num,
-    speed: impl Into<f64>,
-    label: Option<&'static str>,
-    range: Option<RangeInclusive<Num>>,
-    num_decimals: Option<usize>,
-) -> Response
-where
-    Num: Numeric + AddAssign + SubAssign,
-{
-    ui.horizontal(|ui| {
-        if let Some(label) = label {
-            ui.label(label);
-        }
-
-        let mut drag_value = egui::DragValue::new(value).speed(speed);
-        if let Some(range) = range {
-            drag_value = drag_value.clamp_range(range);
-        }
-        if let Some(num_decimals) = num_decimals {
-            drag_value = drag_value.fixed_decimals(num_decimals);
-        }
-        ui.add(drag_value)
-    })
-    .inner
+        })
+        .response
 }
 
 pub fn increment_buttons<Num>(ui: &mut Ui, value: &mut Num, increment: &Num)
@@ -111,27 +82,54 @@ pub fn image_selectable_value<'a, Value: PartialEq>(
 }
 
 pub fn drag_vec3(ui: &mut Ui, value: &mut Vec3, speed: f32) -> (Response, Response, Response) {
-    ui.horizontal(|ui| {
-        ui.columns(3, |ui| {
-            let x = ui[0].add(
-                egui::DragValue::new(&mut value.x)
-                    .speed(speed)
-                    .fixed_decimals(1),
-            );
-            let y = ui[1].add(
-                egui::DragValue::new(&mut value.y)
-                    .speed(speed)
-                    .fixed_decimals(1),
-            );
-            let z = ui[2].add(
-                egui::DragValue::new(&mut value.z)
-                    .speed(speed)
-                    .fixed_decimals(1),
-            );
-            (x, y, z)
-        })
+    ui.columns(3, |ui| {
+        let x = ui[0]
+            .centered_and_justified(|ui| {
+                ui.add(
+                    egui::DragValue::new(&mut value.x)
+                        .speed(speed)
+                        .fixed_decimals(1),
+                )
+            })
+            .inner;
+        let y = ui[1]
+            .centered_and_justified(|ui| {
+                ui.add(
+                    egui::DragValue::new(&mut value.y)
+                        .speed(speed)
+                        .fixed_decimals(1),
+                )
+            })
+            .inner;
+        let z = ui[2]
+            .centered_and_justified(|ui| {
+                ui.add(
+                    egui::DragValue::new(&mut value.z)
+                        .speed(speed)
+                        .fixed_decimals(1),
+                )
+            })
+            .inner;
+        (x, y, z)
     })
-    .inner
+    // ui.columns(3, |ui| {
+    //     let x = ui[0].add(
+    //         egui::DragValue::new(&mut value.x)
+    //             .speed(speed)
+    //             .fixed_decimals(1),
+    //     );
+    //     let y = ui[1].add(
+    //         egui::DragValue::new(&mut value.y)
+    //             .speed(speed)
+    //             .fixed_decimals(1),
+    //     );
+    //     let z = ui[2].add(
+    //         egui::DragValue::new(&mut value.z)
+    //             .speed(speed)
+    //             .fixed_decimals(1),
+    //     );
+    //     (x, y, z)
+    // })
 }
 
 pub fn rotation_edit(ui: &mut egui::Ui, transform: &mut Transform, speed: f32) -> bool {

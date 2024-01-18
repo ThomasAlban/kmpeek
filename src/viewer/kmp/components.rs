@@ -62,7 +62,7 @@ impl From<u8> for FirstPlayerPos {
 }
 
 // --- START POINT COMPONENTS ---
-#[derive(Component, Default)]
+#[derive(Component)]
 pub struct StartPoint {
     pub player_index: i16,
 }
@@ -73,6 +73,11 @@ impl FromKmp<Ktpt> for StartPoint {
         }
     }
 }
+impl Default for StartPoint {
+    fn default() -> Self {
+        Self { player_index: -1 }
+    }
+}
 
 // --- ENEMY PATH COMPONENTS ---
 #[derive(Component, Default)]
@@ -80,19 +85,61 @@ pub struct EnemyPathMarker;
 #[derive(Component, Clone)]
 pub struct EnemyPathPoint {
     pub leniency: f32,
-    pub setting_1: u16,
-    pub setting_2: u8,
+    pub setting_1: EnemyPathSetting1,
+    pub setting_2: EnemyPathSetting2,
     pub setting_3: u8,
 }
 impl FromKmp<Enpt> for EnemyPathPoint {
     fn from_kmp(data: &Enpt) -> Self {
         Self {
             leniency: data.leniency,
-            setting_1: data.setting_1,
-            setting_2: data.setting_2,
+            setting_1: match data.setting_1 {
+                0 => EnemyPathSetting1::None,
+                1 => EnemyPathSetting1::RequiresMushroom,
+                2 => EnemyPathSetting1::UseMushroom,
+                3 => EnemyPathSetting1::Wheelie,
+                4 => EnemyPathSetting1::EndWheelie,
+                _ => {
+                    warn!("Invalid ENPT setting 1 found, which has been set to None");
+                    EnemyPathSetting1::None
+                }
+            },
+            setting_2: match data.setting_2 {
+                0 => EnemyPathSetting2::None,
+                1 => EnemyPathSetting2::EndDrift,
+                2 => EnemyPathSetting2::ForbidDrift,
+                3 => EnemyPathSetting2::ForceDrift,
+                _ => {
+                    warn!("Invalid ENPT setting 2 found, which has been set to None");
+                    EnemyPathSetting2::None
+                }
+            },
             setting_3: data.setting_3,
         }
     }
+}
+#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy)]
+pub enum EnemyPathSetting1 {
+    #[default]
+    None,
+    #[strum(serialize = "Requires Mushroom")]
+    RequiresMushroom,
+    #[strum(serialize = "Use Mushroom")]
+    UseMushroom,
+    Wheelie,
+    #[strum(serialize = "End Wheelie")]
+    EndWheelie,
+}
+#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy)]
+pub enum EnemyPathSetting2 {
+    #[default]
+    None,
+    #[strum(serialize = "End Drift")]
+    EndDrift,
+    #[strum(serialize = "Forbid Drift (?)")]
+    ForbidDrift,
+    #[strum(serialize = "ForceDrift")]
+    ForceDrift,
 }
 
 // --- ITEM PATH COMPONENTS ---

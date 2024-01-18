@@ -48,7 +48,7 @@ impl Default for DockTree {
             tree.main_surface_mut()
                 .split_right(NodeIndex::root(), 0.8, vec![Tab::View]);
         tree.main_surface_mut()
-            .split_below(right_index[1], 0.45, vec![Tab::Edit]);
+            .split_below(right_index[1], 0.45, vec![Tab::Table]);
         Self(tree)
     }
 }

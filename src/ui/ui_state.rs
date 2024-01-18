@@ -1,4 +1,7 @@
-use super::settings::{AppSettings, SetupAppSettingsSet};
+use super::{
+    settings::{AppSettings, SetupAppSettingsSet},
+    tabs::DockTree,
+};
 use crate::{
     ui::file_dialog::DialogType,
     ui::update_ui::{KclFileSelected, KmpFileSelected},
@@ -23,6 +26,10 @@ impl Plugin for UiStatePlugin {
             .insert_resource(MouseInViewport(false))
             .insert_resource(ViewportRect(Rect::from_corners(Vec2::ZERO, Vec2::ZERO)))
             .insert_resource(ShowModesCollapsed(None))
+            .add_event::<SaveDockTree>()
+            .add_systems(Update, save_docktree.run_if(on_event::<SaveDockTree>()))
+            .add_systems(Update, reset_docktree.run_if(on_event::<ResetDockTree>()))
+            .add_event::<ResetDockTree>()
             .add_systems(
                 Startup,
                 (apply_deferred, check_cmd_args)
@@ -30,6 +37,18 @@ impl Plugin for UiStatePlugin {
                     .after(SetupAppSettingsSet),
             );
     }
+}
+
+#[derive(Event, Default)]
+pub struct SaveDockTree;
+pub fn save_docktree(mut pkv: ResMut<PkvStore>, tree: Res<DockTree>) {
+    pkv.set("tree", tree.as_ref()).unwrap();
+}
+#[derive(Event, Default)]
+pub struct ResetDockTree;
+pub fn reset_docktree(mut pkv: ResMut<PkvStore>, mut tree: ResMut<DockTree>) {
+    *tree = DockTree::default();
+    pkv.set("tree", tree.as_ref()).unwrap();
 }
 
 #[derive(Resource)]

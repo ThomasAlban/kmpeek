@@ -2,7 +2,6 @@ use super::gizmo::GizmoOptions;
 use super::EditMode;
 use crate::ui::ui_state::{MouseInViewport, ViewportRect};
 use crate::viewer::kmp::components::KmpSection;
-use bevy::render::view::visibility;
 use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_egui::EguiContexts;
 use bevy_mod_outline::*;

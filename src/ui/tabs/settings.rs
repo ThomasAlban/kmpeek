@@ -1,6 +1,10 @@
-use super::UiSubSection;
+use super::{DockTree, UiSubSection};
 use crate::{
-    ui::{file_dialog::ShowFileDialog, settings::AppSettings, ui_state::FileDialogRes},
+    ui::{
+        file_dialog::ShowFileDialog,
+        settings::AppSettings,
+        ui_state::{FileDialogRes, ResetDockTree, SaveDockTree},
+    },
     util::kcl_file::KclFlag,
     viewer::{
         camera::{
@@ -44,14 +48,14 @@ pub struct ShowSettingsTab<'w, 's> {
     ),
     pkv: ResMut<'w, PkvStore>,
     file_dialog_res: ResMut<'w, FileDialogRes>,
+    ev_save_docktree: EventWriter<'w, SaveDockTree>,
+    ev_reset_docktree: EventWriter<'w, ResetDockTree>,
 }
 impl UiSubSection for ShowSettingsTab<'_, '_> {
     fn show(&mut self, ui: &mut egui::Ui) {
         let mut fly_cam = self.q_cams.0.get_single_mut().unwrap();
         let mut orbit_cam = self.q_cams.1.get_single_mut().unwrap();
         let mut topdown_cam = self.q_cams.2.get_single_mut().unwrap();
-
-        ui.label("These settings will be saved when you close the app.");
 
         egui::CollapsingHeader::new("KMP Viewer")
             .default_open(true)
@@ -294,13 +298,20 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
             }
         });
         ui.horizontal(|ui| {
-            if ui.button("Reset Tab Layout").clicked() {
-                self.settings.reset_tree = true;
+            if ui.button("Save Tab Layout").clicked() {
+                self.ev_save_docktree.send_default();
             }
-            if ui.button("Reset All Settings").clicked() {
+            if ui.button("Reset Tab Layout").clicked() {
+                self.ev_reset_docktree.send_default();
+            }
+        });
+        ui.horizontal(|ui| {
+            if ui.button("Save Settings").clicked() {
+                self.pkv.set("settings", self.settings.as_ref()).unwrap();
+            }
+            if ui.button("Reset Settings").clicked() {
                 *self.settings = AppSettings::default();
                 self.pkv.set("settings", self.settings.as_ref()).unwrap();
-                self.settings.reset_tree = true;
             }
         });
     }
