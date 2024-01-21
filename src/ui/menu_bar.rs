@@ -1,7 +1,7 @@
 use super::{
     file_dialog::ShowFileDialog,
     tabs::{DockTree, Tab},
-    ui_state::FileDialogRes,
+    ui_state::{FileDialogRes, ResetDockTree, SaveDockTree},
     update_ui::UiSection,
 };
 use bevy::ecs::system::SystemParam;
@@ -17,6 +17,8 @@ pub struct ShowMenuBar<'w, 's> {
     contexts: EguiContexts<'w, 's>,
     tree: ResMut<'w, DockTree>,
     file_dialog: ResMut<'w, FileDialogRes>,
+    ev_save_docktree: EventWriter<'w, SaveDockTree>,
+    ev_reset_docktree: EventWriter<'w, ResetDockTree>,
 }
 impl UiSection for ShowMenuBar<'_, '_> {
     fn show(&mut self) {
@@ -59,19 +61,29 @@ impl UiSection for ShowMenuBar<'_, '_> {
                 });
 
                 ui.menu_button("Window", |ui| {
+                    if ui.button("Save Tab Layout").clicked() {
+                        self.ev_save_docktree.send_default();
+                        ui.close_menu();
+                    }
+                    if ui.button("Reset Tab Layout").clicked() {
+                        self.ev_reset_docktree.send_default();
+                        ui.close_menu();
+                    }
                     // toggle each tab on or off
                     for tab in Tab::iter() {
                         // search for the tab and see if it currently exists
                         let tab_in_tree = self.tree.find_tab(&tab);
-                        if ui
-                            .selectable_label(tab_in_tree.is_some(), tab.to_string())
-                            .clicked()
-                        {
-                            // remove if it exists, else create it
-                            if let Some(index) = tab_in_tree {
+                        let mut show_tab = tab_in_tree.is_some();
+                        let changed = ui.checkbox(&mut show_tab, tab.to_string()).changed();
+
+                        // if we've changed the check box to checked, create it
+                        // else if we've changed the check box and unchecked it, remove the tab
+                        if changed && show_tab {
+                            self.tree.push_to_focused_leaf(tab);
+                        }
+                        if let Some(index) = tab_in_tree {
+                            if changed && !show_tab {
                                 self.tree.remove_tab(index);
-                            } else {
-                                self.tree.push_to_focused_leaf(tab);
                             }
                         }
                     }

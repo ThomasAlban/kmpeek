@@ -1,4 +1,5 @@
 mod edit;
+mod outliner;
 mod settings;
 mod table;
 mod view;
@@ -9,8 +10,8 @@ pub use view::*;
 pub use viewport::*;
 
 use self::{
-    edit::ShowEditTab, settings::ShowSettingsTab, table::ShowTableTab, view::ShowViewTab,
-    viewport::ShowViewportTab,
+    edit::ShowEditTab, outliner::ShowOutlinerTab, settings::ShowSettingsTab, table::ShowTableTab,
+    view::ShowViewTab, viewport::ShowViewportTab,
 };
 
 use super::{settings::AppSettings, update_ui::UiSection};
@@ -43,12 +44,20 @@ fn setup_docktree(mut commands: Commands, mut pkv: ResMut<PkvStore>) {
 pub struct DockTree(DockState<Tab>);
 impl Default for DockTree {
     fn default() -> Self {
-        let mut tree = DockState::new(vec![Tab::Viewport]);
-        let right_index =
-            tree.main_surface_mut()
-                .split_right(NodeIndex::root(), 0.8, vec![Tab::View]);
-        tree.main_surface_mut()
-            .split_below(right_index[1], 0.45, vec![Tab::Table]);
+        let mut tree = DockState::new(vec![Tab::Viewport, Tab::Table]);
+        let tree_main_surface = tree.main_surface_mut();
+
+        let left_right_width = 0.2;
+
+        // // we want the panels each side of the viewport to be equal in size
+        let right_width = 1. - left_right_width;
+        let left_width = left_right_width * right_width;
+
+        let [left, _right] =
+            tree_main_surface.split_right(NodeIndex::root(), right_width, vec![Tab::View]);
+        tree_main_surface.split_left(left, left_width, vec![Tab::Outliner]);
+
+        // tree.main_s
         Self(tree)
     }
 }
@@ -60,6 +69,7 @@ pub trait UiSubSection {
 #[derive(Display, PartialEq, EnumIter, Serialize, Deserialize, Clone, Copy)]
 pub enum Tab {
     Viewport,
+    Outliner,
     View,
     Edit,
     Table,
@@ -74,6 +84,7 @@ pub struct TabViewer<'w, 's> {
         's,
         (
             ShowViewportTab<'w, 's>,
+            ShowOutlinerTab<'w, 's>,
             ShowViewTab<'w>,
             ShowEditTab,
             ShowTableTab<'w, 's>,
@@ -88,10 +99,11 @@ impl egui_dock::TabViewer for TabViewer<'_, '_> {
         // we can do different things inside the tab depending on its name
         match tab {
             Tab::Viewport => self.p.p0().show(ui),
-            Tab::View => self.p.p1().show(ui),
-            Tab::Edit => self.p.p2().show(ui),
-            Tab::Table => self.p.p3().show(ui),
-            Tab::Settings => self.p.p4().show(ui),
+            Tab::Outliner => self.p.p1().show(ui),
+            Tab::View => self.p.p2().show(ui),
+            Tab::Edit => self.p.p3().show(ui),
+            Tab::Table => self.p.p4().show(ui),
+            Tab::Settings => self.p.p5().show(ui),
         };
     }
     // show the title of the tab - the 'Tab' type already stores its title anyway
@@ -117,10 +129,5 @@ impl UiSection for ShowDockArea<'_, '_> {
         DockArea::new(&mut self.tree)
             .style(style)
             .show(ctx, &mut self.params.p0());
-
-        if self.params.p1().reset_tree {
-            *self.tree = DockTree::default();
-            self.params.p1().reset_tree = false;
-        }
     }
 }

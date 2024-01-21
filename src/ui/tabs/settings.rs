@@ -1,10 +1,6 @@
-use super::{DockTree, UiSubSection};
+use super::UiSubSection;
 use crate::{
-    ui::{
-        file_dialog::ShowFileDialog,
-        settings::AppSettings,
-        ui_state::{FileDialogRes, ResetDockTree, SaveDockTree},
-    },
+    ui::{file_dialog::ShowFileDialog, settings::AppSettings, ui_state::FileDialogRes},
     util::kcl_file::KclFlag,
     viewer::{
         camera::{
@@ -48,8 +44,6 @@ pub struct ShowSettingsTab<'w, 's> {
     ),
     pkv: ResMut<'w, PkvStore>,
     file_dialog_res: ResMut<'w, FileDialogRes>,
-    ev_save_docktree: EventWriter<'w, SaveDockTree>,
-    ev_reset_docktree: EventWriter<'w, ResetDockTree>,
 }
 impl UiSubSection for ShowSettingsTab<'_, '_> {
     fn show(&mut self, ui: &mut egui::Ui) {
@@ -295,14 +289,6 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
 
             if ui.button("Import Settings").clicked() {
                 ShowFileDialog::import_settings(&mut self.file_dialog_res);
-            }
-        });
-        ui.horizontal(|ui| {
-            if ui.button("Save Tab Layout").clicked() {
-                self.ev_save_docktree.send_default();
-            }
-            if ui.button("Reset Tab Layout").clicked() {
-                self.ev_reset_docktree.send_default();
             }
         });
         ui.horizontal(|ui| {

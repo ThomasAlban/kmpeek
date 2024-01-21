@@ -156,14 +156,17 @@ impl UiSubSection for ShowGizmo<'_, '_> {
                         selected.translation += translation_delta;
                         if self.gizmo_options.gizmo_origin == GizmoOrigin::Individual {
                             selected.rotate(gizmo_transform.rotation);
-                            // this prevents a weird issue where the points would slowly squash
-                            selected.rotation = selected.rotation.normalize();
                         } else {
                             selected.rotate_around(
                                 gizmo_transform.translation,
                                 gizmo_transform.rotation,
                             );
+                            // someone went onto my laptop and wrote this when I was gone
+                            // so I guess I'm leaving it here
+                            // cum on my ballsac and call me a meercat
                         }
+                        // this prevents a weird issue where the points would slowly squash
+                        selected.rotation = selected.rotation.normalize();
                     }
                 }
             }

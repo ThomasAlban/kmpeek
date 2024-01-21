@@ -7,7 +7,7 @@ pub mod settings;
 use self::{
     components::*,
     path::{
-        spawn_path_section, spawn_route_section, update_node_links, KmpPathNodeLink, PathMaterials,
+        spawn_path_section, update_node_links, EntityGroup, KmpPathNodeLink, PathMaterials,
         PathMeshes,
     },
     point::{spawn_point_section, spawn_respawn_point_section, PointMaterials, PointMeshes},
@@ -30,6 +30,7 @@ impl Plugin for KmpPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<KmpVisibilityUpdate>()
             .init_resource::<KmpEditMode>()
+            .init_resource::<Kmp>()
             .add_systems(
                 Update,
                 (
@@ -40,6 +41,17 @@ impl Plugin for KmpPlugin {
                 ),
             );
     }
+}
+
+#[derive(Resource, Default, Clone)]
+pub struct Kmp {
+    pub start_points: Vec<Entity>,
+    pub enemy_paths: Vec<EntityGroup>,
+    pub item_paths: Vec<EntityGroup>,
+    pub objects: Vec<Entity>,
+    pub areas: Vec<Entity>,
+    pub cameras: Vec<Entity>,
+    pub respawn_points: Vec<Entity>,
 }
 
 pub fn unlit_material(
@@ -63,7 +75,7 @@ pub fn spawn_model(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut ev_kmp_file_selected: EventReader<KmpFileSelected>,
-    q_kmp_section: Query<Entity, With<KmpSection>>,
+    q_kmp_section: Query<Entity, With<KmpSelectablePoint>>,
     settings: Res<AppSettings>,
     mut ev_kmp_visibility_update: EventWriter<KmpVisibilityUpdate>,
 ) {
@@ -78,7 +90,7 @@ pub fn spawn_model(
 
     // open the KMP file and read it
     let mut kmp_file = File::open(ev.0.clone()).expect("could not open kmp file");
-    let kmp = Kmp::read(&mut kmp_file).expect("could not read kmp file");
+    let kmp = KmpFile::read(&mut kmp_file).expect("could not read kmp file");
     // allocate the KMP on the heap so that we can access it in commands which execute after this function
     let kmp = Arc::new(kmp);
 
@@ -135,9 +147,7 @@ pub fn spawn_model(
 
     // --- START POINTS ---
 
-    dbg!(&kmp.ktpt.entries[0].rotation);
-
-    spawn_point_section::<Ktpt, StartPoint>(
+    let start_points = spawn_point_section::<Ktpt, StartPoint>(
         &mut commands,
         kmp.clone(),
         point_meshes.clone(),
@@ -147,7 +157,7 @@ pub fn spawn_model(
 
     // --- ENEMY PATHS ---
 
-    spawn_path_section::<Enpt, EnemyPathPoint, EnemyPathMarker>(
+    let enemy_paths = spawn_path_section::<Enpt, EnemyPathPoint, EnemyPathMarker>(
         &mut commands,
         kmp.clone(),
         path_meshes.clone(),
@@ -155,9 +165,9 @@ pub fn spawn_model(
         settings.kmp_model.outline.clone(),
     );
 
-    // --- ITEM POINTS ---
+    // --- ITEM PATHS ---
 
-    spawn_path_section::<Itpt, ItemPathPoint, ItemPathMarker>(
+    let item_paths = spawn_path_section::<Itpt, ItemPathPoint, ItemPathMarker>(
         &mut commands,
         kmp.clone(),
         path_meshes.clone(),
@@ -169,7 +179,7 @@ pub fn spawn_model(
 
     // --- OBJECTS ---
 
-    spawn_point_section::<Gobj, Object>(
+    let objects = spawn_point_section::<Gobj, Object>(
         &mut commands,
         kmp.clone(),
         point_meshes.clone(),
@@ -179,16 +189,16 @@ pub fn spawn_model(
 
     // --- ROUTES ---
 
-    spawn_route_section(
-        &mut commands,
-        kmp.clone(),
-        path_meshes.clone(),
-        PathMaterials::from_colors(&mut materials, &sections.color.routes),
-    );
+    // spawn_route_section(
+    //     &mut commands,
+    //     kmp.clone(),
+    //     path_meshes.clone(),
+    //     PathMaterials::from_colors(&mut materials, &sections.color.routes),
+    // );
 
     // --- AREAS ---
 
-    spawn_point_section::<Area, AreaPoint>(
+    let areas = spawn_point_section::<Area, AreaPoint>(
         &mut commands,
         kmp.clone(),
         point_meshes.clone(),
@@ -198,7 +208,7 @@ pub fn spawn_model(
 
     // --- CAMREAS ---
 
-    spawn_point_section::<Came, KmpCamera>(
+    let cameras = spawn_point_section::<Came, KmpCamera>(
         &mut commands,
         kmp.clone(),
         point_meshes.clone(),
@@ -208,7 +218,7 @@ pub fn spawn_model(
 
     // --- RESPAWN POINTS ---
 
-    spawn_respawn_point_section(
+    let respawn_points = spawn_respawn_point_section(
         &mut commands,
         kmp.clone(),
         point_meshes.clone(),
@@ -219,6 +229,19 @@ pub fn spawn_model(
     // --- CANNON POINTS ---
 
     // --- FINISH POINTS ---
+
+    // ---
+
+    let kmp = Kmp {
+        start_points,
+        enemy_paths,
+        item_paths,
+        objects,
+        areas,
+        cameras,
+        respawn_points,
+    };
+    commands.insert_resource(kmp);
 
     ev_kmp_visibility_update.send_default();
 }

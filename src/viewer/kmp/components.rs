@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 
 #[derive(Component, Default)]
-pub struct KmpSection;
+pub struct KmpSelectablePoint;
 
 pub trait FromKmp<T> {
     fn from_kmp(data: &T) -> Self;

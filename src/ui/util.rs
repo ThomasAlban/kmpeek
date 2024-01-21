@@ -1,16 +1,15 @@
 #![allow(dead_code)]
-
-use std::{
-    fmt::Display,
-    ops::{AddAssign, SubAssign},
-};
-
 use bevy::{
     math::{vec3, EulerRot, Quat, Vec3},
     transform::components::Transform,
 };
 use bevy_egui::egui::{
-    self, emath::Numeric, Button, ImageButton, ImageSource, Layout, Response, Ui, Vec2,
+    self, emath::Numeric, include_image, popup, Button, Context, Image, ImageButton, ImageSource,
+    Response, Sense, Ui, Vec2,
+};
+use std::{
+    fmt::Display,
+    ops::{AddAssign, SubAssign},
 };
 
 pub fn combobox_enum<T>(
@@ -56,6 +55,14 @@ where
     }
 }
 
+pub fn svg_image<'a>(img: impl Into<ImageSource<'a>>, ctx: &Context, size: f32) -> Image<'a> {
+    let img = egui::Image::new(img);
+    // scale up the svg image by the window scale factor so it doesn't look blurry on lower resolution screens
+    img.load_for_size(ctx, egui::Vec2::splat(size) * ctx.pixels_per_point())
+        .unwrap();
+    img
+}
+
 pub fn image_selectable_value<'a, Value: PartialEq>(
     ui: &mut egui::Ui,
     size: f32,
@@ -63,13 +70,7 @@ pub fn image_selectable_value<'a, Value: PartialEq>(
     selected: Value,
     img: impl Into<ImageSource<'a>>,
 ) -> Response {
-    let img = egui::Image::new(img);
-    // scale up the svg image by the window scale factor so it doesn't look blurry on lower resolution screens
-    img.load_for_size(
-        ui.ctx(),
-        egui::Vec2::splat(size) * ui.ctx().pixels_per_point(),
-    )
-    .unwrap();
+    let img = svg_image(img, ui.ctx(), size);
 
     let res = ui.allocate_ui(egui::Vec2::splat(size), |ui| {
         let btn = ui.add(ImageButton::new(img).selected(*current == selected));
@@ -188,4 +189,43 @@ pub fn rotation_edit(ui: &mut egui::Ui, transform: &mut Transform, speed: f32) -
     transform.rotation = transform.rotation.normalize();
 
     changed
+}
+
+pub fn button_triggered_popup<R>(
+    ui: &mut Ui,
+    name: String,
+    add_contents: impl FnOnce(&mut Ui) -> R,
+) {
+    let btn = ui.button(&name);
+    let popup_id = ui.make_persistent_id(format!("{name} popup"));
+    if btn.clicked() {
+        ui.memory_mut(|mem| mem.toggle_popup(popup_id));
+    }
+    popup::popup_below_widget(ui, popup_id, &btn, add_contents);
+
+    // popup::popup_below_widget(
+    //     ui,
+    //     gizmo_options_popup_id,
+    //     &gizmo_options_btn,
+    //     |ui| {
+    //         ui.style_mut().spacing.button_padding = egui::Vec2::ZERO;
+    //         ui.la
+}
+
+pub fn view_icon_btn(ui: &mut Ui, checked: &mut bool, size: f32) -> Response {
+    let view_on = include_image!("../../assets/icons/view_on.svg");
+    let view_off = include_image!("../../assets/icons/view_off.svg");
+    let img = if *checked { view_on } else { view_off };
+
+    ui.style_mut().spacing.button_padding = Vec2::ZERO;
+    let img = svg_image(img, ui.ctx(), size);
+    let res = ui.allocate_ui(egui::Vec2::splat(size), |ui| {
+        let mut icon = ui.add(img.sense(Sense::click()));
+        if icon.clicked() {
+            *checked = !*checked;
+            icon.mark_changed();
+        };
+        icon
+    });
+    res.inner
 }

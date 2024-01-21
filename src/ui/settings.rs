@@ -18,9 +18,7 @@ pub struct AppSettings {
     pub kcl_model: KclModelSettings,
     pub kmp_model: KmpModelSettings,
     pub open_course_kcl_in_directory: bool,
-    pub reset_tree: bool,
     pub increment: u32,
-    pub view_multiple: bool,
 }
 impl Default for AppSettings {
     fn default() -> Self {
@@ -29,9 +27,7 @@ impl Default for AppSettings {
             kcl_model: KclModelSettings::default(),
             kmp_model: KmpModelSettings::default(),
             open_course_kcl_in_directory: true,
-            reset_tree: false,
             increment: 1,
-            view_multiple: false,
         }
     }
 }

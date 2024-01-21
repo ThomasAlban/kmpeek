@@ -10,7 +10,7 @@ use std::{
 #[derive(Debug, Serialize, Deserialize, Resource, Clone)]
 #[binrw]
 #[brw(big)]
-pub struct Kmp {
+pub struct KmpFile {
     pub header: Header,
     pub ktpt: Section<Ktpt>,
     pub enpt: Section<Enpt>,
@@ -250,20 +250,20 @@ where
     for<'a> Self: BinRead<Args<'a> = ()> + 'a,
     for<'a> Self: BinWrite<Args<'a> = ()> + 'a,
 {
-    fn get_section(kmp: &Kmp) -> &Section<Self>;
-    fn get_section_mut(kmp: &mut Kmp) -> &mut Section<Self>;
+    fn get_section(kmp: &KmpFile) -> &Section<Self>;
+    fn get_section_mut(kmp: &mut KmpFile) -> &mut Section<Self>;
 }
 pub trait KmpGetPathSection {
-    fn get_path_section(kmp: &Kmp) -> &Section<PathGroup>;
-    fn get_path_section_mut(kmp: &mut Kmp) -> &mut Section<PathGroup>;
+    fn get_path_section(kmp: &KmpFile) -> &Section<PathGroup>;
+    fn get_path_section_mut(kmp: &mut KmpFile) -> &mut Section<PathGroup>;
 }
 macro_rules! impl_kmp_get_section {
     ($kmp_section:ty, $sect:ident) => {
         impl KmpGetSection for $kmp_section {
-            fn get_section(kmp: &Kmp) -> &Section<Self> {
+            fn get_section(kmp: &KmpFile) -> &Section<Self> {
                 &kmp.$sect
             }
-            fn get_section_mut(kmp: &mut Kmp) -> &mut Section<Self> {
+            fn get_section_mut(kmp: &mut KmpFile) -> &mut Section<Self> {
                 &mut kmp.$sect
             }
         }
@@ -272,10 +272,10 @@ macro_rules! impl_kmp_get_section {
 macro_rules! impl_kmp_path_section {
     ($kmp_section:ty, $sect:ident) => {
         impl KmpGetPathSection for $kmp_section {
-            fn get_path_section(kmp: &Kmp) -> &Section<PathGroup> {
+            fn get_path_section(kmp: &KmpFile) -> &Section<PathGroup> {
                 &kmp.$sect
             }
-            fn get_path_section_mut(kmp: &mut Kmp) -> &mut Section<PathGroup> {
+            fn get_path_section_mut(kmp: &mut KmpFile) -> &mut Section<PathGroup> {
                 &mut kmp.$sect
             }
         }
@@ -359,7 +359,7 @@ fn read_write_kmp_test(path: &str) {
 
     let mut in_cursor = Cursor::new(&mut in_buf);
 
-    let kmp = Kmp::read(&mut in_cursor).unwrap();
+    let kmp = KmpFile::read(&mut in_cursor).unwrap();
 
     let mut out_buf: Vec<u8> = Vec::new();
     let mut out_cursor = Cursor::new(&mut out_buf);

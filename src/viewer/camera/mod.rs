@@ -10,6 +10,7 @@ use bevy::{
     window::{CursorGrabMode, PrimaryWindow},
 };
 use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString, IntoStaticStr};
 
 mod fly;
 mod orbit;
@@ -25,10 +26,13 @@ impl Plugin for CameraPlugin {
     }
 }
 
-#[derive(PartialEq, Clone, Copy, Serialize, Deserialize, Debug)]
+#[derive(
+    PartialEq, Clone, Copy, Serialize, Deserialize, Debug, IntoStaticStr, EnumString, Display,
+)]
 pub enum CameraMode {
     Fly,
     Orbit,
+    #[strum(serialize = "Top Down")]
     TopDown,
 }
 impl Default for CameraMode {

@@ -1,7 +1,7 @@
 use super::gizmo::GizmoOptions;
 use super::EditMode;
 use crate::ui::ui_state::{MouseInViewport, ViewportRect};
-use crate::viewer::kmp::components::KmpSection;
+use crate::viewer::kmp::components::KmpSelectablePoint;
 use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_egui::EguiContexts;
 use bevy_mod_outline::*;
@@ -51,7 +51,7 @@ pub fn select(
     mouse_buttons: Res<Input<MouseButton>>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
     mut raycast: Raycast,
-    q_kmp_section: Query<&KmpSection>,
+    q_kmp_section: Query<&KmpSelectablePoint>,
     mut commands: Commands,
     gizmo: Res<GizmoOptions>,
     mut q_outline: Query<&mut OutlineVolume>,
@@ -96,8 +96,6 @@ pub fn select(
     }
     // select the entity
     if let Some((to_select, _)) = intersection {
-        // get the parent entity
-        // set the entity as a child of the transform parent
         commands.entity(*to_select).insert(Selected);
         // add the outline
         if let Ok(mut outline) = q_outline.get_mut(*to_select) {
@@ -135,7 +133,7 @@ pub fn select_box(
     viewport_rect: Res<ViewportRect>,
     edit_mode: Res<EditMode>,
     mouse_in_viewport: Res<MouseInViewport>,
-    q_selectable: Query<(&Transform, Entity, &Visibility), With<KmpSection>>,
+    q_selectable: Query<(&Transform, Entity, &Visibility, Has<Selected>), With<KmpSelectablePoint>>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
     mut commands: Commands,
     mut select_box: ResMut<SelectBox>,
@@ -190,7 +188,7 @@ pub fn select_box(
 
         // select stuff
         for selectable in q_selectable.iter() {
-            if selectable.2 != Visibility::Visible {
+            if selectable.2 != Visibility::Visible || selectable.3 {
                 continue;
             }
             let Some(viewport_pos) = cam.0.world_to_viewport(cam.1, selectable.0.translation)
@@ -210,7 +208,7 @@ pub fn select_box(
 }
 
 pub fn update_outlines(
-    q_entities: Query<(Entity, Has<Selected>, &Visibility), With<KmpSection>>,
+    q_entities: Query<(Entity, Has<Selected>, &Visibility), With<KmpSelectablePoint>>,
     mut q_outline: Query<&mut OutlineVolume>,
 ) {
     for (entity, is_selected, visibility) in q_entities.iter() {
