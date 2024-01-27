@@ -7,9 +7,7 @@ impl Plugin for NormalizePlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (update_normalize, apply_deferred)
-                .in_set(UpdateNormalizeSet)
-                .before(UpdateUiSet),
+            update_normalize.in_set(UpdateNormalizeSet), // .before(UpdateUiSet),
         );
     }
 }
@@ -54,18 +52,21 @@ fn update_normalize(
             if *visibility == ViewVisibility::HIDDEN {
                 continue;
             }
+            let mut transform_cp = *transform;
+
             let scale_before = transform.scale;
-            transform.scale = Vec3::ONE * settings.kmp_model.point_scale;
+            transform_cp.scale = Vec3::ONE * settings.kmp_model.point_scale;
 
             if !normalize.axes.x {
-                transform.scale.x = scale_before.x;
+                transform_cp.scale.x = scale_before.x;
             }
             if !normalize.axes.y {
-                transform.scale.y = scale_before.y;
+                transform_cp.scale.y = scale_before.y;
             }
             if !normalize.axes.z {
-                transform.scale.z = scale_before.z;
+                transform_cp.scale.z = scale_before.z;
             }
+            transform.set_if_neq(transform_cp);
         }
         return;
     }
@@ -113,19 +114,23 @@ fn update_normalize(
 
         let scale_before = transform.scale; // save what the scale was before we change it
 
-        transform.scale = gt.scale * required_scale * window.scale_factor() as f32 / 2.; // change the scale
+        let mut transform_cp = *transform;
+
+        transform_cp.scale = gt.scale * required_scale * window.scale_factor() as f32 / 2.; // change the scale
 
         // reset the scale if we didn't want to affect any axes
         if !normalize.axes.x {
-            transform.scale.x = scale_before.x;
+            transform_cp.scale.x = scale_before.x;
         }
         if !normalize.axes.y {
-            transform.scale.y = scale_before.y;
+            transform_cp.scale.y = scale_before.y;
         }
         if !normalize.axes.z {
-            transform.scale.z = scale_before.z;
+            transform_cp.scale.z = scale_before.z;
         }
 
-        *global_transform = (*transform).into();
+        if transform.set_if_neq(transform_cp) {
+            *global_transform = (*transform).into();
+        }
     }
 }

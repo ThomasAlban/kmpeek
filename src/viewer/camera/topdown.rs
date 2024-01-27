@@ -90,7 +90,7 @@ fn topdown_cam(
     mut ev_mouse_motion: EventReader<MouseMotion>,
     mut ev_mouse_scroll: EventReader<MouseWheel>,
     mouse_buttons: Res<Input<MouseButton>>,
-    mut q_topdown_cam: Query<(&TopDownCam, &mut Transform, &mut Projection)>,
+    mut q_topdown_cam: Query<(&mut Transform, &mut Projection), With<TopDownCam>>,
     settings: Res<AppSettings>,
     mouse_in_viewport: Res<MouseInViewport>,
 ) {
@@ -114,20 +114,23 @@ fn topdown_cam(
 
     let window_size = Vec2::new(window.width(), window.height());
 
-    for (_, mut transform, mut projection) in q_topdown_cam.iter_mut() {
-        if let Projection::Orthographic(projection) = &*projection {
-            pan *= Vec2::new(projection.area.width(), projection.area.height()) / window_size;
-        }
-        transform.translation += vec3(pan.x, 0., pan.y) * settings.camera.top_down.move_sensitivity;
+    let (mut transform, mut projection) = q_topdown_cam.single_mut();
+    let mut transform_cp = *transform;
 
-        if scroll.abs() > 0. {
-            if let Projection::Orthographic(projection) = &mut *projection {
-                projection.scale -= (scroll * projection.scale)
-                    * 0.001
-                    * settings.camera.top_down.scroll_sensitivity;
-                projection.scale = projection.scale.clamp(1., 500.);
-            }
+    if let Projection::Orthographic(projection) = &*projection {
+        pan *= Vec2::new(projection.area.width(), projection.area.height()) / window_size;
+    }
+    transform_cp.translation += vec3(pan.x, 0., pan.y) * settings.camera.top_down.move_sensitivity;
+
+    if scroll.abs() > 0. {
+        if let Projection::Orthographic(projection) = &mut *projection {
+            projection.scale -=
+                (scroll * projection.scale) * 0.001 * settings.camera.top_down.scroll_sensitivity;
+            projection.scale = projection.scale.clamp(1., 500.);
         }
     }
+
+    transform.set_if_neq(transform_cp);
+
     ev_mouse_motion.clear();
 }

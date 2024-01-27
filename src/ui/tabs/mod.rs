@@ -2,18 +2,15 @@ mod edit;
 mod outliner;
 mod settings;
 mod table;
-mod view;
 mod viewport;
 
 pub use settings::*;
-pub use view::*;
 pub use viewport::*;
 
 use self::{
     edit::ShowEditTab, outliner::ShowOutlinerTab, settings::ShowSettingsTab, table::ShowTableTab,
-    view::ShowViewTab, viewport::ShowViewportTab,
+    viewport::ShowViewportTab,
 };
-
 use super::{settings::AppSettings, update_ui::UiSection};
 use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::{egui, EguiContexts};
@@ -47,17 +44,10 @@ impl Default for DockTree {
         let mut tree = DockState::new(vec![Tab::Viewport, Tab::Table]);
         let tree_main_surface = tree.main_surface_mut();
 
-        let left_right_width = 0.2;
+        let [_, right] = tree_main_surface.split_right(NodeIndex::root(), 0.8, vec![Tab::Outliner]);
 
-        // // we want the panels each side of the viewport to be equal in size
-        let right_width = 1. - left_right_width;
-        let left_width = left_right_width * right_width;
+        tree_main_surface.split_below(right, 0.5, vec![Tab::Edit]);
 
-        let [left, _right] =
-            tree_main_surface.split_right(NodeIndex::root(), right_width, vec![Tab::View]);
-        tree_main_surface.split_left(left, left_width, vec![Tab::Outliner]);
-
-        // tree.main_s
         Self(tree)
     }
 }
@@ -70,7 +60,6 @@ pub trait UiSubSection {
 pub enum Tab {
     Viewport,
     Outliner,
-    View,
     Edit,
     Table,
     Settings,
@@ -85,8 +74,7 @@ pub struct TabViewer<'w, 's> {
         (
             ShowViewportTab<'w, 's>,
             ShowOutlinerTab<'w, 's>,
-            ShowViewTab<'w>,
-            ShowEditTab,
+            ShowEditTab<'w, 's>,
             ShowTableTab<'w, 's>,
             ShowSettingsTab<'w, 's>,
         ),
@@ -100,10 +88,9 @@ impl egui_dock::TabViewer for TabViewer<'_, '_> {
         match tab {
             Tab::Viewport => self.p.p0().show(ui),
             Tab::Outliner => self.p.p1().show(ui),
-            Tab::View => self.p.p2().show(ui),
-            Tab::Edit => self.p.p3().show(ui),
-            Tab::Table => self.p.p4().show(ui),
-            Tab::Settings => self.p.p5().show(ui),
+            Tab::Edit => self.p.p2().show(ui),
+            Tab::Table => self.p.p3().show(ui),
+            Tab::Settings => self.p.p4().show(ui),
         };
     }
     // show the title of the tab - the 'Tab' type already stores its title anyway

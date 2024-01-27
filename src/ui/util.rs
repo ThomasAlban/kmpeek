@@ -4,11 +4,12 @@ use bevy::{
     transform::components::Transform,
 };
 use bevy_egui::egui::{
-    self, emath::Numeric, include_image, popup, Button, Context, Image, ImageButton, ImageSource,
-    Response, Sense, Ui, Vec2,
+    self, emath::Numeric, include_image, Align, Align2, Area, Button, Color32, Context, Image,
+    ImageButton, ImageSource, Order, Response, Sense, Ui, Vec2,
 };
 use std::{
     fmt::Display,
+    hash::Hash,
     ops::{AddAssign, SubAssign},
 };
 
@@ -63,15 +64,13 @@ pub fn svg_image<'a>(img: impl Into<ImageSource<'a>>, ctx: &Context, size: f32) 
     img
 }
 
-pub fn image_selectable_value<'a, Value: PartialEq>(
+pub fn image_selectable_value<Value: PartialEq>(
     ui: &mut egui::Ui,
-    size: f32,
     current: &mut Value,
     selected: Value,
-    img: impl Into<ImageSource<'a>>,
+    img: Image,
+    size: f32,
 ) -> Response {
-    let img = svg_image(img, ui.ctx(), size);
-
     let res = ui.allocate_ui(egui::Vec2::splat(size), |ui| {
         let btn = ui.add(ImageButton::new(img).selected(*current == selected));
         if btn.clicked() {
@@ -113,24 +112,6 @@ pub fn drag_vec3(ui: &mut Ui, value: &mut Vec3, speed: f32) -> (Response, Respon
             .inner;
         (x, y, z)
     })
-    // ui.columns(3, |ui| {
-    //     let x = ui[0].add(
-    //         egui::DragValue::new(&mut value.x)
-    //             .speed(speed)
-    //             .fixed_decimals(1),
-    //     );
-    //     let y = ui[1].add(
-    //         egui::DragValue::new(&mut value.y)
-    //             .speed(speed)
-    //             .fixed_decimals(1),
-    //     );
-    //     let z = ui[2].add(
-    //         egui::DragValue::new(&mut value.z)
-    //             .speed(speed)
-    //             .fixed_decimals(1),
-    //     );
-    //     (x, y, z)
-    // })
 }
 
 pub fn rotation_edit(ui: &mut egui::Ui, transform: &mut Transform, speed: f32) -> bool {
@@ -186,40 +167,64 @@ pub fn rotation_edit(ui: &mut egui::Ui, transform: &mut Transform, speed: f32) -
     update_rotation(y, Vec3::Y);
     update_rotation(z, Vec3::Z);
 
-    transform.rotation = transform.rotation.normalize();
+    if changed {
+        transform.rotation = transform.rotation.normalize();
+    }
 
     changed
 }
 
 pub fn button_triggered_popup<R>(
     ui: &mut Ui,
-    name: String,
+    id: impl Hash,
+    btn: Response,
     add_contents: impl FnOnce(&mut Ui) -> R,
 ) {
-    let btn = ui.button(&name);
-    let popup_id = ui.make_persistent_id(format!("{name} popup"));
+    let popup_id = ui.make_persistent_id(id);
     if btn.clicked() {
         ui.memory_mut(|mem| mem.toggle_popup(popup_id));
     }
-    popup::popup_below_widget(ui, popup_id, &btn, add_contents);
 
-    // popup::popup_below_widget(
-    //     ui,
-    //     gizmo_options_popup_id,
-    //     &gizmo_options_btn,
-    //     |ui| {
-    //         ui.style_mut().spacing.button_padding = egui::Vec2::ZERO;
-    //         ui.la
+    if ui.memory(|mem| mem.is_popup_open(popup_id)) {
+        let (pos, pivot) = (btn.rect.left_bottom(), Align2::LEFT_TOP);
+
+        let res = Area::new(popup_id)
+            .order(Order::Foreground)
+            .constrain(true)
+            .fixed_pos(pos)
+            .pivot(pivot)
+            .show(ui.ctx(), |ui| {
+                let frame = egui::Frame::popup(ui.style());
+                let frame_margin = frame.total_margin();
+                frame
+                    .show(ui, |ui| {
+                        ui.with_layout(egui::Layout::top_down_justified(Align::LEFT), |ui| {
+                            ui.set_width(btn.rect.width() - frame_margin.sum().x);
+                            add_contents(ui)
+                        })
+                        .inner
+                    })
+                    .inner
+            });
+
+        let clicked_elsewhere = res.response.clicked_elsewhere() && btn.clicked_elsewhere();
+
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) || clicked_elsewhere {
+            ui.memory_mut(|mem| mem.close_popup());
+        }
+    }
 }
 
-pub fn view_icon_btn(ui: &mut Ui, checked: &mut bool, size: f32) -> Response {
-    let view_on = include_image!("../../assets/icons/view_on.svg");
-    let view_off = include_image!("../../assets/icons/view_off.svg");
-    let img = if *checked { view_on } else { view_off };
-
+pub fn view_icon_btn(ui: &mut Ui, checked: &mut bool) -> Response {
     ui.style_mut().spacing.button_padding = Vec2::ZERO;
-    let img = svg_image(img, ui.ctx(), size);
-    let res = ui.allocate_ui(egui::Vec2::splat(size), |ui| {
+
+    let img = if *checked {
+        Icons::view_on(ui.ctx())
+    } else {
+        Icons::view_off(ui.ctx())
+    };
+
+    let res = ui.allocate_ui(egui::Vec2::splat(Icons::SIZE), |ui| {
         let mut icon = ui.add(img.sense(Sense::click()));
         if icon.clicked() {
             *checked = !*checked;
@@ -228,4 +233,136 @@ pub fn view_icon_btn(ui: &mut Ui, checked: &mut bool, size: f32) -> Response {
         icon
     });
     res.inner
+}
+
+pub struct Icons;
+
+impl Icons {
+    pub const SIZE: f32 = 14.;
+    pub const GIZMO_OPTIONS_SIZE: f32 = 25.;
+    pub const EDIT_MODE_OPTIONS_SIZE: f32 = 35.;
+
+    pub const START_POINTS_COLOR: Color32 = Color32::from_rgb(80, 80, 255);
+    pub const ENEMY_PATHS_COLOR: Color32 = Color32::RED;
+    pub const ITEM_PATHS_COLOR: Color32 = Color32::GREEN;
+    pub const RESPAWN_POINTS_COLOR: Color32 = Color32::YELLOW;
+    pub const OBJECTS_COLOR: Color32 = Color32::from_rgb(255, 0, 255);
+    pub const AREAS_COLOR: Color32 = Color32::from_rgb(255, 160, 0);
+    pub const CAMERAS_COLOR: Color32 = Color32::from_rgb(160, 0, 255);
+
+    pub fn view_on<'a>(ctx: &Context) -> Image<'a> {
+        svg_image(
+            include_image!("../../assets/icons/view_on.svg"),
+            ctx,
+            Self::SIZE,
+        )
+    }
+    pub fn view_off<'a>(ctx: &Context) -> Image<'a> {
+        svg_image(
+            include_image!("../../assets/icons/view_off.svg"),
+            ctx,
+            Self::SIZE,
+        )
+    }
+    pub fn path_group<'a>(ctx: &Context) -> Image<'a> {
+        svg_image(
+            include_image!("../../assets/icons/path_group.svg"),
+            ctx,
+            Self::SIZE,
+        )
+    }
+    pub fn path<'a>(ctx: &Context) -> Image<'a> {
+        svg_image(
+            include_image!("../../assets/icons/path.svg"),
+            ctx,
+            Self::SIZE,
+        )
+    }
+    pub fn cube_group<'a>(ctx: &Context) -> Image<'a> {
+        svg_image(
+            include_image!("../../assets/icons/cube_group.svg"),
+            ctx,
+            Self::SIZE,
+        )
+    }
+    pub fn cube<'a>(ctx: &Context) -> Image<'a> {
+        svg_image(
+            include_image!("../../assets/icons/cube.svg"),
+            ctx,
+            Self::SIZE,
+        )
+    }
+
+    pub fn origin_mean<'a>(ctx: &Context) -> Image<'a> {
+        svg_image(
+            include_image!("../../assets/icons/origin_mean.svg"),
+            ctx,
+            Self::GIZMO_OPTIONS_SIZE,
+        )
+    }
+    pub fn origin_first_selected<'a>(ctx: &Context) -> Image<'a> {
+        svg_image(
+            include_image!("../../assets/icons/origin_first_selected.svg"),
+            ctx,
+            Self::GIZMO_OPTIONS_SIZE,
+        )
+    }
+    pub fn origin_individual<'a>(ctx: &Context) -> Image<'a> {
+        svg_image(
+            include_image!("../../assets/icons/origin_individual.svg"),
+            ctx,
+            Self::GIZMO_OPTIONS_SIZE,
+        )
+    }
+
+    pub fn orient_global<'a>(ctx: &Context) -> Image<'a> {
+        svg_image(
+            include_image!("../../assets/icons/orient_global.svg"),
+            ctx,
+            Self::GIZMO_OPTIONS_SIZE,
+        )
+    }
+    pub fn orient_local<'a>(ctx: &Context) -> Image<'a> {
+        svg_image(
+            include_image!("../../assets/icons/orient_local.svg"),
+            ctx,
+            Self::GIZMO_OPTIONS_SIZE,
+        )
+    }
+
+    pub fn tweak<'a>(ctx: &Context) -> Image<'a> {
+        svg_image(
+            include_image!("../../assets/icons/tweak.svg"),
+            ctx,
+            Self::EDIT_MODE_OPTIONS_SIZE,
+        )
+    }
+    pub fn select_box<'a>(ctx: &Context) -> Image<'a> {
+        svg_image(
+            include_image!("../../assets/icons/select_box.svg"),
+            ctx,
+            Self::EDIT_MODE_OPTIONS_SIZE,
+        )
+    }
+    pub fn translate<'a>(ctx: &Context) -> Image<'a> {
+        svg_image(
+            include_image!("../../assets/icons/translate.svg"),
+            ctx,
+            Self::EDIT_MODE_OPTIONS_SIZE,
+        )
+    }
+    pub fn rotate<'a>(ctx: &Context) -> Image<'a> {
+        svg_image(
+            include_image!("../../assets/icons/rotate.svg"),
+            ctx,
+            Self::EDIT_MODE_OPTIONS_SIZE,
+        )
+    }
+    pub fn scale<'a>(ctx: &Context) -> Image<'a> {
+        svg_image(
+            include_image!("../../assets/icons/scale.svg"),
+            ctx,
+            Self::EDIT_MODE_OPTIONS_SIZE,
+        )
+    }
 }

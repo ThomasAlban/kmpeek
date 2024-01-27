@@ -119,16 +119,17 @@ fn fly_cam_move(
         return;
     }
 
-    let mut fly_cam_transform = q_fly_cam.get_single_mut().unwrap();
+    let mut transform = q_fly_cam.get_single_mut().unwrap();
 
     let mut velocity = Vec3::ZERO;
-    let local_z = fly_cam_transform.local_z();
+    let local_z = transform.local_z();
     let forward = -Vec3::new(local_z.x, 0., local_z.z);
     let right = Vec3::new(local_z.z, 0., -local_z.x);
 
     let mut speed_boost = false;
 
     if keys.get_pressed().count() > 0 {
+        // redraw the window when we're holding a button down (e.g. flying around but not moving the mouse) as otherwise the window doesn't redraw
         ev_request_redraw.send(RequestRedraw);
     }
 
@@ -154,8 +155,12 @@ fn fly_cam_move(
         velocity *= settings.camera.fly.speed_boost;
     }
 
-    fly_cam_transform.translation +=
+    let mut transform_cp = *transform;
+
+    transform_cp.translation +=
         velocity * 200. * settings.camera.fly.speed / window.scale_factor() as f32;
+
+    transform.set_if_neq(transform_cp);
 }
 
 fn fly_cam_look(
@@ -170,10 +175,10 @@ fn fly_cam_look(
     }
 
     let window = q_window.get_single().unwrap();
-    let mut fly_cam_transform = q_fly_cam.get_single_mut().unwrap();
+    let mut transform = q_fly_cam.get_single_mut().unwrap();
 
     for ev in ev_mouse_motion.read() {
-        let (mut yaw, mut pitch, _) = fly_cam_transform.rotation.to_euler(EulerRot::YXZ);
+        let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
         match window.cursor.grab_mode {
             CursorGrabMode::None => (),
             _ => {
@@ -187,8 +192,12 @@ fn fly_cam_look(
             }
         }
         pitch = pitch.clamp(-1.54, 1.54);
+
+        let mut transform_cp = *transform;
         // order is important to prevent unintended roll
-        fly_cam_transform.rotation =
+        transform_cp.rotation =
             Quat::from_axis_angle(Vec3::Y, yaw) * Quat::from_axis_angle(Vec3::X, pitch);
+
+        transform.set_if_neq(transform_cp);
     }
 }

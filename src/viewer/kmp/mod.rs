@@ -1,23 +1,24 @@
 pub mod components;
+pub mod meshes_materials;
 pub mod path;
-mod point;
+pub mod point;
 pub mod sections;
 pub mod settings;
 
 use self::{
     components::*,
-    path::{
-        spawn_path_section, update_node_links, EntityGroup, KmpPathNodeLink, PathMaterials,
-        PathMeshes,
-    },
-    point::{spawn_point_section, spawn_respawn_point_section, PointMaterials, PointMeshes},
+    meshes_materials::{setup_kmp_meshes_materials, KmpMeshesMaterials},
+    path::{spawn_path_section, update_node_links, KmpPathNodeLink},
+    point::{spawn_point_section, spawn_respawn_point_section},
     sections::KmpEditMode,
 };
-use super::normalize::UpdateNormalizeSet;
+use super::{edit::select::SelectSet, normalize::UpdateNormalizeSet};
 use crate::{
-    ui::{settings::AppSettings, update_ui::KmpFileSelected},
+    ui::{
+        settings::{AppSettings, SetupAppSettingsSet},
+        update_ui::{KmpFileSelected, UpdateUiSet},
+    },
     util::kmp_file::*,
-    util::shapes::{Cone, Cylinder},
     viewer::kmp::sections::KmpModelSections,
 };
 use bevy::{prelude::*, window::RequestRedraw};
@@ -30,54 +31,33 @@ impl Plugin for KmpPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<KmpVisibilityUpdate>()
             .init_resource::<KmpEditMode>()
-            .init_resource::<Kmp>()
+            .add_systems(
+                Startup,
+                (apply_deferred, setup_kmp_meshes_materials)
+                    .chain()
+                    .after(SetupAppSettingsSet),
+            )
             .add_systems(
                 Update,
                 (
                     spawn_model.run_if(on_event::<KmpFileSelected>()),
                     // run update node links before update normalize so that the updated positions are normalized
-                    update_node_links.before(UpdateNormalizeSet),
+                    update_node_links
+                        .after(UpdateUiSet)
+                        .after(SelectSet)
+                        .before(UpdateNormalizeSet),
                     update_visible.run_if(on_event::<KmpVisibilityUpdate>()),
                 ),
             );
     }
 }
-
-#[derive(Resource, Default, Clone)]
-pub struct Kmp {
-    pub start_points: Vec<Entity>,
-    pub enemy_paths: Vec<EntityGroup>,
-    pub item_paths: Vec<EntityGroup>,
-    pub objects: Vec<Entity>,
-    pub areas: Vec<Entity>,
-    pub cameras: Vec<Entity>,
-    pub respawn_points: Vec<Entity>,
-}
-
-pub fn unlit_material(
-    materials: &mut Assets<StandardMaterial>,
-    color: Color,
-) -> Handle<StandardMaterial> {
-    materials.add(StandardMaterial {
-        base_color: color,
-        alpha_mode: if color.a() < 1. {
-            AlphaMode::Blend
-        } else {
-            AlphaMode::Opaque
-        },
-        unlit: true,
-        ..default()
-    })
-}
-
 pub fn spawn_model(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     mut ev_kmp_file_selected: EventReader<KmpFileSelected>,
     q_kmp_section: Query<Entity, With<KmpSelectablePoint>>,
     settings: Res<AppSettings>,
     mut ev_kmp_visibility_update: EventWriter<KmpVisibilityUpdate>,
+    kmp_meshes_materials: Res<KmpMeshesMaterials>,
 ) {
     // if there is no kmp file selected event return
     let Some(ev) = ev_kmp_file_selected.read().next() else {
@@ -99,46 +79,9 @@ pub fn spawn_model(
         commands.entity(entity).despawn();
     }
 
-    // meshes for the kmp model
-    let sphere_mesh: Mesh = shape::UVSphere {
-        radius: 100.,
-        ..default()
-    }
-    .into();
-    // sphere_mesh.generate_outline_normals().unwrap();
-    let sphere_mesh = meshes.add(sphere_mesh);
-    let cylinder_mesh = meshes.add(Mesh::from(Cylinder {
-        height: 1.,
-        radius_bottom: 50.,
-        radius_top: 50.,
-        radial_segments: 32,
-        height_segments: 32,
-    }));
-    let frustrum_mesh = meshes.add(Mesh::from(Cylinder {
-        height: 100.,
-        radius_bottom: 100.,
-        radius_top: 50.,
-        radial_segments: 32,
-        height_segments: 32,
-    }));
-    let cone_mesh = meshes.add(Mesh::from(Cone {
-        height: 200.,
-        radius: 100.,
-        segments: 32,
-    }));
-
-    let point_meshes = PointMeshes::new(
-        sphere_mesh.clone(),
-        cylinder_mesh.clone(),
-        cone_mesh.clone(),
-    );
-    let path_meshes = PathMeshes::new(
-        sphere_mesh.clone(),
-        cylinder_mesh.clone(),
-        frustrum_mesh.clone(),
-    );
-
     let sections = &settings.kmp_model.sections;
+    let meshes = &kmp_meshes_materials.meshes;
+    let materials = &kmp_meshes_materials.materials;
 
     // --- TRACK INFO ---
 
@@ -147,31 +90,31 @@ pub fn spawn_model(
 
     // --- START POINTS ---
 
-    let start_points = spawn_point_section::<Ktpt, StartPoint>(
+    spawn_point_section::<Ktpt, StartPoint>(
         &mut commands,
         kmp.clone(),
-        point_meshes.clone(),
-        PointMaterials::from_colors(&mut materials, &sections.color.start_points),
+        meshes.clone(),
+        materials.start_points.clone(),
         settings.kmp_model.outline.clone(),
     );
 
     // --- ENEMY PATHS ---
 
-    let enemy_paths = spawn_path_section::<Enpt, EnemyPathPoint, EnemyPathMarker>(
+    spawn_path_section::<Enpt, EnemyPathPoint, EnemyPathMarker>(
         &mut commands,
         kmp.clone(),
-        path_meshes.clone(),
-        PathMaterials::from_colors(&mut materials, &sections.color.enemy_paths),
+        meshes.clone(),
+        materials.enemy_paths.clone(),
         settings.kmp_model.outline.clone(),
     );
 
     // --- ITEM PATHS ---
 
-    let item_paths = spawn_path_section::<Itpt, ItemPathPoint, ItemPathMarker>(
+    spawn_path_section::<Itpt, ItemPathPoint, ItemPathMarker>(
         &mut commands,
         kmp.clone(),
-        path_meshes.clone(),
-        PathMaterials::from_colors(&mut materials, &sections.color.item_paths),
+        meshes.clone(),
+        materials.item_paths.clone(),
         settings.kmp_model.outline.clone(),
     );
 
@@ -179,11 +122,11 @@ pub fn spawn_model(
 
     // --- OBJECTS ---
 
-    let objects = spawn_point_section::<Gobj, Object>(
+    spawn_point_section::<Gobj, Object>(
         &mut commands,
         kmp.clone(),
-        point_meshes.clone(),
-        PointMaterials::from_colors(&mut materials, &sections.color.objects),
+        meshes.clone(),
+        materials.objects.clone(),
         settings.kmp_model.outline.clone(),
     );
 
@@ -198,31 +141,31 @@ pub fn spawn_model(
 
     // --- AREAS ---
 
-    let areas = spawn_point_section::<Area, AreaPoint>(
+    spawn_point_section::<Area, AreaPoint>(
         &mut commands,
         kmp.clone(),
-        point_meshes.clone(),
-        PointMaterials::from_colors(&mut materials, &sections.color.areas),
+        meshes.clone(),
+        materials.areas.clone(),
         settings.kmp_model.outline.clone(),
     );
 
     // --- CAMREAS ---
 
-    let cameras = spawn_point_section::<Came, KmpCamera>(
+    spawn_point_section::<Came, KmpCamera>(
         &mut commands,
         kmp.clone(),
-        point_meshes.clone(),
-        PointMaterials::from_colors(&mut materials, &sections.color.cameras),
+        meshes.clone(),
+        materials.cameras.clone(),
         settings.kmp_model.outline.clone(),
     );
 
     // --- RESPAWN POINTS ---
 
-    let respawn_points = spawn_respawn_point_section(
+    spawn_respawn_point_section(
         &mut commands,
         kmp.clone(),
-        point_meshes.clone(),
-        PointMaterials::from_colors(&mut materials, &sections.color.respawn_points),
+        meshes.clone(),
+        materials.respawn_points.clone(),
         settings.kmp_model.outline.clone(),
     );
 
@@ -231,17 +174,6 @@ pub fn spawn_model(
     // --- FINISH POINTS ---
 
     // ---
-
-    let kmp = Kmp {
-        start_points,
-        enemy_paths,
-        item_paths,
-        objects,
-        areas,
-        cameras,
-        respawn_points,
-    };
-    commands.insert_resource(kmp);
 
     ev_kmp_visibility_update.send_default();
 }
@@ -258,7 +190,6 @@ fn update_visible(
             Query<&mut Visibility, With<EnemyPathMarker>>,
             Query<&mut Visibility, With<ItemPathMarker>>,
             Query<&mut Visibility, With<Object>>,
-            Query<&mut Visibility, With<RouteMarker>>,
             Query<&mut Visibility, With<AreaPoint>>,
         )>,
         ParamSet<(
@@ -299,8 +230,7 @@ fn update_visible(
     set_visibility!(q.p0().p1(), usize::from(KmpModelSections::EnemyPaths));
     set_visibility!(q.p0().p2(), usize::from(KmpModelSections::ItemPaths));
     set_visibility!(q.p0().p3(), usize::from(KmpModelSections::Objects));
-    set_visibility!(q.p0().p4(), usize::from(KmpModelSections::Routes));
-    set_visibility!(q.p0().p5(), usize::from(KmpModelSections::Area));
+    set_visibility!(q.p0().p4(), usize::from(KmpModelSections::Areas));
     set_visibility!(q.p1().p0(), usize::from(KmpModelSections::Cameras));
     set_visibility!(q.p1().p1(), usize::from(KmpModelSections::RespawnPoints));
     set_visibility!(q.p1().p2(), usize::from(KmpModelSections::CannonPoints));

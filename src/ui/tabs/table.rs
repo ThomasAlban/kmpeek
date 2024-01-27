@@ -5,9 +5,8 @@ use crate::{
             components::{EnemyPathPoint, StartPoint},
             path::EntityGroup,
             sections::{KmpEditMode, KmpModelSections},
-            Kmp,
         },
-        transform::select::Selected,
+        edit::select::Selected,
     },
 };
 use bevy::{ecs::system::SystemParam, prelude::*};
@@ -21,8 +20,6 @@ pub struct ShowTableTab<'w, 's> {
     kmp_edit_mode: Res<'w, KmpEditMode>,
     commands: Commands<'w, 's>,
 
-    kmp: ResMut<'w, Kmp>,
-
     q_transform: Query<'w, 's, &'static mut Transform>,
     q_is_selected: Query<'w, 's, Has<Selected>>,
 
@@ -31,25 +28,25 @@ pub struct ShowTableTab<'w, 's> {
 }
 impl UiSubSection for ShowTableTab<'_, '_> {
     fn show(&mut self, ui: &mut bevy_egui::egui::Ui) {
-        match self.kmp_edit_mode.0 {
-            KmpModelSections::StartPoints => StartPointTable::show(
-                ui,
-                &mut self.commands,
-                &self.kmp.start_points,
-                &mut self.q_transform,
-                &mut self.q_is_selected,
-                &mut self.q_start_point,
-            ),
-            KmpModelSections::EnemyPaths => EnemyPathTable::show(
-                ui,
-                &mut self.commands,
-                &self.kmp.enemy_paths,
-                &mut self.q_transform,
-                &mut self.q_is_selected,
-                &mut self.q_enemy_path_point,
-            ),
-            _ => (),
-        }
+        // match self.kmp_edit_mode.0 {
+        //     KmpModelSections::StartPoints => StartPointTable::show(
+        //         ui,
+        //         &mut self.commands,
+        //         &self.kmp.start_points,
+        //         &mut self.q_transform,
+        //         &mut self.q_is_selected,
+        //         &mut self.q_start_point,
+        //     ),
+        //     KmpModelSections::EnemyPaths => EnemyPathTable::show(
+        //         ui,
+        //         &mut self.commands,
+        //         &self.kmp.enemy_paths,
+        //         &mut self.q_transform,
+        //         &mut self.q_is_selected,
+        //         &mut self.q_enemy_path_point,
+        //     ),
+        //     _ => (),
+        // }
     }
 }
 
@@ -140,20 +137,28 @@ impl StartPointTable {
                 let mut start_point = q_start_point.get_mut(*entity).unwrap();
 
                 KmpTable::make_row(&mut body, commands, is_selected, *entity, |row| {
+                    let mut transform_cp = *transform;
+                    let mut start_point_cp = *start_point;
+
                     row.col(|ui| {
-                        drag_vec3(ui, &mut transform.translation, 10.);
+                        drag_vec3(ui, &mut transform_cp.translation, 10.);
                     });
                     row.col(|ui| {
-                        rotation_edit(ui, &mut transform, 1.);
+                        rotation_edit(ui, &mut transform_cp, 1.);
                     });
                     row.col(|ui| {
                         ui.with_layout(
                             Layout::centered_and_justified(egui::Direction::TopDown),
                             |ui| {
-                                ui.add(DragValue::new(&mut start_point.player_index).speed(0.05));
+                                ui.add(
+                                    DragValue::new(&mut start_point_cp.player_index).speed(0.05),
+                                );
                             },
                         );
                     });
+
+                    transform.set_if_neq(transform_cp);
+                    start_point.set_if_neq(start_point_cp);
                 });
             }
         });
@@ -185,23 +190,29 @@ impl EnemyPathTable {
                     let mut enemy_path_point = q_enemy_path_point.get_mut(*entity).unwrap();
 
                     KmpTable::make_row(&mut body, commands, is_selected, *entity, |row| {
+                        let mut transform_cp = *transform;
+                        let mut enemy_path_point_cp = *enemy_path_point;
+
                         row.col(|ui| {
-                            drag_vec3(ui, &mut transform.translation, 10.);
+                            drag_vec3(ui, &mut transform_cp.translation, 10.);
                         });
                         row.col(|ui| {
-                            ui.add(DragValue::new(&mut enemy_path_point.leniency).speed(0.05));
+                            ui.add(DragValue::new(&mut enemy_path_point_cp.leniency).speed(0.05));
                         });
                         row.col(|ui| {
                             let id = format!("enpt_setting_1:{:?}", entity);
-                            combobox_enum(ui, &mut enemy_path_point.setting_1, id, None);
+                            combobox_enum(ui, &mut enemy_path_point_cp.setting_1, id, None);
                         });
                         row.col(|ui| {
                             let id = format!("enpt_setting_2:{:?}", entity);
-                            combobox_enum(ui, &mut enemy_path_point.setting_2, id, None);
+                            combobox_enum(ui, &mut enemy_path_point_cp.setting_2, id, None);
                         });
                         row.col(|ui| {
-                            ui.add(DragValue::new(&mut enemy_path_point.setting_3).speed(0.05));
+                            ui.add(DragValue::new(&mut enemy_path_point_cp.setting_3).speed(0.05));
                         });
+
+                        transform.set_if_neq(transform_cp);
+                        enemy_path_point.set_if_neq(enemy_path_point_cp);
                     });
                 }
             }

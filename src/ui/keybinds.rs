@@ -1,4 +1,4 @@
-use crate::viewer::transform::EditMode;
+use crate::viewer::edit::EditMode;
 
 use super::{file_dialog::ShowFileDialog, ui_state::FileDialogRes};
 use bevy::prelude::*;

@@ -1,51 +1,16 @@
-use std::sync::Arc;
-
-use bevy::{math::vec3, prelude::*};
-use bevy_mod_outline::{OutlineBundle, OutlineVolume};
-
+use super::{
+    components::RespawnPoint,
+    meshes_materials::{KmpMeshes, PointMaterials},
+    settings::OutlineSettings,
+    FromKmp, KmpSelectablePoint,
+};
 use crate::{
     util::kmp_file::{Jgpt, KmpFile, KmpGetSection, KmpPositionPoint, KmpRotationPoint},
     viewer::normalize::Normalize,
 };
-
-use super::{
-    components::RespawnPoint,
-    settings::{OutlineSettings, PointColor},
-    unlit_material, FromKmp, KmpSelectablePoint,
-};
-
-#[derive(Clone)]
-pub struct PointMeshes {
-    sphere: Handle<Mesh>,
-    cylinder: Handle<Mesh>,
-    cone: Handle<Mesh>,
-}
-impl PointMeshes {
-    pub fn new(sphere: Handle<Mesh>, cylinder: Handle<Mesh>, cone: Handle<Mesh>) -> Self {
-        Self {
-            sphere,
-            cylinder,
-            cone,
-        }
-    }
-}
-
-pub struct PointMaterials {
-    point: Handle<StandardMaterial>,
-    line: Handle<StandardMaterial>,
-    arrow: Handle<StandardMaterial>,
-    up_arrow: Handle<StandardMaterial>,
-}
-impl PointMaterials {
-    pub fn from_colors(materials: &mut Assets<StandardMaterial>, colors: &PointColor) -> Self {
-        Self {
-            point: unlit_material(materials, colors.point),
-            line: unlit_material(materials, colors.line),
-            arrow: unlit_material(materials, colors.arrow),
-            up_arrow: unlit_material(materials, colors.up_arrow),
-        }
-    }
-}
+use bevy::{math::vec3, prelude::*};
+use bevy_mod_outline::{OutlineBundle, OutlineVolume};
+use std::sync::Arc;
 
 pub fn spawn_point_section<
     T: KmpGetSection + KmpPositionPoint + KmpRotationPoint + Send + 'static + Clone,
@@ -53,7 +18,7 @@ pub fn spawn_point_section<
 >(
     commands: &mut Commands,
     kmp: Arc<KmpFile>,
-    meshes: PointMeshes,
+    meshes: KmpMeshes,
     materials: PointMaterials,
     outline: OutlineSettings,
 ) -> Vec<Entity> {
@@ -69,65 +34,95 @@ pub fn spawn_point_section<
             euler_rot.y.to_radians(),
             euler_rot.z.to_radians(),
         );
-        let mut result = commands.spawn((
-            PbrBundle {
-                mesh: meshes.sphere.clone(),
-                material: materials.point.clone(),
-                transform: Transform::from_translation(position).with_rotation(rotation),
-                visibility: Visibility::Hidden,
-                ..default()
-            },
+        let entity = spawn_point::<T, U>(
+            commands,
+            &meshes,
+            &materials,
+            position,
+            rotation,
             U::from_kmp(node),
-            KmpSelectablePoint,
-            Normalize::new(200., 30., BVec3::TRUE),
-            OutlineBundle {
-                outline: OutlineVolume {
-                    visible: false,
-                    colour: outline.color,
-                    width: outline.width,
-                },
-                ..default()
-            },
-        ));
-        result.with_children(|parent| {
-            let line_length = 750.;
-            let mut line_transform = Transform::from_scale(vec3(1., line_length, 1.));
-            line_transform.translation.z = line_length / 2.;
-            line_transform.rotate_x(90_f32.to_radians());
-            parent.spawn(PbrBundle {
-                mesh: meshes.cylinder.clone(),
-                material: materials.line.clone(),
-                transform: line_transform,
-                ..default()
-            });
-
-            let mut arrow_transform = Transform::from_translation(vec3(0., 0., line_length));
-            arrow_transform.rotate_x(90_f32.to_radians());
-            parent.spawn(PbrBundle {
-                mesh: meshes.cone.clone(),
-                material: materials.arrow.clone(),
-                transform: arrow_transform,
-                ..default()
-            });
-
-            let up_arrow_transform = Transform::from_translation(vec3(0., line_length * 0.75, 0.))
-                .with_scale(vec3(1., 2., 1.));
-            parent.spawn(PbrBundle {
-                mesh: meshes.cone.clone(),
-                material: materials.up_arrow.clone(),
-                transform: up_arrow_transform,
-                ..default()
-            });
-        });
-        entities.push(result.id());
+            &outline,
+            false,
+        );
+        entities.push(entity);
     }
     entities
+}
+
+pub fn spawn_point<
+    T: KmpGetSection + KmpPositionPoint + KmpRotationPoint + Send + 'static + Clone,
+    U: Component + FromKmp<T>,
+>(
+    commands: &mut Commands,
+    meshes: &KmpMeshes,
+    materials: &PointMaterials,
+    position: Vec3,
+    rotation: Quat,
+    kmp_component: U,
+    outline: &OutlineSettings,
+    visible: bool,
+) -> Entity {
+    let mut result = commands.spawn((
+        PbrBundle {
+            mesh: meshes.sphere.clone(),
+            material: materials.point.clone(),
+            transform: Transform::from_translation(position).with_rotation(rotation),
+            visibility: if visible {
+                Visibility::Visible
+            } else {
+                Visibility::Hidden
+            },
+            ..default()
+        },
+        kmp_component,
+        KmpSelectablePoint,
+        Normalize::new(200., 30., BVec3::TRUE),
+        OutlineBundle {
+            outline: OutlineVolume {
+                visible: false,
+                colour: outline.color,
+                width: outline.width,
+            },
+            ..default()
+        },
+    ));
+    result.with_children(|parent| {
+        let line_length = 750.;
+        let mut line_transform = Transform::from_scale(vec3(1., line_length, 1.));
+        line_transform.translation.z = line_length / 2.;
+        line_transform.rotate_x(90_f32.to_radians());
+        parent.spawn(PbrBundle {
+            mesh: meshes.cylinder.clone(),
+            material: materials.line.clone(),
+            transform: line_transform,
+            ..default()
+        });
+
+        let mut arrow_transform = Transform::from_translation(vec3(0., 0., line_length));
+        arrow_transform.rotate_x(90_f32.to_radians());
+        parent.spawn(PbrBundle {
+            mesh: meshes.cone.clone(),
+            material: materials.arrow.clone(),
+            transform: arrow_transform,
+            ..default()
+        });
+
+        let up_arrow_transform = Transform::from_translation(vec3(0., line_length * 0.75, 0.))
+            .with_scale(vec3(1., 2., 1.));
+        parent.spawn(PbrBundle {
+            mesh: meshes.cone.clone(),
+            material: materials.up_arrow.clone(),
+            transform: up_arrow_transform,
+            ..default()
+        });
+    });
+    result.id()
 }
 
 pub fn spawn_respawn_point_section(
     commands: &mut Commands,
     kmp: Arc<KmpFile>,
-    meshes: PointMeshes,
+    meshes: KmpMeshes,
     materials: PointMaterials,
     outline: OutlineSettings,
 ) -> Vec<Entity> {

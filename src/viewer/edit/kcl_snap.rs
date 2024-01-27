@@ -2,7 +2,10 @@ use super::{
     select::{cast_ray_from_cam, get_ray_from_cam, scale_viewport_pos, Selected},
     EditMode,
 };
-use crate::{ui::ui_state::ViewportRect, viewer::kcl_model::KCLModelSection};
+use crate::{
+    ui::ui_state::{MouseInViewport, ViewportRect},
+    viewer::kcl_model::KCLModelSection,
+};
 use bevy::{prelude::*, utils::HashMap, window::PrimaryWindow};
 use bevy_mod_raycast::prelude::*;
 
@@ -13,15 +16,16 @@ pub fn snap_to_kcl(
     q_window: Query<&Window, With<PrimaryWindow>>,
     viewport_rect: Res<ViewportRect>,
     mut raycast: Raycast,
-    q_kcl: Query<&KCLModelSection>,
+    q_kcl: Query<With<KCLModelSection>>,
     edit_mode: Res<EditMode>,
+    mouse_in_viewport: Res<MouseInViewport>,
 
     mut initial_offset: Local<Vec2>,
     mut initial_intersection_distance: Local<f32>,
     mut initial_mouse_pos: Local<Vec2>,
     mut position_differences: Local<HashMap<Entity, Vec3>>,
 ) {
-    if *edit_mode != EditMode::Tweak {
+    if *edit_mode != EditMode::Tweak || !mouse_in_viewport.0 {
         return;
     }
 

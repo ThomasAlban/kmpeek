@@ -14,8 +14,7 @@ pub enum KmpModelSections {
     #[strum(serialize = "Respawn Points")]
     RespawnPoints,
     Objects,
-    Routes,
-    Area,
+    Areas,
     Cameras,
     #[strum(serialize = "Cannon Points")]
     CannonPoints,
@@ -36,8 +35,7 @@ impl From<KmpModelSections> for usize {
             Checkpoints => 3,
             RespawnPoints => 4,
             Objects => 5,
-            Routes => 6,
-            Area => 7,
+            Areas => 7,
             Cameras => 8,
             CannonPoints => 9,
             BattleFinishPoints => 10,

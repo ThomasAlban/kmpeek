@@ -62,7 +62,7 @@ impl From<u8> for FirstPlayerPos {
 }
 
 // --- START POINT COMPONENTS ---
-#[derive(Component)]
+#[derive(Component, Clone, Copy, PartialEq)]
 pub struct StartPoint {
     pub player_index: i16,
 }
@@ -82,7 +82,7 @@ impl Default for StartPoint {
 // --- ENEMY PATH COMPONENTS ---
 #[derive(Component, Default)]
 pub struct EnemyPathMarker;
-#[derive(Component, Clone)]
+#[derive(Component, Clone, Copy, PartialEq)]
 pub struct EnemyPathPoint {
     pub leniency: f32,
     pub setting_1: EnemyPathSetting1,

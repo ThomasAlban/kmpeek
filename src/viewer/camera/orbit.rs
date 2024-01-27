@@ -22,7 +22,7 @@ impl Plugin for OrbitCamPlugin {
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Clone, Copy, PartialEq)]
 pub struct OrbitCam {
     pub focus: Vec3,
     pub radius: f32,
@@ -146,63 +146,69 @@ fn orbit_cam(
         orbit_button_changed = true;
     }
 
-    for (mut orbit_cam, mut transform, projection) in q_orbit_cam.iter_mut() {
-        if orbit_button_changed {
-            // only check for upside down when orbiting started or ended this frame
-            // if the camera is "upside" down, panning horizontally would be inverted, so invert the input to make it correct
-            let up = transform.rotation * Vec3::Y;
-            orbit_cam.upside_down = up.y <= 0.0;
-        }
+    let (mut orbit_cam, mut transform, projection) = q_orbit_cam.single_mut();
+    let mut transform_cp = *transform;
+    let mut orbit_cam_cp = *orbit_cam;
 
-        let window_size = Vec2::new(window.width(), window.height());
-
-        let mut any = false;
-        if rotation_move.length_squared() > 0.0 {
-            any = true;
-            let delta_x = {
-                let delta = rotation_move.x / window_size.x * std::f32::consts::PI * 2.0;
-                if orbit_cam.upside_down {
-                    -delta
-                } else {
-                    delta
-                }
-            };
-            let delta_y = rotation_move.y / window_size.y * std::f32::consts::PI;
-
-            let yaw = Quat::from_rotation_y(-delta_x);
-            let pitch = Quat::from_rotation_x(-delta_y);
-            transform.rotation = yaw * transform.rotation; // rotate around global y axis
-            transform.rotation *= pitch; // rotate around local x axis
-        } else if pan.length_squared() > 0.0 {
-            any = true;
-            // make panning distance independent of resolution and FOV
-            if let Projection::Perspective(projection) = projection {
-                pan *= Vec2::new(projection.fov * projection.aspect_ratio, projection.fov)
-                    / window_size;
-            }
-            // translate by local axes
-            let right = transform.rotation * Vec3::X * -pan.x;
-            let up = transform.rotation * Vec3::Y * pan.y;
-            // make panning proportional to distance away from focus point
-            let translation = (right + up) * orbit_cam.radius;
-            orbit_cam.focus += translation;
-        } else if scroll.abs() > 0.0 {
-            any = true;
-            orbit_cam.radius -=
-                scroll * orbit_cam.radius * 0.002 * settings.camera.orbit.scroll_sensitivity;
-            // dont allow zoom to reach zero or you get stuck
-            orbit_cam.radius = orbit_cam.radius.clamp(1., 500000.);
-        }
-
-        if any {
-            // emulating parent/child to make the yaw/y-axis rotation behave like a turntable
-            // parent = x and y rotation
-            // child = z-offset
-            let rot_matrix = Mat3::from_quat(transform.rotation);
-            transform.translation =
-                orbit_cam.focus + rot_matrix.mul_vec3(Vec3::new(0.0, 0.0, orbit_cam.radius));
-        }
+    if orbit_button_changed {
+        // only check for upside down when orbiting started or ended this frame
+        // if the camera is "upside" down, panning horizontally would be inverted, so invert the input to make it correct
+        let up = transform_cp.rotation * Vec3::Y;
+        orbit_cam_cp.upside_down = up.y <= 0.0;
     }
+
+    let window_size = Vec2::new(window.width(), window.height());
+
+    let mut any = false;
+    if rotation_move.length_squared() > 0.0 {
+        any = true;
+        let delta_x = {
+            let delta = rotation_move.x / window_size.x * std::f32::consts::PI * 2.0;
+            if orbit_cam_cp.upside_down {
+                -delta
+            } else {
+                delta
+            }
+        };
+        let delta_y = rotation_move.y / window_size.y * std::f32::consts::PI;
+
+        let yaw = Quat::from_rotation_y(-delta_x);
+        let pitch = Quat::from_rotation_x(-delta_y);
+        transform_cp.rotation = yaw * transform_cp.rotation; // rotate around global y axis
+        transform_cp.rotation *= pitch; // rotate around local x axis
+    } else if pan.length_squared() > 0.0 {
+        any = true;
+        // make panning distance independent of resolution and FOV
+        if let Projection::Perspective(projection) = projection {
+            pan *=
+                Vec2::new(projection.fov * projection.aspect_ratio, projection.fov) / window_size;
+        }
+        // translate by local axes
+        let right = transform_cp.rotation * Vec3::X * -pan.x;
+        let up = transform_cp.rotation * Vec3::Y * pan.y;
+        // make panning proportional to distance away from focus point
+        let translation = (right + up) * orbit_cam_cp.radius;
+        orbit_cam_cp.focus += translation;
+    } else if scroll.abs() > 0.0 {
+        any = true;
+        orbit_cam_cp.radius -=
+            scroll * orbit_cam_cp.radius * 0.002 * settings.camera.orbit.scroll_sensitivity;
+        // dont allow zoom to reach zero or you get stuck
+        orbit_cam_cp.radius = orbit_cam_cp.radius.clamp(1., 500000.);
+    }
+
+    if any {
+        // emulating parent/child to make the yaw/y-axis rotation behave like a turntable
+        // parent = x and y rotation
+        // child = z-offset
+        let rot_matrix = Mat3::from_quat(transform_cp.rotation);
+        transform_cp.translation =
+            orbit_cam_cp.focus + rot_matrix.mul_vec3(Vec3::new(0.0, 0.0, orbit_cam_cp.radius));
+    }
+
+    transform.set_if_neq(transform_cp);
+    orbit_cam.set_if_neq(orbit_cam_cp);
+
     // consume any remaining events, so they don't pile up if we don't need them
     // (and also to avoid Bevy warning us about not checking events every frame update)
     ev_mouse_motion.clear();
