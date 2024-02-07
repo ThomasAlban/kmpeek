@@ -4,7 +4,7 @@ use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 #[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy)]
 pub enum KmpModelSections {
     #[default]
-    #[strum(serialize = "Start Points")]
+    #[strum(serialize = "Start Points", props(num = "0"))]
     StartPoints,
     #[strum(serialize = "Enemy Paths")]
     EnemyPaths,
@@ -35,10 +35,10 @@ impl From<KmpModelSections> for usize {
             Checkpoints => 3,
             RespawnPoints => 4,
             Objects => 5,
-            Areas => 7,
-            Cameras => 8,
-            CannonPoints => 9,
-            BattleFinishPoints => 10,
+            Areas => 6,
+            Cameras => 7,
+            CannonPoints => 8,
+            BattleFinishPoints => 9,
         }
     }
 }

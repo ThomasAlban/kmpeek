@@ -1,282 +1,173 @@
 use super::UiSubSection;
 use crate::{
-    ui::util::{view_icon_btn, Icons},
-    viewer::{edit::select::Selected, kmp::path::EntityGroup},
+    ui::{
+        settings::AppSettings,
+        util::{view_icon_btn, Icons},
+    },
+    viewer::{
+        edit::select::Selected,
+        kmp::{
+            components::{
+                AreaPoint, CannonPoint, EnemyPathMarker, ItemPathMarker, KmpCamera, Object,
+                RespawnPoint, StartPoint,
+            },
+            path::{EnemyPathGroups, ItemPathGroups},
+            sections::{KmpEditMode, KmpModelSections},
+            KmpVisibilityUpdate,
+        },
+    },
 };
 use bevy::{ecs::system::SystemParam, prelude::*};
-use bevy_egui::egui::{self, collapsing_header, Color32, Ui};
+use bevy_egui::egui::{collapsing_header::CollapsingState, Align, Color32, Layout, Ui};
 
 #[derive(SystemParam)]
 pub struct ShowOutlinerTab<'w, 's> {
-    commands: Commands<'w, 's>,
-    q_visibility: Query<'w, 's, &'static mut Visibility>,
-    q_is_selected: Query<'w, 's, Has<Selected>>,
-    q_all_selected: Query<'w, 's, Entity, With<Selected>>,
     keys: Res<'w, Input<KeyCode>>,
+    edit_mode: ResMut<'w, KmpEditMode>,
+
+    start_points: Query<'w, 's, Entity, With<StartPoint>>,
+    enemy_paths: Query<'w, 's, Entity, With<EnemyPathMarker>>,
+    item_paths: Query<'w, 's, Entity, With<ItemPathMarker>>,
+    respawn_points: Query<'w, 's, Entity, With<RespawnPoint>>,
+    objects: Query<'w, 's, Entity, With<Object>>,
+    areas: Query<'w, 's, Entity, With<AreaPoint>>,
+    cameras: Query<'w, 's, Entity, With<KmpCamera>>,
+    cannon_points: Query<'w, 's, Entity, With<CannonPoint>>,
+
+    enemy_groups: Option<Res<'w, EnemyPathGroups>>,
+    item_groups: Option<Res<'w, ItemPathGroups>>,
+    commands: Commands<'w, 's>,
+
+    q_visibility: Query<'w, 's, &'static mut Visibility>,
+    q_selected: Query<'w, 's, Entity, With<Selected>>,
+    ev_kmp_visibility_update: EventWriter<'w, KmpVisibilityUpdate>,
+    settings: ResMut<'w, AppSettings>,
+    link_visibilities: Local<'s, bool>,
 }
 impl UiSubSection for ShowOutlinerTab<'_, '_> {
     fn show(&mut self, ui: &mut bevy_egui::egui::Ui) {
+        *self.link_visibilities = true;
 
-        // self.show_point_outliner(
-        //     ui,
-        //     "Start Points",
-        //     Icons::START_POINTS_COLOR,
-        //     &kmp.start_points,
-        // );
+        let start_points = self.start_points.iter().collect::<Vec<Entity>>();
 
-        // self.show_path_outliner(
-        //     ui,
-        //     "Enemy Paths",
-        //     Icons::ENEMY_PATHS_COLOR,
-        //     &kmp.enemy_paths,
-        // );
+        let enemy_paths = self.enemy_paths.iter().collect::<Vec<Entity>>();
+        let enemy_groups = self.enemy_groups.as_ref().map(|e| e.0.clone());
+        let item_paths = self.item_paths.iter().collect::<Vec<Entity>>();
+        let item_groups = self.item_groups.as_ref().map(|e| e.0.clone());
 
-        // self.show_path_outliner(ui, "Item Paths", Icons::ITEM_PATHS_COLOR, &kmp.item_paths);
+        // todo: checkpoints
+        let checkpoints: Vec<Entity> = vec![];
+        let checkpoint_paths: Option<Vec<Vec<Entity>>> = None;
 
-        // // todo: checkpoints
-
-        // self.show_point_outliner(
-        //     ui,
-        //     "Respawn Points",
-        //     Icons::RESPAWN_POINTS_COLOR,
-        //     &kmp.respawn_points,
-        // );
-
-        // self.show_point_outliner(ui, "Objects", Icons::OBJECTS_COLOR, &kmp.objects);
-
-        // self.show_point_outliner(ui, "Areas", Icons::AREAS_COLOR, &kmp.areas);
-
-        // self.show_point_outliner(ui, "Cameras", Icons::CAMERAS_COLOR, &kmp.cameras);
-
-        // todo: cannon points
-
+        let respawn_points = self.respawn_points.iter().collect::<Vec<Entity>>();
+        let objects = self.objects.iter().collect::<Vec<Entity>>();
+        let areas = self.areas.iter().collect::<Vec<Entity>>();
+        let cameras = self.cameras.iter().collect::<Vec<Entity>>();
+        let cannon_points = self.cannon_points.iter().collect::<Vec<Entity>>();
         // todo: battle finish points
+        let battle_finish_points: Vec<Entity> = vec![];
+
+        use KmpModelSections::*;
+
+        self.show_point_outliner(ui, StartPoints, &start_points);
+        self.show_path_outliner(ui, EnemyPaths, &enemy_paths, &enemy_groups);
+        self.show_path_outliner(ui, ItemPaths, &item_paths, &item_groups);
+        self.show_path_outliner(ui, Checkpoints, &checkpoints, &checkpoint_paths);
+        self.show_point_outliner(ui, RespawnPoints, &respawn_points);
+        self.show_point_outliner(ui, Objects, &objects);
+        self.show_point_outliner(ui, Areas, &areas);
+        self.show_point_outliner(ui, Cameras, &cameras);
+        self.show_point_outliner(ui, CannonPoints, &cannon_points);
+        self.show_point_outliner(ui, BattleFinishPoints, &battle_finish_points);
     }
 }
-
 impl ShowOutlinerTab<'_, '_> {
+    const ICON_SIZE: f32 = 14.;
     fn show_point_outliner(
         &mut self,
         ui: &mut Ui,
-        name: impl Into<String>,
-        icon_tint: impl Into<Color32> + Clone,
+        selected: KmpModelSections,
         entities: &[Entity],
     ) {
-        self.show_points_collapsing_header(
-            ui,
-            name,
-            Icons::cube_group(ui.ctx()),
-            icon_tint,
-            entities,
-        );
+        self.show_header(ui, selected, entities, false);
     }
-
     fn show_path_outliner(
         &mut self,
         ui: &mut Ui,
-        name: impl Into<String>,
-        icon_tint: impl Into<Color32> + Clone,
-        entity_groups: &[EntityGroup],
+        selected: KmpModelSections,
+        entities: &[Entity],
+        group_info: &Option<Vec<Vec<Entity>>>,
     ) {
-        let name: String = name.into();
-        let mut children_visible = Vec::new();
-        let mut children_selected = Vec::new();
-
-        for entity_group in entity_groups.iter() {
-            let mut entity_group_visibilities = Vec::new();
-            let mut entity_group_selected = Vec::new();
-            for entity in entity_group.entities.iter() {
-                let visibility = self.q_visibility.get(*entity).unwrap();
-                let is_selected = self.q_is_selected.get(*entity).unwrap();
-
-                entity_group_visibilities.push(visibility == Visibility::Visible);
-                entity_group_selected.push(is_selected);
-            }
-            children_visible.push(entity_group_visibilities);
-            children_selected.push(entity_group_selected);
-        }
-
-        collapsing_header::CollapsingState::load_with_default_open(
+        CollapsingState::load_with_default_open(
             ui.ctx(),
-            name.clone().into(),
+            format!("{}_outliner", selected).into(),
             false,
         )
         .show_header(ui, |ui| {
-            let mut any_visible = children_visible.iter().any(|e| e.iter().any(|e| *e));
-            let mut all_selected = children_selected.iter().all(|e| e.iter().all(|e| *e));
-            let view_btn = view_icon_btn(ui, &mut any_visible);
-            if view_btn.changed() {
-                for entity_group in entity_groups.iter() {
-                    for entity in entity_group.entities.iter() {
-                        self.set_visibility(*entity, any_visible, all_selected);
-                    }
-                }
-            }
-
-            let img = Icons::path_group(ui.ctx()).tint(icon_tint.clone());
-            ui.allocate_ui(egui::Vec2::splat(Icons::SIZE), |ui| ui.add(img));
-
-            let toggle_all_selected = ui.toggle_value(&mut all_selected, name);
-
-            if toggle_all_selected.changed() {
-                self.path_header_set_selected(all_selected, entity_groups);
-            }
+            self.show_header(ui, selected, entities, true);
         })
         .body(|ui| {
-            for (i, entity_group) in entity_groups.iter().enumerate() {
-                self.show_points_collapsing_header(
-                    ui,
-                    format!("Path {i}"),
-                    Icons::path(ui.ctx()),
-                    icon_tint.clone(),
-                    &entity_group.entities,
-                );
+            if let Some(groups) = group_info {
+                for (i, entities) in groups.iter().enumerate() {
+                    self.show_path(ui, i, entities, Icons::SECTION_COLORS[selected as usize]);
+                }
             }
         });
     }
-
-    fn show_points_collapsing_header(
+    fn show_header(
         &mut self,
         ui: &mut Ui,
-        name: impl Into<String>,
-        icon: egui::Image,
-        icon_tint: impl Into<Color32> + Clone,
+        selected: KmpModelSections,
         entities: &[Entity],
+        path: bool,
     ) {
-        let name: String = name.into();
-        let mut children_visible = Vec::new();
-        let mut children_selected = Vec::new();
-
-        for entity in entities.iter() {
-            let visibility = self.q_visibility.get(*entity).unwrap();
-            let is_selected = self.q_is_selected.get(*entity).unwrap();
-            children_visible.push(visibility == Visibility::Visible);
-            children_selected.push(is_selected);
-        }
-        collapsing_header::CollapsingState::load_with_default_open(
-            ui.ctx(),
-            name.clone().into(),
-            false,
-        )
-        .show_header(ui, |ui| {
-            let mut any_visible = children_visible.iter().any(|e| *e);
-            let mut all_selected = children_selected.iter().all(|e| *e);
-            let view_btn = view_icon_btn(ui, &mut any_visible);
-            if view_btn.changed() {
-                for entity in entities.iter() {
-                    self.set_visibility(*entity, any_visible, all_selected);
-                }
+        let current = &mut self.edit_mode.0;
+        let visibilities = &mut self.settings.kmp_model.sections.visible;
+        ui.horizontal(|ui| {
+            if !path {
+                ui.add_space(18.);
             }
-
-            ui.allocate_ui(egui::Vec2::splat(Icons::SIZE), |ui| {
-                ui.add(icon.tint(icon_tint.clone()));
-            });
-
-            let toggle_all_selected = ui.toggle_value(&mut all_selected, name);
-            if toggle_all_selected.changed() {
-                self.point_header_set_selected(all_selected, entities);
-            }
-        })
-        .body(|ui| {
-            self.show_points_list(ui, entities, icon_tint);
-        });
-    }
-
-    fn show_points_list(
-        &mut self,
-        ui: &mut Ui,
-        entities: &[Entity],
-        icon_tint: impl Into<Color32> + Clone,
-    ) {
-        for (i, entity) in entities.iter().enumerate() {
-            let visibility = self.q_visibility.get(*entity).unwrap();
-            let mut is_selected = self.q_is_selected.get(*entity).unwrap();
-            let mut is_visible = *visibility == Visibility::Visible;
-
-            let (view_btn, toggle_val) = ui
-                .horizontal(|ui| {
-                    ui.add_space(15.);
-                    let view_btn = view_icon_btn(ui, &mut is_visible);
-
-                    let img = Icons::cube(ui.ctx()).tint(icon_tint.clone());
-                    ui.allocate_ui(egui::Vec2::splat(Icons::SIZE), |ui| ui.add(img));
-
-                    let toggle_val = ui.toggle_value(&mut is_selected, format!("Point {i}"));
-                    (view_btn, toggle_val)
-                })
-                .inner;
-            if view_btn.changed() {
-                self.set_visibility(*entity, is_visible, is_selected);
-            }
-            if toggle_val.changed() {
-                self.point_set_selected(is_selected, *entity);
-            }
-        }
-    }
-
-    fn set_visibility(&mut self, entity: Entity, visible: bool, is_selected: bool) {
-        let mut set_visible = |e: Entity, v: bool| {
-            *self.q_visibility.get_mut(e).unwrap() = if v {
-                Visibility::Visible
-            } else {
-                Visibility::Hidden
-            };
-        };
-
-        // if we are selected, then go through everything that is selected and toggle visibility of those things as well
-        if is_selected {
-            for selected in self.q_all_selected.iter() {
-                set_visible(selected, visible);
-            }
-        } else {
-            // otherwise just set the visibility of only ourselves
-            set_visible(entity, visible);
-        }
-    }
-
-    fn path_header_set_selected(&mut self, all_selected: bool, entity_groups: &[EntityGroup]) {
-        if !self.keys.pressed(KeyCode::ShiftLeft) {
-            for selected in self.q_all_selected.iter() {
-                self.commands.entity(selected).remove::<Selected>();
-            }
-        }
-
-        for entity_group in entity_groups.iter() {
-            for entity in entity_group.entities.iter() {
-                if all_selected {
-                    self.commands.entity(*entity).insert(Selected);
+            ui.add_sized(
+                [Self::ICON_SIZE, Self::ICON_SIZE],
+                if path {
+                    Icons::path_group(ui.ctx(), Self::ICON_SIZE)
                 } else {
-                    self.commands.entity(*entity).remove::<Selected>();
+                    Icons::cube_group(ui.ctx(), Self::ICON_SIZE)
                 }
+                .tint(Icons::SECTION_COLORS[selected as usize]),
+            );
+            if ui
+                .selectable_value(current, selected, selected.to_string())
+                .clicked()
+                && *self.link_visibilities
+            {
+                *visibilities = [false; 10];
+                visibilities[selected as usize] = true;
+                self.ev_kmp_visibility_update.send_default();
             }
-        }
-    }
 
-    fn point_header_set_selected(&mut self, all_selected: bool, entities: &[Entity]) {
-        if !self.keys.pressed(KeyCode::ShiftLeft) {
-            for selected in self.q_all_selected.iter() {
-                self.commands.entity(selected).remove::<Selected>();
-            }
-        }
-
-        for entity in entities.iter() {
-            if all_selected {
-                self.commands.entity(*entity).insert(Selected);
-            } else {
-                self.commands.entity(*entity).remove::<Selected>();
-            }
-        }
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                let mut all_visible = entities
+                    .iter()
+                    .all(|e| self.q_visibility.get(*e) == Ok(&Visibility::Visible));
+                if view_icon_btn(ui, &mut all_visible).changed() {
+                    visibilities[selected as usize] = all_visible;
+                    self.ev_kmp_visibility_update.send_default();
+                }
+            });
+        });
     }
-    fn point_set_selected(&mut self, selected: bool, entity: Entity) {
-        if !self.keys.pressed(KeyCode::ShiftLeft) {
-            for selected in self.q_all_selected.iter() {
-                self.commands.entity(selected).remove::<Selected>();
-            }
-        }
-        if selected {
-            self.commands.entity(entity).insert(Selected);
-        } else {
-            self.commands.entity(entity).remove::<Selected>();
-        }
+    fn show_path(&mut self, ui: &mut Ui, i: usize, entities: &[Entity], color: Color32) {
+        ui.horizontal(|ui| {
+            ui.add_space(10.);
+            ui.add_sized(
+                [Self::ICON_SIZE, Self::ICON_SIZE],
+                Icons::path(ui.ctx(), Self::ICON_SIZE).tint(color),
+            );
+            ui.label(format!("Path {i}"));
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                view_icon_btn(ui, &mut true);
+            });
+        });
     }
 }

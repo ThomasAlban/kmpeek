@@ -654,7 +654,7 @@ version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "58ddc2b76783939c530178f88e5711a1b01044d7b02db4033e2eb8b43b6cf4ec"
 dependencies = [
- "glam",
+ "glam 0.24.1",
  "serde",
 ]
 
@@ -664,7 +664,7 @@ version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ec4962977a746d870170532fc92759e04d3dbcae8b7b82e7ca3bb83b1d75277"
 dependencies = [
- "glam",
+ "glam 0.24.1",
 ]
 
 [[package]]
@@ -763,7 +763,7 @@ dependencies = [
  "bevy_utils",
  "downcast-rs",
  "erased-serde",
- "glam",
+ "glam 0.24.1",
  "serde",
  "smallvec",
  "smol_str",
@@ -1485,12 +1485,12 @@ dependencies = [
 
 [[package]]
 name = "egui-gizmo"
-version = "0.14.1"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cff743d17ff4d032f9ab3f5c58b6d7c4983ceb1dfa45a20c9f0eaf2b30025444"
+checksum = "ca7e40a59693dfac6232ab3d813bc22619b2f8e98a0e809fcadff9e9f1ff108e"
 dependencies = [
  "egui",
- "glam",
+ "glam 0.25.0",
  "mint",
 ]
 
@@ -1568,7 +1568,7 @@ checksum = "8fce2eeef77fd4a293a54b62aa00ac9daebfbcda4bf8998c5a815635b004aa1c"
 dependencies = [
  "const_panic",
  "encase_derive",
- "glam",
+ "glam 0.24.1",
  "thiserror",
 ]
 
@@ -1870,8 +1870,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42218cb640844e3872cc3c153dc975229e080a6c4733b34709ef445610550226"
 dependencies = [
  "bytemuck",
- "mint",
  "serde",
+]
+
+[[package]]
+name = "glam"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "151665d9be52f9bb40fc7966565d39666f2d1e69233571b71b87791c7e0528b3"
+dependencies = [
+ "mint",
 ]
 
 [[package]]
@@ -2013,7 +2021,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cb3df16a7bcb1b5bc092abd55e14f77ca70aea14445026e264586fc62889a10"
 dependencies = [
  "constgebra",
- "glam",
+ "glam 0.24.1",
 ]
 
 [[package]]

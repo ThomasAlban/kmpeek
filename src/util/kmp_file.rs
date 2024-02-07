@@ -106,7 +106,7 @@ pub struct PathGroup {
 #[binrw]
 pub struct Itpt {
     pub position: [f32; 3],
-    pub bullet_bill_control: f32,
+    pub bullet_control: f32,
     pub setting_1: u16,
     pub setting_2: u16,
 }

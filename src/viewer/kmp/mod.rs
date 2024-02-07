@@ -8,7 +8,9 @@ pub mod settings;
 use self::{
     components::*,
     meshes_materials::{setup_kmp_meshes_materials, KmpMeshesMaterials},
-    path::{spawn_path_section, update_node_links, KmpPathNodeLink},
+    path::{
+        spawn_path_section, traverse_paths, update_node_links, KmpPathNodeLink, RecalculatePaths,
+    },
     point::{spawn_point_section, spawn_respawn_point_section},
     sections::KmpEditMode,
 };
@@ -30,6 +32,7 @@ pub struct KmpPlugin;
 impl Plugin for KmpPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<KmpVisibilityUpdate>()
+            .add_event::<RecalculatePaths>()
             .init_resource::<KmpEditMode>()
             .add_systems(
                 Startup,
@@ -47,6 +50,7 @@ impl Plugin for KmpPlugin {
                         .after(SelectSet)
                         .before(UpdateNormalizeSet),
                     update_visible.run_if(on_event::<KmpVisibilityUpdate>()),
+                    traverse_paths.run_if(on_event::<RecalculatePaths>()),
                 ),
             );
     }
@@ -57,6 +61,7 @@ pub fn spawn_model(
     q_kmp_section: Query<Entity, With<KmpSelectablePoint>>,
     settings: Res<AppSettings>,
     mut ev_kmp_visibility_update: EventWriter<KmpVisibilityUpdate>,
+    mut ev_recalculate_paths: EventWriter<RecalculatePaths>,
     kmp_meshes_materials: Res<KmpMeshesMaterials>,
 ) {
     // if there is no kmp file selected event return
@@ -79,7 +84,6 @@ pub fn spawn_model(
         commands.entity(entity).despawn();
     }
 
-    let sections = &settings.kmp_model.sections;
     let meshes = &kmp_meshes_materials.meshes;
     let materials = &kmp_meshes_materials.materials;
 
@@ -176,6 +180,7 @@ pub fn spawn_model(
     // ---
 
     ev_kmp_visibility_update.send_default();
+    ev_recalculate_paths.send_default();
 }
 
 #[derive(Event, Default)]

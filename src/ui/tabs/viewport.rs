@@ -13,10 +13,6 @@ use crate::{
             select::SelectBox,
             EditMode,
         },
-        kmp::{
-            sections::{KmpEditMode, KmpModelSections},
-            KmpVisibilityUpdate,
-        },
     },
 };
 use bevy::{
@@ -25,7 +21,6 @@ use bevy::{
 };
 use bevy_egui::egui::{self, Color32, Margin, Pos2, Rounding, Stroke, Ui};
 use egui_gizmo::GizmoOrientation;
-use strum::IntoEnumIterator;
 
 #[derive(SystemParam)]
 struct ViewportParams<'w, 's> {
@@ -39,8 +34,6 @@ struct ViewportParams<'w, 's> {
     select_box: Res<'w, SelectBox>,
     settings: ResMut<'w, AppSettings>,
     ev_camera_mode_changed: EventWriter<'w, CameraModeChanged>,
-    kmp_edit_mode: ResMut<'w, KmpEditMode>,
-    ev_kmp_visibility_updated: EventWriter<'w, KmpVisibilityUpdate>,
 }
 
 #[derive(SystemParam)]
@@ -120,6 +113,7 @@ impl ShowViewportTab<'_, '_> {
                         let gizmo_options_btn = ui.button("Gizmo Options");
                         button_triggered_popup(ui, "gizmo_options_popup", gizmo_options_btn, |ui| {
                             ui.style_mut().spacing.button_padding = egui::Vec2::ZERO;
+                            let size = 25.;
                             ui.label("Origin:");
                             ui.horizontal(|ui| {
                                 let origin = &mut p.gizmo_options.gizmo_origin;
@@ -128,24 +122,24 @@ impl ShowViewportTab<'_, '_> {
                                     ui,
                                     origin,
                                     GizmoOrigin::Mean,
-                                    Icons::origin_mean(ui.ctx()),
-                                    Icons::GIZMO_OPTIONS_SIZE,
+                                    Icons::origin_mean(ui.ctx(), size),
+                                    size,
                                 )
                                 .on_hover_text_at_pointer("Takes the mean average of each point's position, and places the gizmo there");
                                 image_selectable_value(
                                     ui,
                                     origin,
                                     GizmoOrigin::FirstSelected,
-                                    Icons::origin_first_selected(ui.ctx()),
-                                    Icons::GIZMO_OPTIONS_SIZE,
+                                    Icons::origin_first_selected(ui.ctx(), size),
+                                    size,
                                 )
                                 .on_hover_text_at_pointer("Places the gizmo at the first selected point");
                                 image_selectable_value(
                                     ui,
                                     origin,
                                     GizmoOrigin::Individual,
-                                    Icons::origin_individual(ui.ctx()),
-                                    Icons::GIZMO_OPTIONS_SIZE,
+                                    Icons::origin_individual(ui.ctx(), size),
+                                    size,
                                 )
                                 .on_hover_text_at_pointer("Places the gizmo at the first selected point, with each point's origin as its own");
                             });
@@ -157,16 +151,16 @@ impl ShowViewportTab<'_, '_> {
                                     ui,
                                     orient,
                                     GizmoOrientation::Global,
-                                    Icons::orient_global(ui.ctx()),
-                                    Icons::GIZMO_OPTIONS_SIZE,
+                                    Icons::orient_global(ui.ctx(), size),
+                                    size,
                                 )
                                 .on_hover_text_at_pointer("Orient the gizmo to the global space");
                                 image_selectable_value(
                                     ui,
                                     orient,
                                     GizmoOrientation::Local,
-                                    Icons::orient_local(ui.ctx()),
-                                    Icons::GIZMO_OPTIONS_SIZE,
+                                    Icons::orient_local(ui.ctx(), size),
+                                    size,
                                 )
                                 .on_hover_text_at_pointer("Orient the gizmo to the selected point");
                             });
@@ -200,72 +194,43 @@ impl ShowViewportTab<'_, '_> {
                                 }
                             });
                         });
-
-                        let img = match p.kmp_edit_mode.0 {
-                            KmpModelSections::StartPoints => Icons::cube_group(ui.ctx()).tint(Icons::START_POINTS_COLOR),
-                            KmpModelSections::EnemyPaths => Icons::path_group(ui.ctx()).tint(Icons::ENEMY_PATHS_COLOR),
-                            KmpModelSections::ItemPaths => Icons::cube_group(ui.ctx()).tint(Icons::ITEM_PATHS_COLOR),
-                            KmpModelSections::RespawnPoints => Icons::cube_group(ui.ctx()).tint(Icons::RESPAWN_POINTS_COLOR),
-                            KmpModelSections::Objects => Icons::cube_group(ui.ctx()).tint(Icons::OBJECTS_COLOR),
-                            KmpModelSections::Areas => Icons::cube_group(ui.ctx()).tint(Icons::AREAS_COLOR),
-                            KmpModelSections::Cameras => Icons::cube_group(ui.ctx()).tint(Icons::CAMERAS_COLOR),
-                            _ => Icons::cube_group(ui.ctx()).tint(Icons::CAMERAS_COLOR)
-                        };
-
-                        ui.add(egui::Button::image_and_text(img, format!("Tool: {}", p.kmp_edit_mode.0)));
-
-                        egui::ComboBox::from_id_source("tool_select").selected_text(format!("Tool: {}", p.kmp_edit_mode.0)).show_ui(ui, |ui| {
-                            for (i, section) in KmpModelSections::iter().enumerate() {
-                                let mut visible_changed = false;
-                                if ui
-                                    .selectable_value(&mut p.kmp_edit_mode.0, section, section.to_string())
-                                    .clicked()
-                                {
-                                    p.settings.kmp_model.sections.visible = [false; 11];
-                                    p.settings.kmp_model.sections.visible[i] = true;
-                                    visible_changed = true;
-                                };
-                                if visible_changed {
-                                    p.ev_kmp_visibility_updated.send_default();
-                                }
-                            }
-                        });
                     });
                     // cursor/gizmo mode
                     ui.vertical(|ui| {
                         ui.style_mut().spacing.button_padding = egui::Vec2::ZERO;
                         let mode = &mut *p.edit_mode;
+                        let size = 35.;
 
                         image_selectable_value(
                             ui,
                             mode,
                             EditMode::Tweak,
-                            Icons::tweak(ui.ctx()),
-                            Icons::EDIT_MODE_OPTIONS_SIZE,
+                            Icons::tweak(ui.ctx(), size),
+                            size,
                         )
                         .on_hover_text_at_pointer("Drag points around freely");
                         image_selectable_value(
                             ui,
                             mode,
                             EditMode::SelectBox,
-                            Icons::select_box(ui.ctx()),
-                            Icons::EDIT_MODE_OPTIONS_SIZE,
+                            Icons::select_box(ui.ctx(), size),
+                            size,
                         )
                         .on_hover_text_at_pointer("Select points with a selection box");
                         image_selectable_value(
                             ui,
                             mode,
                             EditMode::Translate,
-                            Icons::translate(ui.ctx()),
-                            Icons::EDIT_MODE_OPTIONS_SIZE,
+                            Icons::translate(ui.ctx(), size),
+                            size,
                         )
                         .on_hover_text_at_pointer("Translate points with a gizmo");
                         image_selectable_value(
                             ui,
                             mode,
                             EditMode::Rotate,
-                            Icons::rotate(ui.ctx()),
-                            Icons::EDIT_MODE_OPTIONS_SIZE,
+                            Icons::rotate(ui.ctx(), size),
+                            size,
                         )
                         .on_hover_text_at_pointer("Rotate points with a gizmo");
                     });

@@ -20,10 +20,20 @@ impl Default for KmpModelSettings {
 }
 
 // stores whether each section is visible, and the relevant colors for each section
-#[derive(Serialize, Deserialize, Reflect, Default)]
+#[derive(Serialize, Deserialize, Reflect)]
 pub struct KmpModelSectionSettings {
-    pub visible: [bool; 11],
+    pub visible: [bool; 10],
     pub color: KmpModelColors,
+}
+impl Default for KmpModelSectionSettings {
+    fn default() -> Self {
+        let mut visible = [false; 10];
+        visible[0] = true;
+        Self {
+            visible,
+            color: KmpModelColors::default(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Reflect)]

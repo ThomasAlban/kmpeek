@@ -25,7 +25,7 @@ impl Plugin for MousePickingPlugin {
             .init_resource::<SelectBox>()
             .add_systems(
                 Update,
-                (select, select_box, update_outlines)
+                (select, select_box, update_outlines, apply_deferred)
                     .chain()
                     .in_set(SelectSet)
                     .after(UpdateUiSet),

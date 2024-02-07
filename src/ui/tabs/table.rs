@@ -1,12 +1,12 @@
 use crate::{
     ui::util::{combobox_enum, drag_vec3, rotation_edit},
     viewer::{
+        edit::select::Selected,
         kmp::{
             components::{EnemyPathPoint, StartPoint},
             path::EntityGroup,
             sections::{KmpEditMode, KmpModelSections},
         },
-        edit::select::Selected,
     },
 };
 use bevy::{ecs::system::SystemParam, prelude::*};
@@ -144,7 +144,7 @@ impl StartPointTable {
                         drag_vec3(ui, &mut transform_cp.translation, 10.);
                     });
                     row.col(|ui| {
-                        rotation_edit(ui, &mut transform_cp, 1.);
+                        // rotation_edit(ui, &mut transform_cp, 1.);
                     });
                     row.col(|ui| {
                         ui.with_layout(

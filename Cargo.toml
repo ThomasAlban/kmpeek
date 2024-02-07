@@ -31,7 +31,7 @@ bevy_pkv = "0.9.0"
 binrw = "0.13.3"
 bytemuck = "1.13.1"
 byteorder = "1.4.3"
-egui-gizmo = "0.14.1"
+egui-gizmo = "0.15.0"
 
 egui_dock = { git = "https://github.com/LennysLounge/egui_dock", branch = "replace_binary_tree", features = [
     "serde",

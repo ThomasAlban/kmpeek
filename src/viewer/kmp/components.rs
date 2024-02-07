@@ -11,6 +11,12 @@ pub trait FromKmp<T> {
 
 // components attached to kmp entities, to store data about them:
 
+// --- GENERAL PATH COMPONENTS ---
+#[derive(Component, Default)]
+pub struct PathStart;
+#[derive(Component, Default)]
+pub struct PathOverallStart;
+
 // --- TRACK INFO COMPONENTS ---
 #[derive(Component, Default)]
 pub struct TrackInfo {
@@ -30,7 +36,14 @@ impl FromKmp<Stgi> for TrackInfo {
             speed_mod: 0.,
             lens_flare_color: data.flare_color,
             lens_flare_flashing: data.lens_flare_flashing == 1,
-            first_player_pos: data.pole_pos.into(),
+            first_player_pos: match data.pole_pos {
+                0 => FirstPlayerPos::Left,
+                1 => FirstPlayerPos::Right,
+                _ => {
+                    warn!("Invalid STGI First Player Pos found");
+                    FirstPlayerPos::default()
+                }
+            },
             narrow_player_spacing: data.driver_distance == 1,
         }
     }
@@ -48,21 +61,9 @@ pub enum FirstPlayerPos {
     Left,
     Right,
 }
-impl From<u8> for FirstPlayerPos {
-    fn from(value: u8) -> Self {
-        match value {
-            0 => Self::Left,
-            1 => Self::Right,
-            _ => {
-                warn!("Invalid STGI First Player Pos found, which has been set to Left");
-                Self::Left
-            }
-        }
-    }
-}
 
 // --- START POINT COMPONENTS ---
-#[derive(Component, Clone, Copy, PartialEq)]
+#[derive(Component, Clone, Copy, PartialEq, Debug)]
 pub struct StartPoint {
     pub player_index: i16,
 }
@@ -100,8 +101,8 @@ impl FromKmp<Enpt> for EnemyPathPoint {
                 3 => EnemyPathSetting1::Wheelie,
                 4 => EnemyPathSetting1::EndWheelie,
                 _ => {
-                    warn!("Invalid ENPT setting 1 found, which has been set to None");
-                    EnemyPathSetting1::None
+                    warn!("Invalid ENPT setting 1 found");
+                    EnemyPathSetting1::default()
                 }
             },
             setting_2: match data.setting_2 {
@@ -110,8 +111,8 @@ impl FromKmp<Enpt> for EnemyPathPoint {
                 2 => EnemyPathSetting2::ForbidDrift,
                 3 => EnemyPathSetting2::ForceDrift,
                 _ => {
-                    warn!("Invalid ENPT setting 2 found, which has been set to None");
-                    EnemyPathSetting2::None
+                    warn!("Invalid ENPT setting 2 found");
+                    EnemyPathSetting2::default()
                 }
             },
             setting_3: data.setting_3,
@@ -145,20 +146,44 @@ pub enum EnemyPathSetting2 {
 // --- ITEM PATH COMPONENTS ---
 #[derive(Component, Default)]
 pub struct ItemPathMarker;
-#[derive(Component)]
+#[derive(Component, PartialEq, Clone)]
 pub struct ItemPathPoint {
-    pub bullet_bill_control: f32,
-    pub setting_1: u16,
-    pub setting_2: u16,
+    pub bullet_control: f32,
+    pub bullet_follows_height: ItemPathBulletFollowsHeight,
+    pub bullet_no_drop: bool,
+    pub low_shell_priority: bool,
 }
 impl FromKmp<Itpt> for ItemPathPoint {
     fn from_kmp(data: &Itpt) -> Self {
         Self {
-            bullet_bill_control: data.bullet_bill_control,
-            setting_1: data.setting_1,
-            setting_2: data.setting_2,
+            bullet_control: data.bullet_control,
+            bullet_follows_height: match data.setting_1 {
+                0 => ItemPathBulletFollowsHeight::Never,
+                1 => ItemPathBulletFollowsHeight::IfAboveGround,
+                2 => ItemPathBulletFollowsHeight::Always,
+                3 => ItemPathBulletFollowsHeight::NeverBouncyMushrooms,
+                _ => {
+                    warn!("Invalid ITPT setting 1 found, which has been set to If Above Ground");
+                    ItemPathBulletFollowsHeight::default()
+                }
+            },
+            bullet_no_drop: data.setting_2 == 1 || data.setting_2 == 3 || data.setting_1 == 5 || data.setting_2 == 7,
+            low_shell_priority: data.setting_2 == 2
+                || data.setting_2 == 3
+                || data.setting_2 == 6
+                || data.setting_2 == 7,
         }
     }
+}
+#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy)]
+pub enum ItemPathBulletFollowsHeight {
+    #[default]
+    #[strum(serialize = "If Above Ground")]
+    IfAboveGround,
+    Never,
+    Always,
+    #[strum(serialize = "Never (Bouncy Mushrooms)")]
+    NeverBouncyMushrooms,
 }
 
 // --- OBJECT COMPONENTS ---
@@ -229,19 +254,11 @@ impl FromKmp<Area> for AreaPoint {
             kind: match data.kind {
                 0 => AreaKind::Camera(AreaCameraIndex(data.came_index)),
                 1 => AreaKind::EnvEffect(data.setting_1.into()),
-                2 => {
-                    AreaKind::FogEffect(AreaBfgEntry(data.setting_1), AreaSetting2(data.setting_2))
-                }
+                2 => AreaKind::FogEffect(AreaBfgEntry(data.setting_1), AreaSetting2(data.setting_2)),
                 3 => AreaKind::MovingRoad(AreaEnemyPointId(data.enpt_id)),
                 4 => AreaKind::ForceRecalc,
-                5 => AreaKind::MinimapControl(
-                    AreaSetting1(data.setting_1),
-                    AreaSetting2(data.setting_2),
-                ),
-                6 => AreaKind::BloomEffect(
-                    AreaBblmFile(data.setting_1),
-                    AreaFadeTime(data.setting_2),
-                ),
+                5 => AreaKind::MinimapControl(AreaSetting1(data.setting_1), AreaSetting2(data.setting_2)),
+                6 => AreaKind::BloomEffect(AreaBblmFile(data.setting_1), AreaFadeTime(data.setting_2)),
                 7 => AreaKind::EnableBoos,
                 8 => AreaKind::ObjectGroup(AreaGroupId(data.setting_1)),
                 9 => AreaKind::ObjectUnload(AreaGroupId(data.setting_1)),

@@ -97,10 +97,6 @@ pub fn select(
     // select the entity
     if let Some((to_select, _)) = intersection {
         commands.entity(*to_select).insert(Selected);
-        // add the outline
-        if let Ok(mut outline) = q_outline.get_mut(*to_select) {
-            outline.visible = true;
-        }
     } else if !shift_key_down {
         // if we just randomly clicked on nothing then deselect everything
         for selected in q_selected.iter() {
