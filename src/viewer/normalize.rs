@@ -1,14 +1,11 @@
-use bevy::{prelude::*, window::PrimaryWindow};
-
-use crate::ui::{settings::AppSettings, update_ui::UpdateUiSet};
+use crate::ui::settings::AppSettings;
+use bevy::{prelude::*, transform::TransformSystem, window::PrimaryWindow};
 
 pub struct NormalizePlugin;
 impl Plugin for NormalizePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            update_normalize.in_set(UpdateNormalizeSet), // .before(UpdateUiSet),
-        );
+        // .after(TransformSystem::TransformPropagate)
+        app.add_systems(Last, update_normalize);
     }
 }
 
@@ -30,31 +27,30 @@ impl Normalize {
         }
     }
 }
+/// Marker struct that marks entities which should inherit their normalization from the parent
+#[derive(Component, Debug)]
+pub struct NormalizeInheritParent;
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
-pub struct UpdateNormalizeSet;
-
+// since this update normalize function runs last in the schedule, it doesn't care about parent/child relationships,
+// only about whether individual entities are marked with the normalize component. This is useful because we can have children
+// of entities which follow the transform of the parent but aren't necesssarily normalized
 fn update_normalize(
-    mut q_normalize: ParamSet<(
+    mut p: ParamSet<(
         Query<(&GlobalTransform, &Camera)>,
-        Query<(
-            &mut Transform,
-            &mut GlobalTransform,
-            &Normalize,
-            &ViewVisibility,
-        )>,
+        Query<(&mut GlobalTransform, &Normalize, &ViewVisibility, Option<&Children>)>,
+        Query<(&mut GlobalTransform, &Transform), With<NormalizeInheritParent>>,
     )>,
     settings: Res<AppSettings>,
     q_window: Query<&Window, With<PrimaryWindow>>,
 ) {
     if !settings.kmp_model.normalize {
-        for (mut transform, _, normalize, visibility) in q_normalize.p1().iter_mut() {
+        for (mut gt, normalize, visibility, _) in p.p1().iter_mut() {
             if *visibility == ViewVisibility::HIDDEN {
                 continue;
             }
-            let mut transform_cp = *transform;
+            let mut transform_cp = gt.compute_transform();
 
-            let scale_before = transform.scale;
+            let scale_before = transform_cp.scale;
             transform_cp.scale = Vec3::ONE * settings.kmp_model.point_scale;
 
             if !normalize.axes.x {
@@ -66,14 +62,16 @@ fn update_normalize(
             if !normalize.axes.z {
                 transform_cp.scale.z = scale_before.z;
             }
-            transform.set_if_neq(transform_cp);
+
+            gt.set_if_neq(transform_cp.into());
         }
+
         return;
     }
     let window = q_window.single();
 
     let (mut camera_position, mut camera) = (None, None);
-    for cam in q_normalize.p0().iter() {
+    for cam in p.p0().iter() {
         if cam.1.is_active {
             if camera.is_some() {
                 panic!("More than one active camera");
@@ -86,37 +84,35 @@ fn update_normalize(
 
     let view = camera_position.compute_matrix().inverse();
 
-    for (mut transform, mut global_transform, normalize, visibility) in q_normalize.p1().iter_mut()
-    {
+    let mut children_to_deal_with = Vec::new();
+
+    for (mut gt, normalize, visibility, children) in p.p1().iter_mut() {
         if *visibility == ViewVisibility::HIDDEN {
             continue;
         }
-        let distance = view.transform_point3(global_transform.translation()).z;
-        let gt = global_transform.compute_transform();
+        let mut transform_cp = gt.compute_transform();
+
+        let distance = view.transform_point3(transform_cp.translation).z;
 
         let Some(pixel_end) = camera.world_to_viewport(
             &GlobalTransform::default(),
-            Vec3::new(normalize.size_in_world * gt.scale.x, 0.0, distance),
+            Vec3::new(normalize.size_in_world * transform_cp.scale.x, 0.0, distance),
         ) else {
             continue;
         };
 
-        let Some(pixel_root) =
-            camera.world_to_viewport(&GlobalTransform::default(), Vec3::new(0.0, 0.0, distance))
+        let Some(pixel_root) = camera.world_to_viewport(&GlobalTransform::default(), Vec3::new(0.0, 0.0, distance))
         else {
             continue;
         };
 
         let actual_pixel_size = pixel_root.distance(pixel_end);
 
-        let required_scale =
-            (normalize.desired_pixel_size * settings.kmp_model.point_scale) / actual_pixel_size;
+        let required_scale = (normalize.desired_pixel_size * settings.kmp_model.point_scale) / actual_pixel_size;
 
-        let scale_before = transform.scale; // save what the scale was before we change it
+        let scale_before = transform_cp.scale; // save what the scale was before we change it
 
-        let mut transform_cp = *transform;
-
-        transform_cp.scale = gt.scale * required_scale * window.scale_factor() as f32 / 2.; // change the scale
+        transform_cp.scale = transform_cp.scale * required_scale * window.scale_factor() as f32 / 2.; // change the scale
 
         // reset the scale if we didn't want to affect any axes
         if !normalize.axes.x {
@@ -129,8 +125,23 @@ fn update_normalize(
             transform_cp.scale.z = scale_before.z;
         }
 
-        if transform.set_if_neq(transform_cp) {
-            *global_transform = (*transform).into();
+        gt.set_if_neq(transform_cp.into());
+
+        let Some(children) = children else { continue };
+        let children: Vec<_> = children.iter().copied().collect();
+        children_to_deal_with.push((*gt, children));
+    }
+
+    // now we propogate the change in scale to any children of the normalized points with the 'NormalizeInheritParent' component
+    // this may cause issues if there are grandchildren in the heirarchy but for now it's fine, lets cross that bridge when we get there
+    let mut p2 = p.p2();
+    for (gt, children) in children_to_deal_with.iter() {
+        for child in children.iter() {
+            let Ok((mut child_gt, child_transform)) = p2.get_mut(*child) else {
+                continue;
+            };
+            // multiply the global transform of the parent which the local transform of the child
+            *child_gt = gt.mul_transform(*child_transform);
         }
     }
 }

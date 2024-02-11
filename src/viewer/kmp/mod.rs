@@ -8,17 +8,14 @@ pub mod settings;
 use self::{
     components::*,
     meshes_materials::{setup_kmp_meshes_materials, KmpMeshesMaterials},
-    path::{
-        spawn_path_section, traverse_paths, update_node_links, KmpPathNodeLink, RecalculatePaths,
-    },
-    point::{spawn_point_section, spawn_respawn_point_section},
+    path::{spawn_path_section, traverse_paths, update_node_links, KmpPathNodeLink, RecalculatePaths},
+    point::{add_respawn_point_preview, spawn_point_section},
     sections::KmpEditMode,
 };
-use super::{edit::select::SelectSet, normalize::UpdateNormalizeSet};
 use crate::{
     ui::{
         settings::{AppSettings, SetupAppSettingsSet},
-        update_ui::{KmpFileSelected, UpdateUiSet},
+        update_ui::KmpFileSelected,
     },
     util::kmp_file::*,
     viewer::kmp::sections::KmpModelSections,
@@ -44,11 +41,7 @@ impl Plugin for KmpPlugin {
                 Update,
                 (
                     spawn_model.run_if(on_event::<KmpFileSelected>()),
-                    // run update node links before update normalize so that the updated positions are normalized
-                    update_node_links
-                        .after(UpdateUiSet)
-                        .after(SelectSet)
-                        .before(UpdateNormalizeSet),
+                    update_node_links,
                     update_visible.run_if(on_event::<KmpVisibilityUpdate>()),
                     traverse_paths.run_if(on_event::<RecalculatePaths>()),
                 ),
@@ -165,13 +158,24 @@ pub fn spawn_model(
 
     // --- RESPAWN POINTS ---
 
-    spawn_respawn_point_section(
+    let respawn_points = spawn_point_section::<Jgpt, RespawnPoint>(
         &mut commands,
         kmp.clone(),
         meshes.clone(),
         materials.respawn_points.clone(),
         settings.kmp_model.outline.clone(),
     );
+    respawn_points
+        .iter()
+        .for_each(|e| add_respawn_point_preview(*e, &mut commands, meshes, &materials.respawn_points));
+
+    // spawn_respawn_point_section(
+    //     &mut commands,
+    //     kmp.clone(),
+    //     meshes.clone(),
+    //     materials.respawn_points.clone(),
+    //     settings.kmp_model.outline.clone(),
+    // );
 
     // --- CANNON POINTS ---
 
@@ -201,15 +205,8 @@ fn update_visible(
             Query<&mut Visibility, With<KmpCamera>>,
             Query<&mut Visibility, With<RespawnPoint>>,
             Query<&mut Visibility, With<CannonPoint>>,
-            Query<&mut Visibility, With<FinishPoint>>,
-            Query<
-                (
-                    &mut Visibility,
-                    Option<&EnemyPathMarker>,
-                    Option<&ItemPathMarker>,
-                ),
-                With<KmpPathNodeLink>,
-            >,
+            Query<&mut Visibility, With<BattleFinishPoint>>,
+            Query<(&mut Visibility, Option<&EnemyPathMarker>, Option<&ItemPathMarker>), With<KmpPathNodeLink>>,
         )>,
     )>,
 ) {
@@ -239,10 +236,7 @@ fn update_visible(
     set_visibility!(q.p1().p0(), usize::from(KmpModelSections::Cameras));
     set_visibility!(q.p1().p1(), usize::from(KmpModelSections::RespawnPoints));
     set_visibility!(q.p1().p2(), usize::from(KmpModelSections::CannonPoints));
-    set_visibility!(
-        q.p1().p3(),
-        usize::from(KmpModelSections::BattleFinishPoints)
-    );
+    set_visibility!(q.p1().p3(), usize::from(KmpModelSections::BattleFinishPoints));
 
     for (mut visibility, enemy_route, item_route) in q.p1().p4().iter_mut() {
         if enemy_route.is_some() {

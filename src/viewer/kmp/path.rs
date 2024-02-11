@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::{
     components::FromKmp,
     meshes_materials::{KmpMeshes, KmpMeshesMaterials, PathMaterials},
@@ -6,9 +8,13 @@ use super::{
 };
 use crate::{
     util::kmp_file::{KmpFile, KmpGetPathSection, KmpGetSection, KmpPositionPoint},
-    viewer::{edit::select::Selected, normalize::Normalize},
+    viewer::normalize::Normalize,
 };
-use bevy::{prelude::*, utils::HashMap};
+use bevy::{
+    ecs::query::{ReadOnlyWorldQuery, WorldQuery},
+    prelude::*,
+    utils::HashMap,
+};
 use bevy_mod_outline::{OutlineBundle, OutlineVolume};
 use std::fmt::Debug;
 use std::{collections::HashSet, sync::Arc};
@@ -28,7 +34,7 @@ pub struct KmpPathNodeLinkLine;
 pub struct KmpPathNodeError;
 
 // component attached to kmp entities which are linked to other kmp entities
-#[derive(Component)]
+#[derive(Component, Clone, Debug)]
 pub struct KmpPathNode {
     pub prev_nodes: HashSet<Entity>,
     pub next_nodes: HashSet<Entity>,
@@ -70,22 +76,28 @@ impl KmpPathNode {
         self.is_next_node_of(other) || self.is_prev_node_of(other)
     }
     #[allow(dead_code)]
-    pub fn delete(&mut self, q_kmp_node: &mut Query<&mut KmpPathNode, Without<Selected>>) {
+    pub fn delete<Q: WorldQuery, F: ReadOnlyWorldQuery>(
+        self,
+        self_entity: Entity,
+        q_kmp_path_node: &mut Query<'_, '_, Q, F>,
+    ) where
+        for<'a> Q: WorldQuery<Item<'a> = Mut<'a, KmpPathNode>>,
+    {
         // for all next nodes
         for e in self.next_nodes.iter() {
             // delete all references to self
-            let Ok(mut next_node) = q_kmp_node.get_mut(*e) else {
+            let Ok(mut next_node) = q_kmp_path_node.get_mut(*e) else {
                 continue;
             };
-            next_node.prev_nodes.retain(|x| x != e);
+            next_node.prev_nodes.retain(|x| *x != self_entity);
         }
         // for all previous nodes
         for e in self.prev_nodes.iter() {
             // delete all references to self
-            let Ok(mut prev_node) = q_kmp_node.get_mut(*e) else {
+            let Ok(mut prev_node) = q_kmp_path_node.get_mut(*e) else {
                 continue;
             };
-            prev_node.next_nodes.retain(|x| x != e);
+            prev_node.next_nodes.retain(|x| *x != self_entity);
         }
     }
     // link nodes, taking in a kmp node query
@@ -152,10 +164,96 @@ struct KmpDataGroup<T> {
     next_groups: Vec<u8>,
 }
 
+pub struct PathPointSpawner<'a, U, Marker> {
+    meshes: &'a KmpMeshes,
+    materials: &'a PathMaterials,
+    position: Vec3,
+    rotation: Quat,
+    kmp_component: U,
+    outline: &'a OutlineSettings,
+    visible: bool,
+    marker: Marker,
+}
+impl<'a, U: Component + Clone, Marker: Component + Default> PathPointSpawner<'a, U, Marker> {
+    pub fn new(
+        meshes: &'a KmpMeshes,
+        materials: &'a PathMaterials,
+        outline: &'a OutlineSettings,
+        kmp_component: U,
+    ) -> Self {
+        Self {
+            meshes,
+            materials,
+            position: Vec3::default(),
+            rotation: Quat::default(),
+            kmp_component,
+            outline,
+            visible: true,
+            marker: Marker::default(),
+        }
+    }
+    pub fn pos(mut self, pos: Vec3) -> Self {
+        self.position = pos;
+        self
+    }
+    pub fn rot(mut self, rot: Quat) -> Self {
+        self.rotation = rot;
+        self
+    }
+    pub fn visible(mut self, visible: bool) -> Self {
+        self.visible = visible;
+        self
+    }
+    fn get_bundle(
+        &self,
+    ) -> (
+        MaterialMeshBundle<StandardMaterial>,
+        KmpPathNode,
+        Marker,
+        U,
+        KmpSelectablePoint,
+        Normalize,
+        OutlineBundle,
+    ) {
+        (
+            PbrBundle {
+                mesh: self.meshes.sphere.clone(),
+                material: self.materials.point.clone(),
+                transform: Transform::from_translation(self.position).with_rotation(self.rotation),
+                visibility: if self.visible {
+                    Visibility::Visible
+                } else {
+                    Visibility::Hidden
+                },
+                ..default()
+            },
+            KmpPathNode::new(),
+            Marker::default(),
+            self.kmp_component.clone(),
+            KmpSelectablePoint,
+            Normalize::new(200., 30., BVec3::TRUE),
+            OutlineBundle {
+                outline: OutlineVolume {
+                    visible: false,
+                    colour: self.outline.color,
+                    width: self.outline.width,
+                },
+                ..default()
+            },
+        )
+    }
+    pub fn spawn_command(&self, commands: &mut Commands) -> Entity {
+        commands.spawn(self.get_bundle()).id()
+    }
+    pub fn spawn_world(&self, world: &mut World) -> Entity {
+        world.spawn(self.get_bundle()).id()
+    }
+}
+
 pub fn spawn_path_section<
     T: KmpGetSection + KmpGetPathSection + KmpPositionPoint + Send + 'static + Clone,
-    U: Component + FromKmp<T>,
-    V: Component + Default,
+    U: Component + FromKmp<T> + Clone,
+    Marker: Component + Default,
 >(
     commands: &mut Commands,
     kmp: Arc<KmpFile>,
@@ -193,30 +291,11 @@ pub fn spawn_path_section<
             };
             for (j, node) in group.nodes.iter().enumerate() {
                 let position: Vec3 = node.get_position().into();
-                let spawned_entity = world
-                    .spawn((
-                        PbrBundle {
-                            mesh: meshes.sphere.clone(),
-                            material: materials.point.clone(),
-                            transform: Transform::from_translation(position),
-                            visibility: Visibility::Hidden,
-                            ..default()
-                        },
-                        KmpPathNode::new(),
-                        V::default(),
-                        U::from_kmp(node),
-                        KmpSelectablePoint,
-                        Normalize::new(200., 30., BVec3::TRUE),
-                        OutlineBundle {
-                            outline: OutlineVolume {
-                                visible: false,
-                                colour: outline.color,
-                                width: outline.width,
-                            },
-                            ..default()
-                        },
-                    ))
-                    .id();
+                let spawned_entity =
+                    PathPointSpawner::<_, Marker>::new(&meshes, &materials, &outline, U::from_kmp(node))
+                        .pos(position)
+                        .visible(false)
+                        .spawn_world(world);
                 // if we are at the start then add the start marker to the point
                 if i == 0 && j == 0 {
                     world.entity_mut(spawned_entity).insert(PathOverallStart);
@@ -232,7 +311,7 @@ pub fn spawn_path_section<
             for entity in group.entities.iter() {
                 if let Some(prev_entity) = prev_entity {
                     KmpPathNode::link_nodes_world_access(prev_entity, *entity, world).unwrap();
-                    spawn_node_link::<V>(
+                    spawn_node_link::<Marker>(
                         world,
                         prev_entity,
                         *entity,
@@ -252,7 +331,7 @@ pub fn spawn_path_section<
                 let next_entity = entity_groups[*next_group_index as usize].entities[0];
                 // link the last entity in the current group with the first entity in the next group
                 KmpPathNode::link_nodes_world_access(entity, next_entity, world).unwrap();
-                spawn_node_link::<V>(
+                spawn_node_link::<Marker>(
                     world,
                     entity,
                     next_entity,
@@ -279,8 +358,7 @@ fn spawn_node_link<T: Component + Default>(
     let prev_pos = world.get::<Transform>(prev_node).unwrap().translation;
     let next_pos = world.get::<Transform>(next_node).unwrap().translation;
 
-    let mut parent_transform =
-        Transform::from_translation(prev_pos.lerp(next_pos, 0.5)).looking_at(next_pos, Vec3::Y);
+    let mut parent_transform = Transform::from_translation(prev_pos.lerp(next_pos, 0.5)).looking_at(next_pos, Vec3::Y);
     parent_transform.rotate_local_x(f32::to_radians(-90.));
 
     let mut line_transform = Transform::default();
@@ -294,10 +372,7 @@ fn spawn_node_link<T: Component + Default>(
                 visibility: Visibility::Hidden,
                 ..default()
             },
-            KmpPathNodeLink {
-                prev_node,
-                next_node,
-            },
+            KmpPathNodeLink { prev_node, next_node },
             // KmpSection,
             T::default(),
         ))
@@ -334,23 +409,14 @@ enum PathType {
 
 pub fn update_node_links(
     q_kmp_node_link: Query<(Entity, &KmpPathNodeLink, &Children, &ViewVisibility)>,
-    q_kmp_node: Query<(
-        Entity,
-        Has<EnemyPathMarker>,
-        Has<ItemPathMarker>,
-        &KmpPathNode,
-    )>,
+    q_kmp_node: Query<(Entity, Has<EnemyPathMarker>, Has<ItemPathMarker>, &KmpPathNode)>,
     mut q_transform: Query<&mut Transform>,
     q_line: Query<&KmpPathNodeLinkLine>,
     mut commands: Commands,
 ) {
     let mut nodes_to_be_linked: HashMap<(Entity, Entity), PathType> = HashMap::new();
     for (cur_node, is_enemy, _, node_data) in q_kmp_node.iter() {
-        let path_type = if is_enemy {
-            PathType::Enemy
-        } else {
-            PathType::Item
-        };
+        let path_type = if is_enemy { PathType::Enemy } else { PathType::Item };
         for prev_node in node_data.prev_nodes.iter() {
             nodes_to_be_linked.insert((*prev_node, cur_node), path_type);
         }
@@ -362,7 +428,7 @@ pub fn update_node_links(
     // go through each node line
     for (link_entity, kmp_node_link, children, visibility) in q_kmp_node_link.iter() {
         if !nodes_to_be_linked.contains_key(&(kmp_node_link.prev_node, kmp_node_link.next_node)) {
-            commands.entity(link_entity).despawn();
+            commands.entity(link_entity).despawn_recursive();
             continue;
         }
         nodes_to_be_linked.remove(&(kmp_node_link.prev_node, kmp_node_link.next_node));
@@ -372,9 +438,11 @@ pub fn update_node_links(
         }
 
         // see https://github.com/bevyengine/bevy/issues/11517
-        let [prev_transform, next_transform] = q_transform
-            .many_mut([kmp_node_link.prev_node, kmp_node_link.next_node])
-            .map(Ref::from);
+        let Ok(transforms) = q_transform.get_many_mut([kmp_node_link.prev_node, kmp_node_link.next_node]) else {
+            commands.entity(link_entity).despawn_recursive();
+            continue;
+        };
+        let [prev_transform, next_transform] = transforms.map(Ref::from);
 
         if !prev_transform.is_changed() && !next_transform.is_changed() {
             continue;
@@ -524,6 +592,7 @@ impl<'a, 'w, 's> Traverser<'a, 'w, 's> {
         }
 
         for next_node in kmp_node.next_nodes.clone().iter() {
+            // recursion, woohoo
             self.traverse_internal(*next_node, cur_index);
         }
     }

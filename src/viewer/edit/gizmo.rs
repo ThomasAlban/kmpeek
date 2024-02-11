@@ -61,12 +61,8 @@ impl UiSubSection for ShowGizmo<'_, '_> {
                 .iter()
                 .filter(|cam| cam.0.is_active)
                 .collect::<Vec<(&Camera, &Transform)>>()[0];
-            let (projection_matrix, view_matrix) = {
-                (
-                    camera.projection_matrix(),
-                    transform.compute_matrix().inverse(),
-                )
-            };
+            let (projection_matrix, view_matrix) =
+                { (camera.projection_matrix(), transform.compute_matrix().inverse()) };
 
             // Snapping is enabled with ctrl key.
             let snapping = self.keys.pressed(KeyCode::ControlLeft);
@@ -141,26 +137,21 @@ impl UiSubSection for ShowGizmo<'_, '_> {
 
             if let Some(gizmo_response) = self.gizmo_options.last_result {
                 let gizmo_transform: [[f32; 4]; 4] = gizmo_response.transform().into();
-                let gizmo_transform =
-                    Transform::from_matrix(Mat4::from_cols_array_2d(&gizmo_transform));
+                let gizmo_transform = Transform::from_matrix(Mat4::from_cols_array_2d(&gizmo_transform));
 
                 if single_selected {
                     // if we have a single point selected assign the gizmo response directly
                     *self.q_selected.single_mut() = gizmo_transform;
                 } else {
                     // otherwise, calculate the delta, and apply that delta to each selected point
-                    let translation_delta =
-                        gizmo_transform.translation - gizmo_transform_point.translation;
+                    let translation_delta = gizmo_transform.translation - gizmo_transform_point.translation;
 
                     for mut selected in self.q_selected.iter_mut() {
                         selected.translation += translation_delta;
                         if self.gizmo_options.gizmo_origin == GizmoOrigin::Individual {
                             selected.rotate(gizmo_transform.rotation);
                         } else {
-                            selected.rotate_around(
-                                gizmo_transform.translation,
-                                gizmo_transform.rotation,
-                            );
+                            selected.rotate_around(gizmo_transform.translation, gizmo_transform.rotation);
                             // someone went onto my laptop and wrote this when I was gone
                             // so I guess I'm leaving it here
                             // cum on my ballsac and call me a meercat

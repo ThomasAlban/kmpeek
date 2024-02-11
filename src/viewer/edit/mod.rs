@@ -3,19 +3,19 @@ pub mod gizmo;
 pub mod kcl_snap;
 pub mod select;
 
+use crate::ui::update_ui::UpdateUiSet;
+
 use self::{
     create_delete::{create_point, delete_point},
     gizmo::TransformGizmoPlugin,
     kcl_snap::snap_to_kcl,
-    select::{deselect_if_not_visible, select, select_box, update_outlines, SelectBox, SelectSet},
+    select::{deselect_if_not_visible, select, select_box, update_outlines, SelectBox},
 };
-use crate::ui::update_ui::UpdateUiSet;
+use super::kmp::KmpVisibilityUpdate;
 use bevy::prelude::*;
 use bevy_mod_outline::OutlinePlugin;
 use bevy_mod_raycast::DefaultRaycastingPlugin;
 use strum_macros::EnumIter;
-
-use super::kmp::KmpVisibilityUpdate;
 
 pub struct MousePickingPlugin;
 impl Plugin for MousePickingPlugin {
@@ -25,14 +25,18 @@ impl Plugin for MousePickingPlugin {
             .init_resource::<SelectBox>()
             .add_systems(
                 Update,
-                (select, select_box, update_outlines, apply_deferred)
+                (
+                    // select stuff and outline it
+                    (select, select_box),
+                    update_outlines,
+                    apply_deferred,
+                    // create/delete/drag points around now that we know what is selected
+                    (create_point, delete_point, snap_to_kcl),
+                    apply_deferred,
+                )
                     .chain()
-                    .in_set(SelectSet)
+                    // after UI so that if we interact with the gizmo we can not deselect stuff
                     .after(UpdateUiSet),
-            )
-            .add_systems(
-                Update,
-                (snap_to_kcl, create_point, delete_point).after(SelectSet),
             )
             .add_systems(
                 Update,

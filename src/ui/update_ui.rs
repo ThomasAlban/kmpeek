@@ -3,6 +3,9 @@ use bevy::prelude::*;
 use bevy_egui::{egui::TextureId, EguiContexts};
 use std::path::PathBuf;
 
+#[derive(SystemSet, Hash, PartialEq, Eq, Clone, Debug)]
+pub struct UpdateUiSet;
+
 pub struct UpdateUIPlugin;
 impl Plugin for UpdateUIPlugin {
     fn build(&self, app: &mut App) {
@@ -22,9 +25,6 @@ pub struct KmpFileSelected(pub PathBuf);
 
 #[derive(Event)]
 pub struct KclFileSelected(pub PathBuf);
-
-#[derive(SystemSet, Hash, PartialEq, Eq, Clone, Debug)]
-pub struct UpdateUiSet;
 
 #[derive(Resource)]
 pub struct UiImages {

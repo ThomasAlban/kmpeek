@@ -4,14 +4,10 @@ use bevy::{
     transform::components::Transform,
 };
 use bevy_egui::egui::{
-    self, emath::Numeric, include_image, Align, Align2, Area, Button, CollapsingResponse, Color32, Context, Image,
-    ImageButton, ImageSource, Layout, Order, Response, Sense, Ui, Vec2, WidgetText,
+    self, include_image, Align, Align2, Area, CollapsingResponse, Color32, Context, Image, ImageButton, ImageSource,
+    Order, Response, Sense, Ui, Vec2, WidgetText,
 };
-use std::{
-    fmt::Display,
-    hash::Hash,
-    ops::{AddAssign, SubAssign},
-};
+use std::{fmt::Display, hash::Hash};
 
 pub mod multi_edit {
     use super::{euler_to_quat, quat_to_euler};

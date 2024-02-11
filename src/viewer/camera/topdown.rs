@@ -2,7 +2,6 @@ use super::CameraMode;
 use crate::ui::{
     settings::AppSettings,
     ui_state::MouseInViewport,
-    update_ui::UpdateUiSet,
     viewport::{SetupViewportSet, ViewportImage},
 };
 use bevy::{
@@ -18,7 +17,7 @@ pub struct TopDownCamPlugin;
 impl Plugin for TopDownCamPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, camera_setup.after(SetupViewportSet))
-            .add_systems(Update, topdown_cam.before(UpdateUiSet));
+            .add_systems(Update, topdown_cam);
     }
 }
 
@@ -77,8 +76,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
                 scale: topdown_default.scale,
                 ..default()
             }),
-            transform: Transform::from_translation(topdown_default.start_pos)
-                .looking_at(Vec3::ZERO, Vec3::Z),
+            transform: Transform::from_translation(topdown_default.start_pos).looking_at(Vec3::ZERO, Vec3::Z),
             ..default()
         },
         TopDownCam,
@@ -124,8 +122,7 @@ fn topdown_cam(
 
     if scroll.abs() > 0. {
         if let Projection::Orthographic(projection) = &mut *projection {
-            projection.scale -=
-                (scroll * projection.scale) * 0.001 * settings.camera.top_down.scroll_sensitivity;
+            projection.scale -= (scroll * projection.scale) * 0.001 * settings.camera.top_down.scroll_sensitivity;
             projection.scale = projection.scale.clamp(1., 500.);
         }
     }

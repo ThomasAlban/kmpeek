@@ -21,7 +21,7 @@ pub fn snap_to_kcl(
     mouse_in_viewport: Res<MouseInViewport>,
 
     mut initial_offset: Local<Vec2>,
-    mut initial_intersection_distance: Local<f32>,
+    mut initial_intersection_point: Local<Vec3>,
     mut initial_mouse_pos: Local<Vec2>,
     mut position_differences: Local<HashMap<Entity, Vec3>>,
 ) {
@@ -52,9 +52,7 @@ pub fn snap_to_kcl(
     if mouse_buttons.just_pressed(MouseButton::Left) {
         *initial_mouse_pos = mouse_pos;
         // get the transform of the thing the mouse has just clicked on
-        let mouse_over = cast_ray_from_cam(cam, scaled_mouse_pos, &mut raycast, |e| {
-            q_selected.contains(e)
-        });
+        let mouse_over = cast_ray_from_cam(cam, scaled_mouse_pos, &mut raycast, |e| q_selected.contains(e));
         let mouse_over = mouse_over.first();
         let Some((mouse_over, _)) = mouse_over else {
             return;
@@ -69,10 +67,7 @@ pub fn snap_to_kcl(
         *initial_offset = pos_screenspace - scaled_mouse_pos;
 
         // set the distance between the camera and this entity's transform, saving it for later in case we drag outside of kcl
-        *initial_intersection_distance = cam
-            .1
-            .translation()
-            .distance(main_point_transform.translation);
+        *initial_intersection_point = main_point_transform.translation;
 
         // go through and set the position differences of each selected entity relative to this one
         for selected in q_selected.iter() {
@@ -89,10 +84,9 @@ pub fn snap_to_kcl(
 
     // send out a ray from the mouse position + the offset
     // so that when an entity is initially clicked, it's transform doesn't change even though they weren't perfectly accurate with the click
-    let intersections =
-        cast_ray_from_cam(cam, scaled_mouse_pos + *initial_offset, &mut raycast, |e| {
-            q_kcl.contains(e)
-        });
+    let intersections = cast_ray_from_cam(cam, scaled_mouse_pos + *initial_offset, &mut raycast, |e| {
+        q_kcl.contains(e)
+    });
 
     if let Some(intersection) = intersections.first() {
         // if there is an intersection with the kcl, snap to the kcl
@@ -103,14 +97,19 @@ pub fn snap_to_kcl(
             selected.0.translation = intersection.1.position() + *position_difference;
         }
     } else {
-        // if there is no intersection with the kcl, keep the same distance from the camera as when we started dragging the point
+        // if there is no intersection with the kcl, move the point in the camera plane based on where we started dragging the point
         let ray = get_ray_from_cam(cam, scaled_mouse_pos + *initial_offset);
         for mut selected in q_selected.iter_mut() {
             let Some(position_difference) = position_differences.get(&selected.1) else {
                 continue;
             };
-            selected.0.translation =
-                ray.position(*initial_intersection_distance) + *position_difference;
+            let camera_plane = Primitive3d::Plane {
+                point: *initial_intersection_point,
+                normal: (-*initial_intersection_point + cam.1.translation()).normalize(),
+            };
+            if let Some(intersection) = ray.intersects_primitive(camera_plane) {
+                selected.0.translation = intersection.position() + *position_difference;
+            }
         }
     }
 }

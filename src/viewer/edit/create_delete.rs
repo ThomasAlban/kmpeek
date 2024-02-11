@@ -1,15 +1,13 @@
 use super::select::{cast_ray_from_cam, scale_viewport_pos, Selected};
 use crate::{
-    ui::ui_state::ViewportRect,
+    ui::ui_state::{MouseInViewport, ViewportRect},
     viewer::{
         kcl_model::KCLModelSection,
         kmp::{
-            components::StartPoint,
+            components::{AreaPoint, BattleFinishPoint, CannonPoint, KmpCamera, Object, Spawnable, StartPoint},
             meshes_materials::KmpMeshesMaterials,
             path::KmpPathNode,
-            point::spawn_point,
             sections::{KmpEditMode, KmpModelSections},
-            settings::OutlineSettings,
         },
     },
 };
@@ -26,7 +24,6 @@ pub fn create_point(
     q_kcl: Query<With<KCLModelSection>>,
     kmp_edit_mode: Res<KmpEditMode>,
     kmp_meshes_materials: Res<KmpMeshesMaterials>,
-
     mut commands: Commands,
 ) {
     if !keys.pressed(KeyCode::AltLeft) || !mouse_buttons.just_pressed(MouseButton::Left) {
@@ -52,34 +49,36 @@ pub fn create_point(
 
     let mouse_3d_pos = kcl_intersection.1.position();
 
-    if kmp_edit_mode.0 != KmpModelSections::StartPoints {
-        return;
-    }
-
-    spawn_point(
-        &mut commands,
-        &kmp_meshes_materials.meshes,
-        &kmp_meshes_materials.materials.start_points,
-        mouse_3d_pos,
-        Quat::default(),
-        StartPoint::default(),
-        &OutlineSettings::default(),
-        true,
-    );
+    use KmpModelSections::*;
+    match kmp_edit_mode.0 {
+        StartPoints => StartPoint::spawn(&mut commands, &kmp_meshes_materials, mouse_3d_pos),
+        // EnemyPaths =>
+        Objects => Object::spawn(&mut commands, &kmp_meshes_materials, mouse_3d_pos),
+        Areas => AreaPoint::spawn(&mut commands, &kmp_meshes_materials, mouse_3d_pos),
+        Cameras => KmpCamera::spawn(&mut commands, &kmp_meshes_materials, mouse_3d_pos),
+        CannonPoints => CannonPoint::spawn(&mut commands, &kmp_meshes_materials, mouse_3d_pos),
+        BattleFinishPoints => BattleFinishPoint::spawn(&mut commands, &kmp_meshes_materials, mouse_3d_pos),
+        _ => Entity::PLACEHOLDER,
+    };
 }
 
 pub fn delete_point(
     keys: Res<Input<KeyCode>>,
-    mut q_selected: Query<(Entity, Option<&mut KmpPathNode>), With<Selected>>,
-    mut q_kmp_node: Query<&mut KmpPathNode, Without<Selected>>,
+    mut q_selected: Query<Entity, With<Selected>>,
+    mut q_kmp_path_node: Query<&mut KmpPathNode>,
     mut commands: Commands,
+    mouse_in_viewport: Res<MouseInViewport>,
 ) {
+    if !mouse_in_viewport.0 {
+        return;
+    };
     if !keys.just_pressed(KeyCode::Back) && !keys.just_pressed(KeyCode::Delete) {
         return;
     }
-    for (entity, kmp_path_node) in q_selected.iter_mut() {
-        if let Some(mut kmp_path_node) = kmp_path_node {
-            kmp_path_node.delete(&mut q_kmp_node);
+    for entity in q_selected.iter_mut() {
+        // unlink ourselves if we are a kmp path node so we don't have any stale references before we delete
+        if let Ok(kmp_path_node) = q_kmp_path_node.get(entity) {
+            kmp_path_node.clone().delete(entity, &mut q_kmp_path_node);
         }
         commands.entity(entity).despawn_recursive();
     }

@@ -1,15 +1,13 @@
 #![allow(clippy::redundant_closure_call)]
-use std::fmt::Debug;
 
 use super::UiSubSection;
 use crate::{
     ui::util::{
         framed_collapsing_header,
         multi_edit::{checkbox_multi_edit, combobox_enum_multi_edit, drag_value_multi_edit, rotation_multi_edit},
-        rotation_edit,
     },
     viewer::{
-        edit::{self, select::Selected},
+        edit::select::Selected,
         kmp::components::{EnemyPathPoint, ItemPathPoint, StartPoint},
     },
 };
@@ -50,8 +48,6 @@ impl UiSubSection for ShowEditTab<'_, '_> {
             });
         });
 
-        edit_spacing(ui);
-
         edit_component("Start Point", self.q_start_point.iter_mut(), ui, |ui, start_points| {
             edit_row("Player Index", true, ui, |ui| {
                 drag_value_multi_edit(ui, start_points.iter_mut().map(|x| &mut x.player_index));
@@ -76,30 +72,26 @@ impl UiSubSection for ShowEditTab<'_, '_> {
             });
         });
 
-        edit_spacing(ui);
-
         edit_component("Item Point", self.q_item_point.iter_mut(), ui, |ui, item_points| {
             edit_row("Bullet Bill Control", true, ui, |ui| {
                 drag_value_multi_edit(ui, item_points.iter_mut().map(|x| &mut x.bullet_control));
             });
             edit_spacing(ui);
-            edit_row("Bullet Follows Height", true, ui, |ui| {
+            edit_row("Bullet Height", false, ui, |ui| {
                 combobox_enum_multi_edit(
                     ui,
                     "itpt_s1",
                     None,
-                    item_points.iter_mut().map(|x| &mut x.bullet_follows_height),
+                    item_points.iter_mut().map(|x| &mut x.bullet_height),
                 );
             });
-            edit_row("Bullet No Drop", false, ui, |ui| {
-                checkbox_multi_edit(ui, item_points.iter_mut().map(|x| &mut x.bullet_no_drop));
+            edit_row("Bullet Can't Drop", false, ui, |ui| {
+                checkbox_multi_edit(ui, item_points.iter_mut().map(|x| &mut x.bullet_cant_drop));
             });
             edit_row("Low Shell Priority", false, ui, |ui| {
                 checkbox_multi_edit(ui, item_points.iter_mut().map(|x| &mut x.low_shell_priority));
             });
         });
-
-        edit_spacing(ui);
     }
 }
 
@@ -117,6 +109,7 @@ fn edit_component<'a, T: 'a + PartialEq + Clone, R>(
         };
         framed_collapsing_header(title, ui, |ui| add_body(ui, items));
     });
+    edit_spacing(ui);
 }
 
 fn edit_spacing(ui: &mut Ui) {

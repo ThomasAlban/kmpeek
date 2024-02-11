@@ -4,17 +4,13 @@ use crate::{
         settings::AppSettings,
         util::{view_icon_btn, Icons},
     },
-    viewer::{
-        edit::select::Selected,
-        kmp::{
-            components::{
-                AreaPoint, CannonPoint, EnemyPathMarker, ItemPathMarker, KmpCamera, Object,
-                RespawnPoint, StartPoint,
-            },
-            path::{EnemyPathGroups, ItemPathGroups},
-            sections::{KmpEditMode, KmpModelSections},
-            KmpVisibilityUpdate,
+    viewer::kmp::{
+        components::{
+            AreaPoint, CannonPoint, EnemyPathMarker, ItemPathMarker, KmpCamera, Object, RespawnPoint, StartPoint,
         },
+        path::{EnemyPathGroups, ItemPathGroups},
+        sections::{KmpEditMode, KmpModelSections},
+        KmpVisibilityUpdate,
     },
 };
 use bevy::{ecs::system::SystemParam, prelude::*};
@@ -22,7 +18,7 @@ use bevy_egui::egui::{collapsing_header::CollapsingState, Align, Color32, Layout
 
 #[derive(SystemParam)]
 pub struct ShowOutlinerTab<'w, 's> {
-    keys: Res<'w, Input<KeyCode>>,
+    // keys: Res<'w, Input<KeyCode>>,
     edit_mode: ResMut<'w, KmpEditMode>,
 
     start_points: Query<'w, 's, Entity, With<StartPoint>>,
@@ -36,10 +32,9 @@ pub struct ShowOutlinerTab<'w, 's> {
 
     enemy_groups: Option<Res<'w, EnemyPathGroups>>,
     item_groups: Option<Res<'w, ItemPathGroups>>,
-    commands: Commands<'w, 's>,
-
+    // commands: Commands<'w, 's>,
     q_visibility: Query<'w, 's, &'static mut Visibility>,
-    q_selected: Query<'w, 's, Entity, With<Selected>>,
+    // q_selected: Query<'w, 's, Entity, With<Selected>>,
     ev_kmp_visibility_update: EventWriter<'w, KmpVisibilityUpdate>,
     settings: ResMut<'w, AppSettings>,
     link_visibilities: Local<'s, bool>,
@@ -83,12 +78,7 @@ impl UiSubSection for ShowOutlinerTab<'_, '_> {
 }
 impl ShowOutlinerTab<'_, '_> {
     const ICON_SIZE: f32 = 14.;
-    fn show_point_outliner(
-        &mut self,
-        ui: &mut Ui,
-        selected: KmpModelSections,
-        entities: &[Entity],
-    ) {
+    fn show_point_outliner(&mut self, ui: &mut Ui, selected: KmpModelSections, entities: &[Entity]) {
         self.show_header(ui, selected, entities, false);
     }
     fn show_path_outliner(
@@ -98,29 +88,19 @@ impl ShowOutlinerTab<'_, '_> {
         entities: &[Entity],
         group_info: &Option<Vec<Vec<Entity>>>,
     ) {
-        CollapsingState::load_with_default_open(
-            ui.ctx(),
-            format!("{}_outliner", selected).into(),
-            false,
-        )
-        .show_header(ui, |ui| {
-            self.show_header(ui, selected, entities, true);
-        })
-        .body(|ui| {
-            if let Some(groups) = group_info {
-                for (i, entities) in groups.iter().enumerate() {
-                    self.show_path(ui, i, entities, Icons::SECTION_COLORS[selected as usize]);
+        CollapsingState::load_with_default_open(ui.ctx(), format!("{}_outliner", selected).into(), false)
+            .show_header(ui, |ui| {
+                self.show_header(ui, selected, entities, true);
+            })
+            .body(|ui| {
+                if let Some(groups) = group_info {
+                    for (i, entities) in groups.iter().enumerate() {
+                        self.show_path(ui, i, entities, Icons::SECTION_COLORS[selected as usize]);
+                    }
                 }
-            }
-        });
+            });
     }
-    fn show_header(
-        &mut self,
-        ui: &mut Ui,
-        selected: KmpModelSections,
-        entities: &[Entity],
-        path: bool,
-    ) {
+    fn show_header(&mut self, ui: &mut Ui, selected: KmpModelSections, entities: &[Entity], path: bool) {
         let current = &mut self.edit_mode.0;
         let visibilities = &mut self.settings.kmp_model.sections.visible;
         ui.horizontal(|ui| {
@@ -136,20 +116,20 @@ impl ShowOutlinerTab<'_, '_> {
                 }
                 .tint(Icons::SECTION_COLORS[selected as usize]),
             );
-            if ui
-                .selectable_value(current, selected, selected.to_string())
-                .clicked()
-                && *self.link_visibilities
-            {
+            if ui.selectable_value(current, selected, selected.to_string()).clicked() && *self.link_visibilities {
                 *visibilities = [false; 10];
                 visibilities[selected as usize] = true;
                 self.ev_kmp_visibility_update.send_default();
             }
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let mut all_visible = entities
-                    .iter()
-                    .all(|e| self.q_visibility.get(*e) == Ok(&Visibility::Visible));
+                let mut all_visible = if !entities.is_empty() {
+                    entities
+                        .iter()
+                        .all(|e| self.q_visibility.get(*e) == Ok(&Visibility::Visible))
+                } else {
+                    false
+                };
                 if view_icon_btn(ui, &mut all_visible).changed() {
                     visibilities[selected as usize] = all_visible;
                     self.ev_kmp_visibility_update.send_default();
@@ -157,7 +137,7 @@ impl ShowOutlinerTab<'_, '_> {
             });
         });
     }
-    fn show_path(&mut self, ui: &mut Ui, i: usize, entities: &[Entity], color: Color32) {
+    fn show_path(&mut self, ui: &mut Ui, i: usize, _entities: &[Entity], color: Color32) {
         ui.horizontal(|ui| {
             ui.add_space(10.);
             ui.add_sized(

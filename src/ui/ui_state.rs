@@ -32,9 +32,7 @@ impl Plugin for UiStatePlugin {
             .add_event::<ResetDockTree>()
             .add_systems(
                 Startup,
-                (apply_deferred, check_cmd_args)
-                    .chain()
-                    .after(SetupAppSettingsSet),
+                (apply_deferred, check_cmd_args).chain().after(SetupAppSettingsSet),
             );
     }
 }

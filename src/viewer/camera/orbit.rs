@@ -2,7 +2,6 @@ use super::CameraMode;
 use crate::ui::{
     settings::AppSettings,
     ui_state::MouseInViewport,
-    update_ui::UpdateUiSet,
     viewport::{SetupViewportSet, ViewportImage},
 };
 use bevy::{
@@ -18,7 +17,7 @@ pub struct OrbitCamPlugin;
 impl Plugin for OrbitCamPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, camera_setup.after(SetupViewportSet))
-            .add_systems(Update, orbit_cam.before(UpdateUiSet));
+            .add_systems(Update, orbit_cam);
     }
 }
 
@@ -82,8 +81,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
                 is_active: false,
                 ..default()
             },
-            transform: Transform::from_translation(orbit_default.start_pos)
-                .looking_at(Vec3::ZERO, Vec3::Y),
+            transform: Transform::from_translation(orbit_default.start_pos).looking_at(Vec3::ZERO, Vec3::Y),
             ..default()
         },
         OrbitCam {
@@ -180,8 +178,7 @@ fn orbit_cam(
         any = true;
         // make panning distance independent of resolution and FOV
         if let Projection::Perspective(projection) = projection {
-            pan *=
-                Vec2::new(projection.fov * projection.aspect_ratio, projection.fov) / window_size;
+            pan *= Vec2::new(projection.fov * projection.aspect_ratio, projection.fov) / window_size;
         }
         // translate by local axes
         let right = transform_cp.rotation * Vec3::X * -pan.x;
@@ -191,8 +188,7 @@ fn orbit_cam(
         orbit_cam_cp.focus += translation;
     } else if scroll.abs() > 0.0 {
         any = true;
-        orbit_cam_cp.radius -=
-            scroll * orbit_cam_cp.radius * 0.002 * settings.camera.orbit.scroll_sensitivity;
+        orbit_cam_cp.radius -= scroll * orbit_cam_cp.radius * 0.002 * settings.camera.orbit.scroll_sensitivity;
         // dont allow zoom to reach zero or you get stuck
         orbit_cam_cp.radius = orbit_cam_cp.radius.clamp(1., 500000.);
     }
@@ -202,8 +198,7 @@ fn orbit_cam(
         // parent = x and y rotation
         // child = z-offset
         let rot_matrix = Mat3::from_quat(transform_cp.rotation);
-        transform_cp.translation =
-            orbit_cam_cp.focus + rot_matrix.mul_vec3(Vec3::new(0.0, 0.0, orbit_cam_cp.radius));
+        transform_cp.translation = orbit_cam_cp.focus + rot_matrix.mul_vec3(Vec3::new(0.0, 0.0, orbit_cam_cp.radius));
     }
 
     transform.set_if_neq(transform_cp);

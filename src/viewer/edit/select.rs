@@ -7,9 +7,6 @@ use bevy_egui::EguiContexts;
 use bevy_mod_outline::*;
 use bevy_mod_raycast::prelude::*;
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
-pub struct SelectSet;
-
 pub fn scale_viewport_pos(viewport_pos: Vec2, window: &Window, viewport_rect: Rect) -> Vec2 {
     // make (0,0) be the top left corner of the viewport
     let mut scaled_viewport_pos = viewport_pos - viewport_rect.min;
@@ -54,7 +51,6 @@ pub fn select(
     q_kmp_section: Query<&KmpSelectablePoint>,
     mut commands: Commands,
     gizmo: Res<GizmoOptions>,
-    mut q_outline: Query<&mut OutlineVolume>,
     q_selected: Query<Entity, With<Selected>>,
     q_visibility: Query<&Visibility>,
     mut contexts: EguiContexts,
@@ -105,10 +101,7 @@ pub fn select(
     }
 }
 
-pub fn deselect_if_not_visible(
-    mut commands: Commands,
-    q_selected: Query<(Entity, &Visibility), With<Selected>>,
-) {
+pub fn deselect_if_not_visible(mut commands: Commands, q_selected: Query<(Entity, &Visibility), With<Selected>>) {
     // deselect any entity that isn't visible
     for (e, selected) in q_selected.iter() {
         if selected != Visibility::Visible {
@@ -123,6 +116,7 @@ pub struct SelectBox {
     pub unscaled: Option<Rect>,
 }
 
+// this handles working out the select box rectangle and actually selecting stuff (the visuals for the box are handled in the UI section)
 pub fn select_box(
     mouse_buttons: Res<Input<MouseButton>>,
     q_window: Query<&Window, With<PrimaryWindow>>,
@@ -148,30 +142,33 @@ pub fn select_box(
 
     let scaled_mouse_pos = scale_viewport_pos(mouse_pos, window, viewport_rect.0);
 
+    // save the initial scaled/unscaled mouse pos into local variables (so that they can be used for one corner of the select box)
     if mouse_buttons.just_pressed(MouseButton::Left) {
         *initial_scaled_mouse_pos = scaled_mouse_pos;
         *initial_unscaled_mouse_pos = mouse_pos;
     }
 
+    // how much we have to move the mouse before we actually start making a select box
+    const LENIENCY_BEFORE_SELECT: f32 = 3.;
+
     if mouse_buttons.pressed(MouseButton::Left)
-        && initial_scaled_mouse_pos.distance(scaled_mouse_pos) > 3.
+        && initial_scaled_mouse_pos.distance(scaled_mouse_pos) > LENIENCY_BEFORE_SELECT
     {
+        // delete the select box if mouse isn't in viewport
         if !mouse_in_viewport.0 {
-            *select_box = SelectBox {
-                scaled: None,
-                unscaled: None,
-            };
+            *select_box = SelectBox::default();
             return;
         }
+
+        // set the select box with the initial mouse pos and the current mouse pos as the 2 corners
+        // Rect::from_corners handles negatives etc
         *select_box = SelectBox {
-            scaled: Some(Rect::from_corners(
-                *initial_scaled_mouse_pos,
-                scaled_mouse_pos,
-            )),
+            scaled: Some(Rect::from_corners(*initial_scaled_mouse_pos, scaled_mouse_pos)),
             unscaled: Some(Rect::from_corners(*initial_unscaled_mouse_pos, mouse_pos)),
         };
     }
 
+    // when we release the mouse button, we actually select stuff
     if mouse_buttons.just_released(MouseButton::Left) {
         let Some(select_rect) = select_box.scaled else {
             return;
@@ -187,8 +184,7 @@ pub fn select_box(
             if selectable.2 != Visibility::Visible || selectable.3 {
                 continue;
             }
-            let Some(viewport_pos) = cam.0.world_to_viewport(cam.1, selectable.0.translation)
-            else {
+            let Some(viewport_pos) = cam.0.world_to_viewport(cam.1, selectable.0.translation) else {
                 continue;
             };
 
@@ -196,13 +192,12 @@ pub fn select_box(
                 commands.entity(selectable.1).insert(Selected);
             }
         }
-        *select_box = SelectBox {
-            scaled: None,
-            unscaled: None,
-        };
+        // reset the select box after we've selected stuff
+        *select_box = SelectBox::default();
     }
 }
 
+// put outlines on any entities which are selected, and remove them if they aren't selected
 pub fn update_outlines(
     q_entities: Query<(Entity, Has<Selected>, &Visibility), With<KmpSelectablePoint>>,
     mut q_outline: Query<&mut OutlineVolume>,

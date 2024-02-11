@@ -1,7 +1,6 @@
 use crate::ui::{
     settings::AppSettings,
     ui_state::MouseInViewport,
-    update_ui::UpdateUiSet,
     viewport::{SetupViewportSet, ViewportImage},
 };
 use bevy::{
@@ -19,7 +18,7 @@ pub struct FlyCamPlugin;
 impl Plugin for FlyCamPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, camera_setup.after(SetupViewportSet))
-            .add_systems(Update, (fly_cam_look, fly_cam_move).before(UpdateUiSet));
+            .add_systems(Update, (fly_cam_look, fly_cam_move));
     }
 }
 
@@ -85,8 +84,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
                 target: RenderTarget::Image(viewport.handle.clone()),
                 ..default()
             },
-            transform: Transform::from_translation(fly_default.start_pos)
-                .looking_at(Vec3::ZERO, Vec3::Y),
+            transform: Transform::from_translation(fly_default.start_pos).looking_at(Vec3::ZERO, Vec3::Y),
             ..default()
         },
         FlyCam,
@@ -105,10 +103,8 @@ fn fly_cam_move(
         return;
     }
     // if we are pressing the control / cmd key, return
-    if (!cfg!(target_os = "macos")
-        && (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight)))
-        || (cfg!(target_os = "macos")
-            && (keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight)))
+    if (!cfg!(target_os = "macos") && (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight)))
+        || (cfg!(target_os = "macos") && (keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight)))
     {
         return;
     }
@@ -157,8 +153,7 @@ fn fly_cam_move(
 
     let mut transform_cp = *transform;
 
-    transform_cp.translation +=
-        velocity * 200. * settings.camera.fly.speed / window.scale_factor() as f32;
+    transform_cp.translation += velocity * 200. * settings.camera.fly.speed / window.scale_factor() as f32;
 
     transform.set_if_neq(transform_cp);
 }
@@ -184,19 +179,15 @@ fn fly_cam_look(
             _ => {
                 // Using smallest of height or width ensures equal vertical and horizontal sensitivity
                 let window_scale = window.height().min(window.width());
-                pitch -=
-                    (settings.camera.fly.look_sensitivity * 0.00012 * ev.delta.y * window_scale)
-                        .to_radians();
-                yaw -= (settings.camera.fly.look_sensitivity * 0.00012 * ev.delta.x * window_scale)
-                    .to_radians();
+                pitch -= (settings.camera.fly.look_sensitivity * 0.00012 * ev.delta.y * window_scale).to_radians();
+                yaw -= (settings.camera.fly.look_sensitivity * 0.00012 * ev.delta.x * window_scale).to_radians();
             }
         }
         pitch = pitch.clamp(-1.54, 1.54);
 
         let mut transform_cp = *transform;
         // order is important to prevent unintended roll
-        transform_cp.rotation =
-            Quat::from_axis_angle(Vec3::Y, yaw) * Quat::from_axis_angle(Vec3::X, pitch);
+        transform_cp.rotation = Quat::from_axis_angle(Vec3::Y, yaw) * Quat::from_axis_angle(Vec3::X, pitch);
 
         transform.set_if_neq(transform_cp);
     }

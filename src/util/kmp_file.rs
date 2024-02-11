@@ -214,7 +214,7 @@ pub struct Jgpt {
 #[brw(big)]
 pub struct Cnpt {
     position: [f32; 3],
-    angle: [f32; 3],
+    rotation: [f32; 3],
     id: u16,
     shoot_effect: i16,
 }
@@ -224,7 +224,7 @@ pub struct Cnpt {
 #[binrw]
 pub struct Mspt {
     position: [f32; 3],
-    angle: [f32; 3],
+    rotation: [f32; 3],
     id: u16,
     unknown: u16,
 }
@@ -337,6 +337,8 @@ impl_kmp_rotation_point!(Area);
 impl_kmp_rotation_point!(Gobj);
 impl_kmp_rotation_point!(Came);
 impl_kmp_rotation_point!(Jgpt);
+impl_kmp_rotation_point!(Cnpt);
+impl_kmp_rotation_point!(Mspt);
 
 #[test]
 fn test_full_rewrite() {

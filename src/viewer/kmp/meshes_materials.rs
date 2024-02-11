@@ -27,8 +27,8 @@ pub struct KmpMaterials {
     pub objects: PointMaterials,
     pub areas: PointMaterials,
     pub cameras: PointMaterials,
-    pub cannon_points: (),
-    pub battle_finish_points: (),
+    pub cannon_points: PointMaterials,
+    pub battle_finish_points: PointMaterials,
 }
 
 #[derive(Clone)]
@@ -65,10 +65,7 @@ impl PointMaterials {
     }
 }
 
-pub fn unlit_material(
-    materials: &mut Assets<StandardMaterial>,
-    color: Color,
-) -> Handle<StandardMaterial> {
+pub fn unlit_material(materials: &mut Assets<StandardMaterial>, color: Color) -> Handle<StandardMaterial> {
     materials.add(StandardMaterial {
         base_color: color,
         alpha_mode: if color.a() < 1. {
@@ -124,8 +121,8 @@ pub fn setup_kmp_meshes_materials(
         objects: PointMaterials::from_colors(&mut materials, &sections.color.objects),
         areas: PointMaterials::from_colors(&mut materials, &sections.color.areas),
         cameras: PointMaterials::from_colors(&mut materials, &sections.color.cameras),
-        cannon_points: (),
-        battle_finish_points: (),
+        cannon_points: PointMaterials::from_colors(&mut materials, &sections.color.cannon_points),
+        battle_finish_points: PointMaterials::from_colors(&mut materials, &sections.color.battle_finish_points),
     };
 
     let kmp_meshes_materials = KmpMeshesMaterials {

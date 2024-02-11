@@ -47,8 +47,8 @@ pub struct KmpModelColors {
     pub routes: PathColor,
     pub areas: PointColor,
     pub cameras: PointColor,
-    pub cannon_points: (),
-    pub battle_finish_points: (),
+    pub cannon_points: PointColor,
+    pub battle_finish_points: PointColor,
 }
 impl Default for KmpModelColors {
     fn default() -> Self {
@@ -99,8 +99,18 @@ impl Default for KmpModelColors {
                 arrow: Color::rgb(0.75, 0.75, 0.1),
                 up_arrow: Color::rgba(0.5, 0.5, 0., 0.9),
             },
-            cannon_points: (),
-            battle_finish_points: (),
+            cannon_points: PointColor {
+                point: Color::rgb(1., 0.2, 0.),
+                line: Color::rgba(1., 0.7, 0.6, 0.8),
+                arrow: Color::rgb(0.8, 0.2, 0.),
+                up_arrow: Color::rgba(0.8, 0.2, 0., 0.9),
+            },
+            battle_finish_points: PointColor {
+                point: Color::rgb(0.15, 0.55, 0.55),
+                line: Color::rgba(0.65, 0.9, 0.9, 0.9),
+                arrow: Color::rgb(0.2, 0.7, 0.7),
+                up_arrow: Color::rgb(0.2, 0.7, 0.7),
+            },
         }
     }
 }
