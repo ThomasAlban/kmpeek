@@ -507,7 +507,7 @@ dependencies = [
 [[package]]
 name = "bevy_egui"
 version = "0.24.0"
-source = "git+https://github.com/MickHarrigan/bevy_egui?branch=main#cf60274b40190ce2980441ed4dd911f5e2c0ac25"
+source = "git+https://github.com/ThomasAlban/bevy_egui#165fe4570c7b2c2c38d5f3ee49cdbe01fa5e752c"
 dependencies = [
  "arboard",
  "bevy",
@@ -1462,9 +1462,9 @@ dependencies = [
 
 [[package]]
 name = "ecolor"
-version = "0.25.0"
+version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57539aabcdbb733b6806ef421b66dec158dc1582107ad6d51913db3600303354"
+checksum = "9c912193fa5698d4fbc857b831fb96b42215dcf565e06012993a65901299a21f"
 dependencies = [
  "bytemuck",
  "serde",
@@ -1472,9 +1472,9 @@ dependencies = [
 
 [[package]]
 name = "egui"
-version = "0.25.0"
+version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0bf640ed7f3bf3d14ebf00d73bacc09c886443ee84ca6494bde37953012c9e3"
+checksum = "abecd396ede556116fceaa0098a1c9278ef526119c5097311eac4bcf57484c52"
 dependencies = [
  "accesskit",
  "ahash 0.8.6",
@@ -1485,9 +1485,8 @@ dependencies = [
 
 [[package]]
 name = "egui-gizmo"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca7e40a59693dfac6232ab3d813bc22619b2f8e98a0e809fcadff9e9f1ff108e"
+version = "0.16.0"
+source = "git+https://github.com/ThomasAlban/egui-gizmo#4156fbaf9b40d22a34ea433be4bdada19a5665d6"
 dependencies = [
  "egui",
  "glam 0.25.0",
@@ -1496,8 +1495,9 @@ dependencies = [
 
 [[package]]
 name = "egui_dock"
-version = "0.10.0"
-source = "git+https://github.com/LennysLounge/egui_dock?branch=replace_binary_tree#7742823305aa86bd67f7bc6b777f0a6ccc88072d"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00b5bd1db0a840b6f8717728ea957e76f4b6a761b85511a4f6cadbca2273991b"
 dependencies = [
  "duplicate",
  "egui",
@@ -1507,9 +1507,9 @@ dependencies = [
 
 [[package]]
 name = "egui_extras"
-version = "0.25.0"
+version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "753c36d3e2f7a32425af5290af2e52efb3471ea3a263b87f003b5433351b0fd7"
+checksum = "011213c1c95821080d1ea7a28cb2928f89df4d794a4c5f0ed034958966c58860"
 dependencies = [
  "egui",
  "ehttp",
@@ -1523,18 +1523,18 @@ dependencies = [
 
 [[package]]
 name = "egui_file"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36e70dc749a1822522fb2ee8b30134283d3727033f227471f6f6bf45f5fa7233"
+checksum = "c7ab9511d758f446da19bc1341d32014dea4c5c8328709975937b97b33b2347e"
 dependencies = [
  "egui",
 ]
 
 [[package]]
 name = "ehttp"
-version = "0.3.1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f88f45662356f96afc7d9e2bc9910ad8352ee01417f7c69b8b16a53c8767a75d"
+checksum = "e598cc2bfc28612f26426259ed99a978270e9433d63ae6d2843e30fb0974cd02"
 dependencies = [
  "document-features",
  "js-sys",
@@ -1552,9 +1552,9 @@ checksum = "a26ae43d7bcc3b814de94796a5e736d4029efb0ee900c12e2d54c993ad1a1e07"
 
 [[package]]
 name = "emath"
-version = "0.25.0"
+version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ee58355767587db7ba3738930d93cad3052cd834c2b48b9ef6ef26fe4823b7e"
+checksum = "2386663fafbd043f2cd14f0ded4702deb9348fb7e7bacba9c9087a31b17487f1"
 dependencies = [
  "bytemuck",
  "serde",
@@ -1626,9 +1626,9 @@ dependencies = [
 
 [[package]]
 name = "epaint"
-version = "0.25.0"
+version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e638cb066bff0903bbb6143116cfd134a42279c7d68f19c0352a94f15a402de7"
+checksum = "36ac8c9ca960f0263856a7fbc90d7ad41280e8865a7cd3c64d3daec016bd7115"
 dependencies = [
  "ab_glyph",
  "ahash 0.8.6",
@@ -3314,15 +3314,15 @@ dependencies = [
 
 [[package]]
 name = "strum"
-version = "0.25.0"
+version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "290d54ea6f91c969195bdbcd7442c8c2a2ba87da8bf60a7ee86a235d4bc1e125"
+checksum = "723b93e8addf9aa965ebe2d11da6d7540fa2283fcea14b3371ff055f7ba13f5f"
 
 [[package]]
 name = "strum_macros"
-version = "0.25.1"
+version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6069ca09d878a33f883cc06aaa9718ede171841d3832450354410b718b097232"
+checksum = "7a3417fc93d76740d974a01654a09777cb500428cc874ca9f45edfe0c4d4cd18"
 dependencies = [
  "heck",
  "proc-macro2",

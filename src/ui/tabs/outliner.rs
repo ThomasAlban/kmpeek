@@ -6,9 +6,10 @@ use crate::{
     },
     viewer::kmp::{
         components::{
-            AreaPoint, CannonPoint, EnemyPathMarker, ItemPathMarker, KmpCamera, Object, RespawnPoint, StartPoint,
+            AreaPoint, BattleFinishPoint, CannonPoint, EnemyPathMarker, ItemPathMarker, KmpCamera, Object,
+            RespawnPoint, StartPoint,
         },
-        path::{EnemyPathGroups, ItemPathGroups},
+        path::{EnemyPathGroups, ItemPathGroups, PathGroup},
         sections::{KmpEditMode, KmpModelSections},
         KmpVisibilityUpdate,
     },
@@ -29,9 +30,10 @@ pub struct ShowOutlinerTab<'w, 's> {
     areas: Query<'w, 's, Entity, With<AreaPoint>>,
     cameras: Query<'w, 's, Entity, With<KmpCamera>>,
     cannon_points: Query<'w, 's, Entity, With<CannonPoint>>,
+    battle_finish_points: Query<'w, 's, Entity, With<BattleFinishPoint>>,
 
-    enemy_groups: Option<Res<'w, EnemyPathGroups>>,
-    item_groups: Option<Res<'w, ItemPathGroups>>,
+    enemy_groups: Option<ResMut<'w, EnemyPathGroups>>,
+    item_groups: Option<ResMut<'w, ItemPathGroups>>,
     // commands: Commands<'w, 's>,
     q_visibility: Query<'w, 's, &'static mut Visibility>,
     // q_selected: Query<'w, 's, Entity, With<Selected>>,
@@ -43,50 +45,57 @@ impl UiSubSection for ShowOutlinerTab<'_, '_> {
     fn show(&mut self, ui: &mut bevy_egui::egui::Ui) {
         *self.link_visibilities = true;
 
-        let start_points = self.start_points.iter().collect::<Vec<Entity>>();
-
-        let enemy_paths = self.enemy_paths.iter().collect::<Vec<Entity>>();
-        let enemy_groups = self.enemy_groups.as_ref().map(|e| e.0.clone());
-        let item_paths = self.item_paths.iter().collect::<Vec<Entity>>();
-        let item_groups = self.item_groups.as_ref().map(|e| e.0.clone());
-
-        // todo: checkpoints
-        let checkpoints: Vec<Entity> = vec![];
-        let checkpoint_paths: Option<Vec<Vec<Entity>>> = None;
-
-        let respawn_points = self.respawn_points.iter().collect::<Vec<Entity>>();
-        let objects = self.objects.iter().collect::<Vec<Entity>>();
-        let areas = self.areas.iter().collect::<Vec<Entity>>();
-        let cameras = self.cameras.iter().collect::<Vec<Entity>>();
-        let cannon_points = self.cannon_points.iter().collect::<Vec<Entity>>();
-        // todo: battle finish points
-        let battle_finish_points: Vec<Entity> = vec![];
+        // let enemy_paths = self.enemy_paths.iter().collect::<Vec<Entity>>();
+        // let enemy_groups = self.enemy_groups.as_ref().map(|e| e.0.clone());
+        // let item_paths = self.item_paths.iter().collect::<Vec<Entity>>();
+        // let item_groups = self.item_groups.as_ref().map(|e| e.0.clone());
 
         use KmpModelSections::*;
 
-        self.show_point_outliner(ui, StartPoints, &start_points);
-        self.show_path_outliner(ui, EnemyPaths, &enemy_paths, &enemy_groups);
-        self.show_path_outliner(ui, ItemPaths, &item_paths, &item_groups);
-        self.show_path_outliner(ui, Checkpoints, &checkpoints, &checkpoint_paths);
-        self.show_point_outliner(ui, RespawnPoints, &respawn_points);
-        self.show_point_outliner(ui, Objects, &objects);
-        self.show_point_outliner(ui, Areas, &areas);
-        self.show_point_outliner(ui, Cameras, &cameras);
-        self.show_point_outliner(ui, CannonPoints, &cannon_points);
-        self.show_point_outliner(ui, BattleFinishPoints, &battle_finish_points);
+        let checkpoints: Vec<Entity> = Vec::new();
+
+        self.show_point_outliner(ui, StartPoints, self.start_points.iter().collect::<Vec<_>>());
+        self.show_path_outliner(
+            ui,
+            EnemyPaths,
+            self.enemy_paths.iter().collect::<Vec<_>>(),
+            &self.enemy_groups.as_ref().map(|e| e.0.clone()),
+        );
+        self.show_path_outliner(
+            ui,
+            ItemPaths,
+            self.item_paths.iter().collect::<Vec<_>>(),
+            &self.item_groups.as_ref().map(|e| e.0.clone()),
+        );
+        self.show_path_outliner(ui, Checkpoints, checkpoints.iter().copied(), &None);
+        self.show_point_outliner(ui, RespawnPoints, self.respawn_points.iter().collect::<Vec<_>>());
+        self.show_point_outliner(ui, Objects, self.objects.iter().collect::<Vec<_>>());
+        self.show_point_outliner(ui, Areas, self.areas.iter().collect::<Vec<_>>());
+        self.show_point_outliner(ui, Cameras, self.cameras.iter().collect::<Vec<_>>());
+        self.show_point_outliner(ui, CannonPoints, self.cannon_points.iter().collect::<Vec<_>>());
+        self.show_point_outliner(
+            ui,
+            BattleFinishPoints,
+            self.battle_finish_points.iter().collect::<Vec<_>>(),
+        );
     }
 }
 impl ShowOutlinerTab<'_, '_> {
     const ICON_SIZE: f32 = 14.;
-    fn show_point_outliner(&mut self, ui: &mut Ui, selected: KmpModelSections, entities: &[Entity]) {
+    fn show_point_outliner(
+        &mut self,
+        ui: &mut Ui,
+        selected: KmpModelSections,
+        entities: impl IntoIterator<Item = Entity>,
+    ) {
         self.show_header(ui, selected, entities, false);
     }
     fn show_path_outliner(
         &mut self,
         ui: &mut Ui,
         selected: KmpModelSections,
-        entities: &[Entity],
-        group_info: &Option<Vec<Vec<Entity>>>,
+        entities: impl IntoIterator<Item = Entity>,
+        group_info: &Option<Vec<PathGroup>>,
     ) {
         CollapsingState::load_with_default_open(ui.ctx(), format!("{}_outliner", selected).into(), false)
             .show_header(ui, |ui| {
@@ -94,13 +103,20 @@ impl ShowOutlinerTab<'_, '_> {
             })
             .body(|ui| {
                 if let Some(groups) = group_info {
-                    for (i, entities) in groups.iter().enumerate() {
-                        self.show_path(ui, i, entities, Icons::SECTION_COLORS[selected as usize]);
+                    for (i, pathgroup) in groups.iter().enumerate() {
+                        self.show_path(ui, i, pathgroup, Icons::SECTION_COLORS[selected as usize]);
                     }
                 }
             });
     }
-    fn show_header(&mut self, ui: &mut Ui, selected: KmpModelSections, entities: &[Entity], path: bool) {
+    fn show_header(
+        &mut self,
+        ui: &mut Ui,
+        selected: KmpModelSections,
+        entities: impl IntoIterator<Item = Entity>,
+        path: bool,
+    ) {
+        let entities: Vec<_> = entities.into_iter().collect();
         let current = &mut self.edit_mode.0;
         let visibilities = &mut self.settings.kmp_model.sections.visible;
         ui.horizontal(|ui| {
@@ -137,7 +153,15 @@ impl ShowOutlinerTab<'_, '_> {
             });
         });
     }
-    fn show_path(&mut self, ui: &mut Ui, i: usize, _entities: &[Entity], color: Color32) {
+    fn show_path(&mut self, ui: &mut Ui, i: usize, pathgroup: &PathGroup, color: Color32) {
+        let mut all_visible = if !pathgroup.paths.is_empty() {
+            pathgroup
+                .paths
+                .iter()
+                .all(|e| self.q_visibility.get(*e) == Ok(&Visibility::Visible))
+        } else {
+            false
+        };
         ui.horizontal(|ui| {
             ui.add_space(10.);
             ui.add_sized(
@@ -145,9 +169,24 @@ impl ShowOutlinerTab<'_, '_> {
                 Icons::path(ui.ctx(), Self::ICON_SIZE).tint(color),
             );
             ui.label(format!("Path {i}"));
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                view_icon_btn(ui, &mut true);
-            });
+            let view_btn_response = ui
+                .with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    view_icon_btn(ui, &mut all_visible)
+                })
+                .inner;
+
+            if view_btn_response.changed() {
+                for e in pathgroup.paths.iter() {
+                    let Ok(mut visibility) = self.q_visibility.get_mut(*e) else {
+                        continue;
+                    };
+                    *visibility = if all_visible {
+                        Visibility::Visible
+                    } else {
+                        Visibility::Hidden
+                    };
+                }
+            }
         });
     }
 }

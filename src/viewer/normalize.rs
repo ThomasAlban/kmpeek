@@ -1,10 +1,9 @@
 use crate::ui::settings::AppSettings;
-use bevy::{prelude::*, transform::TransformSystem, window::PrimaryWindow};
+use bevy::{prelude::*, window::PrimaryWindow};
 
 pub struct NormalizePlugin;
 impl Plugin for NormalizePlugin {
     fn build(&self, app: &mut App) {
-        // .after(TransformSystem::TransformPropagate)
         app.add_systems(Last, update_normalize);
     }
 }

@@ -527,14 +527,35 @@ pub fn traverse_paths(
     let enemy_groups = traverser.traverse(enemy_start);
     let item_groups = traverser.traverse(item_start);
 
+    let enemy_groups: Vec<_> = enemy_groups
+        .iter()
+        .map(|e| PathGroup {
+            paths: e.clone(),
+            visible: true,
+        })
+        .collect();
+    let item_groups: Vec<_> = item_groups
+        .iter()
+        .map(|e| PathGroup {
+            paths: e.clone(),
+            visible: true,
+        })
+        .collect();
+
     commands.insert_resource(EnemyPathGroups(enemy_groups));
     commands.insert_resource(ItemPathGroups(item_groups));
 }
 
-#[derive(Resource)]
-pub struct EnemyPathGroups(pub Vec<Vec<Entity>>);
-#[derive(Resource)]
-pub struct ItemPathGroups(pub Vec<Vec<Entity>>);
+#[derive(Clone)]
+pub struct PathGroup {
+    pub paths: Vec<Entity>,
+    pub visible: bool,
+}
+
+#[derive(Resource, Clone)]
+pub struct EnemyPathGroups(pub Vec<PathGroup>);
+#[derive(Resource, Clone)]
+pub struct ItemPathGroups(pub Vec<PathGroup>);
 
 struct Traverser<'a, 'w, 's> {
     q_kmp_node: Query<'w, 's, &'a KmpPathNode>,
