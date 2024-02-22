@@ -11,5 +11,5 @@ Contributing to this project is very much welcome! If you want to contribute, ta
 Have Rust installed and the repository cloned, then run `cargo run -r` in the directory (remove `-r` if you want debug mode rather than release mode).  
 Expect it to take a few minutes to compile for the first time (because it will need to download all the packages and compile them), but after that it should be pretty quick.
 
-<img width="1392" alt="image" src="https://github.com/ThomasAlban/kmpeek/assets/98399119/eabd8b41-6d35-4b33-a034-2a9a74a03ea6">
+<img width="1412" alt="image" src="https://github.com/ThomasAlban/kmpeek/assets/98399119/ee13fe41-3acb-4912-82eb-7e187417220b">
 
