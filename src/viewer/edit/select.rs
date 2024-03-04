@@ -1,41 +1,14 @@
 use super::gizmo::GizmoOptions;
 use super::EditMode;
 use crate::ui::ui_state::{MouseInViewport, ViewportRect};
+use crate::util::{cast_ray_from_cam, ui_viewport_to_ndc, world_to_ui_viewport};
+use crate::viewer::kmp::area::BoxGizmoOptions;
 use crate::viewer::kmp::components::KmpSelectablePoint;
-use bevy::{prelude::*, window::PrimaryWindow};
-use bevy_egui::EguiContexts;
+use crate::viewer::kmp::sections::KmpEditMode;
+use bevy::prelude::*;
+use bevy_egui_next::EguiContexts;
 use bevy_mod_outline::*;
 use bevy_mod_raycast::prelude::*;
-
-pub fn scale_viewport_pos(viewport_pos: Vec2, window: &Window, viewport_rect: Rect) -> Vec2 {
-    // make (0,0) be the top left corner of the viewport
-    let mut scaled_viewport_pos = viewport_pos - viewport_rect.min;
-    scaled_viewport_pos = scaled_viewport_pos.clamp(Vec2::ZERO, viewport_rect.max);
-    scaled_viewport_pos *= window.scale_factor() as f32;
-    scaled_viewport_pos
-}
-
-pub fn get_ray_from_cam(cam: (&Camera, &GlobalTransform), scaled_viewport_pos: Vec2) -> Ray3d {
-    cam.0
-        .viewport_to_world(cam.1, scaled_viewport_pos)
-        .map(Ray3d::from)
-        .unwrap()
-}
-
-pub fn cast_ray_from_cam(
-    cam: (&Camera, &GlobalTransform),
-    scaled_viewport_pos: Vec2,
-    raycast: &mut Raycast,
-    filter: impl Fn(Entity) -> bool,
-) -> Vec<(Entity, IntersectionData)> {
-    let ray = get_ray_from_cam(cam, scaled_viewport_pos);
-
-    let raycast_result = raycast
-        .cast_ray(ray, &RaycastSettings::default().with_filter(&filter))
-        .to_vec();
-
-    raycast_result
-}
 
 #[derive(Component, Default)]
 pub struct Selected;
@@ -43,14 +16,15 @@ pub struct Selected;
 pub fn select(
     mouse_in_viewport: Res<MouseInViewport>,
     viewport_rect: Res<ViewportRect>,
-    q_window: Query<&Window, With<PrimaryWindow>>,
+    q_window: Query<&Window>,
     keys: Res<Input<KeyCode>>,
     mouse_buttons: Res<Input<MouseButton>>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
     mut raycast: Raycast,
     q_kmp_section: Query<&KmpSelectablePoint>,
     mut commands: Commands,
-    gizmo: Res<GizmoOptions>,
+    gizmo_options: Res<GizmoOptions>,
+    box_gizmo_options: Res<BoxGizmoOptions>,
     q_selected: Query<Entity, With<Selected>>,
     q_visibility: Query<&Visibility>,
     mut contexts: EguiContexts,
@@ -61,24 +35,22 @@ pub fn select(
     {
         return;
     }
-    let window = q_window.get_single().unwrap();
+    let window = q_window.single();
     let Some(mouse_pos) = window.cursor_position() else {
         return;
     };
-    if gizmo.last_result.is_some() {
+
+    if gizmo_options.last_result.is_some() || box_gizmo_options.mouse_interacting {
         return;
     }
     let shift_key_down = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
 
     // get the active camera
-    let cam = q_camera
-        .iter()
-        .filter(|cam| cam.0.is_active)
-        .collect::<Vec<(&Camera, &GlobalTransform)>>()[0];
+    let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
 
-    let scaled_mouse_pos = scale_viewport_pos(mouse_pos, window, viewport_rect.0);
-    // send out a ray
-    let intersections = cast_ray_from_cam(cam, scaled_mouse_pos, &mut raycast, |e| {
+    let mouse_pos_ndc = ui_viewport_to_ndc(mouse_pos, viewport_rect.0);
+
+    let intersections = cast_ray_from_cam(cam, mouse_pos_ndc, &mut raycast, |e| {
         let visibility = q_visibility.get(e).unwrap();
         q_kmp_section.contains(e) && visibility == Visibility::Visible
     });
@@ -102,7 +74,6 @@ pub fn select(
 }
 
 pub fn deselect_if_not_visible(mut commands: Commands, q_selected: Query<(Entity, &Visibility), With<Selected>>) {
-    // deselect any entity that isn't visible
     for (e, selected) in q_selected.iter() {
         if selected != Visibility::Visible {
             commands.entity(e).remove::<Selected>();
@@ -110,26 +81,38 @@ pub fn deselect_if_not_visible(mut commands: Commands, q_selected: Query<(Entity
     }
 }
 
+pub fn deselect_on_mode_change(
+    edit_mode: Res<KmpEditMode>,
+    mut commands: Commands,
+    q_selected: Query<Entity, With<Selected>>,
+) {
+    if !edit_mode.is_changed() {
+        return;
+    }
+    for e in q_selected.iter() {
+        commands.entity(e).remove::<Selected>();
+    }
+}
+
 #[derive(Resource, Default)]
-pub struct SelectBox {
-    pub scaled: Option<Rect>,
-    pub unscaled: Option<Rect>,
+pub struct SelectBox(pub Option<Rect>);
+impl SelectBox {
+    // how much we have to move the mouse before we actually start making a select box
+    const LENIENCY_BEFORE_SELECT: f32 = 3.;
 }
 
 // this handles working out the select box rectangle and actually selecting stuff (the visuals for the box are handled in the UI section)
 pub fn select_box(
     mouse_buttons: Res<Input<MouseButton>>,
-    q_window: Query<&Window, With<PrimaryWindow>>,
-    viewport_rect: Res<ViewportRect>,
+    q_window: Query<&Window>,
     edit_mode: Res<EditMode>,
     mouse_in_viewport: Res<MouseInViewport>,
     q_selectable: Query<(&Transform, Entity, &Visibility, Has<Selected>), With<KmpSelectablePoint>>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
     mut commands: Commands,
     mut select_box: ResMut<SelectBox>,
-
-    mut initial_scaled_mouse_pos: Local<Vec2>,
-    mut initial_unscaled_mouse_pos: Local<Vec2>,
+    viewport_rect: Res<ViewportRect>,
+    mut initial_mouse_pos: Local<Vec2>,
 ) {
     if *edit_mode != EditMode::SelectBox {
         return;
@@ -140,19 +123,13 @@ pub fn select_box(
         return;
     };
 
-    let scaled_mouse_pos = scale_viewport_pos(mouse_pos, window, viewport_rect.0);
-
     // save the initial scaled/unscaled mouse pos into local variables (so that they can be used for one corner of the select box)
     if mouse_buttons.just_pressed(MouseButton::Left) {
-        *initial_scaled_mouse_pos = scaled_mouse_pos;
-        *initial_unscaled_mouse_pos = mouse_pos;
+        *initial_mouse_pos = mouse_pos;
     }
 
-    // how much we have to move the mouse before we actually start making a select box
-    const LENIENCY_BEFORE_SELECT: f32 = 3.;
-
     if mouse_buttons.pressed(MouseButton::Left)
-        && initial_scaled_mouse_pos.distance(scaled_mouse_pos) > LENIENCY_BEFORE_SELECT
+        && initial_mouse_pos.distance(mouse_pos) > SelectBox::LENIENCY_BEFORE_SELECT
     {
         // delete the select box if mouse isn't in viewport
         if !mouse_in_viewport.0 {
@@ -161,33 +138,25 @@ pub fn select_box(
         }
 
         // set the select box with the initial mouse pos and the current mouse pos as the 2 corners
-        // Rect::from_corners handles negatives etc
-        *select_box = SelectBox {
-            scaled: Some(Rect::from_corners(*initial_scaled_mouse_pos, scaled_mouse_pos)),
-            unscaled: Some(Rect::from_corners(*initial_unscaled_mouse_pos, mouse_pos)),
-        };
+        *select_box = SelectBox(Some(Rect::from_corners(*initial_mouse_pos, mouse_pos)));
     }
 
     // when we release the mouse button, we actually select stuff
     if mouse_buttons.just_released(MouseButton::Left) {
-        let Some(select_rect) = select_box.scaled else {
+        let Some(select_rect) = select_box.0 else {
             return;
         };
         // get the active camera
-        let cam = q_camera
-            .iter()
-            .filter(|cam| cam.0.is_active)
-            .collect::<Vec<(&Camera, &GlobalTransform)>>()[0];
+        let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
 
         // select stuff
         for selectable in q_selectable.iter() {
             if selectable.2 != Visibility::Visible || selectable.3 {
                 continue;
             }
-            let Some(viewport_pos) = cam.0.world_to_viewport(cam.1, selectable.0.translation) else {
+            let Some(viewport_pos) = world_to_ui_viewport(cam, viewport_rect.0, selectable.0.translation) else {
                 continue;
             };
-
             if select_rect.contains(viewport_pos) {
                 commands.entity(selectable.1).insert(Selected);
             }

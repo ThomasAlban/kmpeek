@@ -2,8 +2,7 @@ use bevy::ecs::system::Resource;
 use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 
 #[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy)]
-pub enum KmpModelSections {
-    #[default]
+pub enum KmpSections {
     #[strum(serialize = "Start Points")]
     StartPoints,
     #[strum(serialize = "Enemy Paths")]
@@ -20,14 +19,17 @@ pub enum KmpModelSections {
     CannonPoints,
     #[strum(serialize = "Battle Finish Points")]
     BattleFinishPoints,
+    #[default]
+    #[strum(serialize = "Track Info")]
+    TrackInfo,
 }
 
-#[derive(Resource, Default)]
-pub struct KmpEditMode(pub KmpModelSections);
+#[derive(Resource, Default, Clone, PartialEq)]
+pub struct KmpEditMode(pub KmpSections);
 
-impl From<KmpModelSections> for usize {
-    fn from(value: KmpModelSections) -> Self {
-        use KmpModelSections::*;
+impl From<KmpSections> for usize {
+    fn from(value: KmpSections) -> Self {
+        use KmpSections::*;
         match value {
             StartPoints => 0,
             EnemyPaths => 1,
@@ -39,6 +41,7 @@ impl From<KmpModelSections> for usize {
             Cameras => 7,
             CannonPoints => 8,
             BattleFinishPoints => 9,
+            TrackInfo => 10,
         }
     }
 }

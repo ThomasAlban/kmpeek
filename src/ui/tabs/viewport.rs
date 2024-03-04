@@ -13,17 +13,16 @@ use crate::{
             select::SelectBox,
             EditMode,
         },
+        kmp::area::ShowBoxHandles,
     },
 };
-use bevy::{
-    ecs::system::SystemParam, math::vec2, prelude::*, render::render_resource::Extent3d, window::PrimaryWindow,
-};
-use bevy_egui::egui::{self, Color32, Margin, Pos2, Rounding, Stroke, Ui};
+use bevy::{ecs::system::SystemParam, math::vec2, prelude::*, render::render_resource::Extent3d};
+use bevy_egui_next::egui::{self, Color32, Margin, Pos2, Rounding, Stroke, Ui};
 use egui_gizmo::GizmoOrientation;
 
 #[derive(SystemParam)]
 struct ViewportParams<'w, 's> {
-    q_window: Query<'w, 's, &'static Window, With<PrimaryWindow>>,
+    q_window: Query<'w, 's, &'static Window>,
     image_assets: ResMut<'w, Assets<Image>>,
     viewport: ResMut<'w, ViewportImage>,
     mouse_in_viewport: ResMut<'w, MouseInViewport>,
@@ -37,7 +36,7 @@ struct ViewportParams<'w, 's> {
 
 #[derive(SystemParam)]
 pub struct ShowViewportTab<'w, 's> {
-    p: ParamSet<'w, 's, (ViewportParams<'w, 's>, ShowGizmo<'w, 's>)>,
+    p: ParamSet<'w, 's, (ViewportParams<'w, 's>, ShowGizmo<'w, 's>, ShowBoxHandles<'w, 's>)>,
 }
 impl UiSubSection for ShowViewportTab<'_, '_> {
     fn show(&mut self, ui: &mut egui::Ui) {
@@ -89,6 +88,9 @@ impl UiSubSection for ShowViewportTab<'_, '_> {
 
         // gizmo
         self.p.p1().show(ui);
+
+        // area handles
+        self.p.p2().show(ui);
 
         self.show_select_box(ui, egui_viewport_rect);
 
@@ -210,7 +212,7 @@ impl ShowViewportTab<'_, '_> {
         ui.allocate_ui_at_rect(viewport_rect, |ui| {
             ui.set_clip_rect(viewport_rect);
             let painter = ui.painter();
-            if let Some(select_box) = p.select_box.unscaled {
+            if let Some(select_box) = p.select_box.0 {
                 let select_box = egui::Rect {
                     min: egui::Pos2 {
                         x: select_box.min.x,

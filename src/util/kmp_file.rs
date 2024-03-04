@@ -62,7 +62,7 @@ where
     for<'a> T: BinWrite<Args<'a> = ()> + 'a,
 {
     section_header: SectionHeader,
-    #[br(count = section_header.num_entries)]
+    #[br(count = usize::from(section_header.num_entries))]
     pub entries: Vec<T>,
 }
 
@@ -154,7 +154,7 @@ pub struct Poti {
     pub num_points: u16,
     pub setting_1: u8,
     pub setting_2: u8,
-    #[br(count = num_points)]
+    #[br(count = usize::from(num_points))]
     pub routes: Vec<PotiPoint>,
 }
 
@@ -213,10 +213,10 @@ pub struct Jgpt {
 #[binrw]
 #[brw(big)]
 pub struct Cnpt {
-    position: [f32; 3],
-    rotation: [f32; 3],
-    id: u16,
-    shoot_effect: i16,
+    pub position: [f32; 3],
+    pub rotation: [f32; 3],
+    pub id: u16,
+    pub shoot_effect: i16,
 }
 
 /// The MSPT (mission success point) section describes end positions. After battles and tournaments have ended, the players are placed on this point(s).

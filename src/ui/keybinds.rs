@@ -10,17 +10,11 @@ impl Plugin for KeybindsPlugin {
     }
 }
 
-fn keybinds(
-    keys: Res<Input<KeyCode>>,
-    mut file_dialog: ResMut<FileDialogRes>,
-    mut edit_mode: ResMut<EditMode>,
-) {
+fn keybinds(keys: Res<Input<KeyCode>>, mut file_dialog: ResMut<FileDialogRes>, mut edit_mode: ResMut<EditMode>) {
     // keybinds
     // if the control/command key is pressed
-    if (!cfg!(target_os = "macos")
-        && (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight)))
-        || (cfg!(target_os = "macos")
-            && (keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight)))
+    if (!cfg!(target_os = "macos") && (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight)))
+        || (cfg!(target_os = "macos") && (keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight)))
     {
         if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
             // keybinds with shift held

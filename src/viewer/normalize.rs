@@ -1,5 +1,5 @@
 use crate::ui::settings::AppSettings;
-use bevy::{prelude::*, window::PrimaryWindow};
+use bevy::prelude::*;
 
 pub struct NormalizePlugin;
 impl Plugin for NormalizePlugin {
@@ -40,7 +40,7 @@ fn update_normalize(
         Query<(&mut GlobalTransform, &Transform), With<NormalizeInheritParent>>,
     )>,
     settings: Res<AppSettings>,
-    q_window: Query<&Window, With<PrimaryWindow>>,
+    q_window: Query<&Window>,
 ) {
     if !settings.kmp_model.normalize {
         for (mut gt, normalize, visibility, _) in p.p1().iter_mut() {

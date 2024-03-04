@@ -5,10 +5,7 @@ pub use self::{
     topdown::{TopDownCam, TopDownSettings},
 };
 use crate::ui::{settings::AppSettings, ui_state::MouseInViewport};
-use bevy::{
-    prelude::*,
-    window::{CursorGrabMode, PrimaryWindow},
-};
+use bevy::{prelude::*, window::CursorGrabMode};
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString, IntoStaticStr};
 
@@ -26,9 +23,7 @@ impl Plugin for CameraPlugin {
     }
 }
 
-#[derive(
-    PartialEq, Clone, Copy, Serialize, Deserialize, Debug, IntoStaticStr, EnumString, Display,
-)]
+#[derive(PartialEq, Clone, Copy, Serialize, Deserialize, Debug, IntoStaticStr, EnumString, Display)]
 pub enum CameraMode {
     Fly,
     Orbit,
@@ -61,7 +56,7 @@ fn add_ambient_light(mut commands: Commands) {
 
 fn cursor_grab(
     mouse_buttons: Res<Input<MouseButton>>,
-    mut q_window: Query<&mut Window, With<PrimaryWindow>>,
+    mut q_window: Query<&mut Window>,
     settings: Res<AppSettings>,
     mouse_in_viewport: Res<MouseInViewport>,
 ) {
@@ -87,18 +82,9 @@ fn cursor_grab(
 }
 
 fn update_active_camera(
-    mut q_fly_cam: Query<
-        (Entity, &mut Camera),
-        (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>),
-    >,
-    mut q_orbit_cam: Query<
-        (Entity, &mut Camera),
-        (With<OrbitCam>, Without<FlyCam>, Without<TopDownCam>),
-    >,
-    mut q_topdown_cam: Query<
-        (Entity, &mut Camera),
-        (With<TopDownCam>, Without<FlyCam>, Without<OrbitCam>),
-    >,
+    mut q_fly_cam: Query<(Entity, &mut Camera), (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>)>,
+    mut q_orbit_cam: Query<(Entity, &mut Camera), (With<OrbitCam>, Without<FlyCam>, Without<TopDownCam>)>,
+    mut q_topdown_cam: Query<(Entity, &mut Camera), (With<TopDownCam>, Without<FlyCam>, Without<OrbitCam>)>,
     mut ev_camera_mode_changed: EventReader<CameraModeChanged>,
 ) {
     for ev in ev_camera_mode_changed.read() {

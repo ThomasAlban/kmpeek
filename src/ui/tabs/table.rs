@@ -1,16 +1,16 @@
 use crate::{
-    ui::util::{combobox_enum, drag_vec3, rotation_edit},
+    ui::util::{combobox_enum, drag_vec3},
     viewer::{
         edit::select::Selected,
         kmp::{
             components::{EnemyPathPoint, StartPoint},
             path::EntityGroup,
-            sections::{KmpEditMode, KmpModelSections},
+            sections::KmpEditMode,
         },
     },
 };
 use bevy::{ecs::system::SystemParam, prelude::*};
-use bevy_egui::egui::{self, DragValue, Layout};
+use bevy_egui_next::egui::{self, DragValue, Layout, Ui};
 use egui_extras::{Column, TableBody, TableBuilder, TableRow};
 
 use super::UiSubSection;
@@ -27,7 +27,7 @@ pub struct ShowTableTab<'w, 's> {
     q_enemy_path_point: Query<'w, 's, &'static mut EnemyPathPoint>,
 }
 impl UiSubSection for ShowTableTab<'_, '_> {
-    fn show(&mut self, ui: &mut bevy_egui::egui::Ui) {
+    fn show(&mut self, ui: &mut Ui) {
         // match self.kmp_edit_mode.0 {
         //     KmpModelSections::StartPoints => StartPointTable::show(
         //         ui,
@@ -147,14 +147,9 @@ impl StartPointTable {
                         // rotation_edit(ui, &mut transform_cp, 1.);
                     });
                     row.col(|ui| {
-                        ui.with_layout(
-                            Layout::centered_and_justified(egui::Direction::TopDown),
-                            |ui| {
-                                ui.add(
-                                    DragValue::new(&mut start_point_cp.player_index).speed(0.05),
-                                );
-                            },
-                        );
+                        ui.with_layout(Layout::centered_and_justified(egui::Direction::TopDown), |ui| {
+                            ui.add(DragValue::new(&mut start_point_cp.player_index).speed(0.05));
+                        });
                     });
 
                     transform.set_if_neq(transform_cp);

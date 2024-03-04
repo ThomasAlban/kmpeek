@@ -1,6 +1,7 @@
 use crate::ui::{
     settings::AppSettings,
     ui_state::MouseInViewport,
+    update_ui::UpdateUiSet,
     viewport::{SetupViewportSet, ViewportImage},
 };
 use bevy::{
@@ -8,7 +9,7 @@ use bevy::{
     math::vec3,
     prelude::*,
     render::camera::RenderTarget,
-    window::{CursorGrabMode, PrimaryWindow, RequestRedraw},
+    window::{CursorGrabMode, RequestRedraw},
 };
 use serde::{Deserialize, Serialize};
 
@@ -18,7 +19,7 @@ pub struct FlyCamPlugin;
 impl Plugin for FlyCamPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, camera_setup.after(SetupViewportSet))
-            .add_systems(Update, (fly_cam_look, fly_cam_move));
+            .add_systems(Update, (fly_cam_look, fly_cam_move).before(UpdateUiSet));
     }
 }
 
@@ -93,7 +94,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
 
 fn fly_cam_move(
     keys: Res<Input<KeyCode>>,
-    q_window: Query<&Window, With<PrimaryWindow>>,
+    q_window: Query<&Window>,
     mut q_fly_cam: Query<&mut Transform, With<FlyCam>>,
     mut ev_request_redraw: EventWriter<RequestRedraw>,
     settings: Res<AppSettings>,
@@ -119,8 +120,8 @@ fn fly_cam_move(
 
     let mut velocity = Vec3::ZERO;
     let local_z = transform.local_z();
-    let forward = -Vec3::new(local_z.x, 0., local_z.z);
-    let right = Vec3::new(local_z.z, 0., -local_z.x);
+    let forward = -Vec3::new(local_z.x, 0., local_z.z).normalize();
+    let right = Vec3::new(local_z.z, 0., -local_z.x).normalize();
 
     let mut speed_boost = false;
 
@@ -159,7 +160,7 @@ fn fly_cam_move(
 }
 
 fn fly_cam_look(
-    q_window: Query<&Window, With<PrimaryWindow>>,
+    q_window: Query<&Window>,
     mut ev_mouse_motion: EventReader<MouseMotion>,
     mut q_fly_cam: Query<&mut Transform, With<FlyCam>>,
     settings: Res<AppSettings>,

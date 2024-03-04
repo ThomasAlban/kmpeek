@@ -2,6 +2,7 @@ use super::CameraMode;
 use crate::ui::{
     settings::AppSettings,
     ui_state::MouseInViewport,
+    update_ui::UpdateUiSet,
     viewport::{SetupViewportSet, ViewportImage},
 };
 use bevy::{
@@ -9,7 +10,6 @@ use bevy::{
     math::vec3,
     prelude::*,
     render::camera::RenderTarget,
-    window::PrimaryWindow,
 };
 use serde::{Deserialize, Serialize};
 
@@ -17,7 +17,7 @@ pub struct TopDownCamPlugin;
 impl Plugin for TopDownCamPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, camera_setup.after(SetupViewportSet))
-            .add_systems(Update, topdown_cam);
+            .add_systems(Update, topdown_cam.before(UpdateUiSet));
     }
 }
 
@@ -84,7 +84,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
 }
 
 fn topdown_cam(
-    q_window: Query<&mut Window, With<PrimaryWindow>>,
+    q_window: Query<&mut Window>,
     mut ev_mouse_motion: EventReader<MouseMotion>,
     mut ev_mouse_scroll: EventReader<MouseWheel>,
     mouse_buttons: Res<Input<MouseButton>>,

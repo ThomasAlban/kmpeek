@@ -1,10 +1,8 @@
 use bevy::{
     prelude::*,
-    render::render_resource::{
-        Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
-    },
+    render::render_resource::{Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages},
 };
-use bevy_egui::{egui::TextureId, EguiUserTextures};
+use bevy_egui_next::{egui::TextureId, EguiUserTextures};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 pub struct SetupViewportSet;
@@ -16,9 +14,7 @@ impl Plugin for ViewportPlugin {
             Startup,
             // this makes sure all the 'Commands' are completed before moving onto other startup systems
             // so that other startup systems can make use of the Viewport image handle
-            (setup_viewport, apply_deferred)
-                .chain()
-                .in_set(SetupViewportSet),
+            (setup_viewport, apply_deferred).chain().in_set(SetupViewportSet),
         );
     }
 }
@@ -47,9 +43,7 @@ fn setup_viewport(
             format: TextureFormat::Bgra8UnormSrgb,
             mip_level_count: 1,
             sample_count: 1,
-            usage: TextureUsages::TEXTURE_BINDING
-                | TextureUsages::COPY_DST
-                | TextureUsages::RENDER_ATTACHMENT,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         },
         ..default()

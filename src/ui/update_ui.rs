@@ -1,6 +1,6 @@
 use super::{file_dialog::ShowFileDialog, menu_bar::ShowMenuBar, tabs::ShowDockArea};
 use bevy::prelude::*;
-use bevy_egui::{egui::TextureId, EguiContexts};
+use bevy_egui_next::{egui::TextureId, EguiContexts};
 use std::path::PathBuf;
 
 #[derive(SystemSet, Hash, PartialEq, Eq, Clone, Debug)]

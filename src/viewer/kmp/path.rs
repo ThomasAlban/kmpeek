@@ -3,8 +3,9 @@
 use super::{
     components::FromKmp,
     meshes_materials::{KmpMeshes, KmpMeshesMaterials, PathMaterials},
+    sections::{KmpEditMode, KmpSections},
     settings::OutlineSettings,
-    EnemyPathMarker, ItemPathMarker, KmpSelectablePoint, PathOverallStart,
+    EnemyPathMarker, EnemyPathPoint, ItemPathMarker, ItemPathPoint, KmpError, KmpSelectablePoint, PathOverallStart,
 };
 use crate::{
     util::kmp_file::{KmpFile, KmpGetPathSection, KmpGetSection, KmpPositionPoint},
@@ -25,7 +26,6 @@ pub struct KmpPathNodeLink {
     pub prev_node: Entity,
     pub next_node: Entity,
 }
-
 // represents the line that links the 2 entities
 #[derive(Component)]
 pub struct KmpPathNodeLinkLine;
@@ -101,7 +101,7 @@ impl KmpPathNode {
         }
     }
     // link nodes, taking in a kmp node query
-    fn link_nodes(
+    pub fn link_nodes(
         prev_node_entity: Entity,
         next_node_entity: Entity,
         q_kmp_node: &mut Query<&mut KmpPathNode>,
@@ -127,7 +127,7 @@ impl KmpPathNode {
         Ok(())
     }
     // link nodes if direct world access is available
-    fn link_nodes_world_access(
+    pub fn link_nodes_world_access(
         prev_node_entity: Entity,
         next_node_entity: Entity,
         world: &mut World,
@@ -173,6 +173,7 @@ pub struct PathPointSpawner<'a, U, Marker> {
     outline: &'a OutlineSettings,
     visible: bool,
     marker: Marker,
+    prev_nodes: HashSet<Entity>,
 }
 impl<'a, U: Component + Clone, Marker: Component + Default> PathPointSpawner<'a, U, Marker> {
     pub fn new(
@@ -190,6 +191,7 @@ impl<'a, U: Component + Clone, Marker: Component + Default> PathPointSpawner<'a,
             outline,
             visible: true,
             marker: Marker::default(),
+            prev_nodes: HashSet::new(),
         }
     }
     pub fn pos(mut self, pos: Vec3) -> Self {
@@ -202,6 +204,10 @@ impl<'a, U: Component + Clone, Marker: Component + Default> PathPointSpawner<'a,
     }
     pub fn visible(mut self, visible: bool) -> Self {
         self.visible = visible;
+        self
+    }
+    pub fn prev_nodes(mut self, prev_nodes: HashSet<Entity>) -> Self {
+        self.prev_nodes = prev_nodes;
         self
     }
     fn get_bundle(
@@ -227,7 +233,10 @@ impl<'a, U: Component + Clone, Marker: Component + Default> PathPointSpawner<'a,
                 },
                 ..default()
             },
-            KmpPathNode::new(),
+            KmpPathNode {
+                prev_nodes: self.prev_nodes.clone(),
+                next_nodes: HashSet::new(),
+            },
             Marker::default(),
             self.kmp_component.clone(),
             KmpSelectablePoint,
@@ -257,6 +266,7 @@ pub fn spawn_path_section<
 >(
     commands: &mut Commands,
     kmp: Arc<KmpFile>,
+    kmp_errors: &mut Vec<KmpError>,
     meshes: KmpMeshes,
     materials: PathMaterials,
     outline: OutlineSettings,
@@ -281,6 +291,20 @@ pub fn spawn_path_section<
         kmp_data_groups.push(KmpDataGroup { nodes, next_groups });
     }
 
+    let mut kmp_component_groups = Vec::new();
+
+    let mut acc = 0;
+
+    for group in kmp_data_groups.iter() {
+        let mut kmp_component_group = Vec::new();
+        for node in group.nodes.iter() {
+            let kmp_component = U::from_kmp(node, kmp_errors, acc);
+            kmp_component_group.push(kmp_component);
+            acc += 1;
+        }
+        kmp_component_groups.push(kmp_component_group);
+    }
+
     commands.add(move |world: &mut World| {
         // spawn all the entities, saving the entity IDs into 'entity_groups'
         let mut entity_groups: Vec<EntityGroup> = Vec::with_capacity(kmp_data_groups.len());
@@ -291,11 +315,11 @@ pub fn spawn_path_section<
             };
             for (j, node) in group.nodes.iter().enumerate() {
                 let position: Vec3 = node.get_position().into();
-                let spawned_entity =
-                    PathPointSpawner::<_, Marker>::new(&meshes, &materials, &outline, U::from_kmp(node))
-                        .pos(position)
-                        .visible(false)
-                        .spawn_world(world);
+                let kmp_component = kmp_component_groups[i][j].clone();
+                let spawned_entity = PathPointSpawner::<_, Marker>::new(&meshes, &materials, &outline, kmp_component)
+                    .pos(position)
+                    .visible(false)
+                    .spawn_world(world);
                 // if we are at the start then add the start marker to the point
                 if i == 0 && j == 0 {
                     world.entity_mut(spawned_entity).insert(PathOverallStart);
@@ -311,15 +335,6 @@ pub fn spawn_path_section<
             for entity in group.entities.iter() {
                 if let Some(prev_entity) = prev_entity {
                     KmpPathNode::link_nodes_world_access(prev_entity, *entity, world).unwrap();
-                    spawn_node_link::<Marker>(
-                        world,
-                        prev_entity,
-                        *entity,
-                        meshes.cylinder.clone(),
-                        meshes.frustrum.clone(),
-                        materials.line.clone(),
-                        materials.arrow.clone(),
-                    );
                 }
                 prev_entity = Some(*entity);
             }
@@ -331,15 +346,6 @@ pub fn spawn_path_section<
                 let next_entity = entity_groups[*next_group_index as usize].entities[0];
                 // link the last entity in the current group with the first entity in the next group
                 KmpPathNode::link_nodes_world_access(entity, next_entity, world).unwrap();
-                spawn_node_link::<Marker>(
-                    world,
-                    entity,
-                    next_entity,
-                    meshes.cylinder.clone(),
-                    meshes.frustrum.clone(),
-                    materials.line.clone(),
-                    materials.arrow.clone(),
-                );
             }
         }
     });
@@ -354,6 +360,7 @@ fn spawn_node_link<T: Component + Default>(
 
     line_material: Handle<StandardMaterial>,
     arrow_material: Handle<StandardMaterial>,
+    visible: bool,
 ) {
     let prev_pos = world.get::<Transform>(prev_node).unwrap().translation;
     let next_pos = world.get::<Transform>(next_node).unwrap().translation;
@@ -369,7 +376,11 @@ fn spawn_node_link<T: Component + Default>(
         .spawn((
             SpatialBundle {
                 transform: parent_transform,
-                visibility: Visibility::Hidden,
+                visibility: if visible {
+                    Visibility::Visible
+                } else {
+                    Visibility::Hidden
+                },
                 ..default()
             },
             KmpPathNodeLink { prev_node, next_node },
@@ -413,6 +424,7 @@ pub fn update_node_links(
     mut q_transform: Query<&mut Transform>,
     q_line: Query<&KmpPathNodeLinkLine>,
     mut commands: Commands,
+    kmp_edit_mode: Res<KmpEditMode>,
 ) {
     let mut nodes_to_be_linked: HashMap<(Entity, Entity), PathType> = HashMap::new();
     for (cur_node, is_enemy, _, node_data) in q_kmp_node.iter() {
@@ -476,6 +488,7 @@ pub fn update_node_links(
     for node_not_linked in nodes_to_be_linked.iter() {
         let (prev_node, next_node) = *node_not_linked.0;
         let path_type = *node_not_linked.1;
+        let kmp_edit_mode = kmp_edit_mode.0;
         commands.add(move |world: &mut World| {
             let meshes_materials = world.resource::<KmpMeshesMaterials>();
             if path_type == PathType::Enemy {
@@ -487,6 +500,7 @@ pub fn update_node_links(
                     meshes_materials.meshes.frustrum.clone(),
                     meshes_materials.materials.enemy_paths.line.clone(),
                     meshes_materials.materials.enemy_paths.arrow.clone(),
+                    kmp_edit_mode == KmpSections::EnemyPaths,
                 );
             } else if path_type == PathType::Item {
                 spawn_node_link::<ItemPathMarker>(
@@ -497,6 +511,7 @@ pub fn update_node_links(
                     meshes_materials.meshes.frustrum.clone(),
                     meshes_materials.materials.item_paths.line.clone(),
                     meshes_materials.materials.item_paths.arrow.clone(),
+                    kmp_edit_mode == KmpSections::ItemPaths,
                 );
             }
         });
@@ -506,12 +521,12 @@ pub fn update_node_links(
 #[derive(Event, Default)]
 pub struct RecalculatePaths;
 
-pub fn traverse_paths(
+pub fn traverse_paths<'a>(
     mut p: ParamSet<(
         Query<Entity, (With<PathOverallStart>, With<EnemyPathMarker>)>,
         Query<Entity, (With<PathOverallStart>, With<ItemPathMarker>)>,
     )>,
-    q_kmp_node: Query<&KmpPathNode>,
+    q_kmp_node: Query<(&'a KmpPathNode, Option<&'a EnemyPathPoint>, Option<&'a ItemPathPoint>)>,
     q_is_overall_start: Query<With<PathOverallStart>>,
     mut commands: Commands,
 ) {
@@ -558,14 +573,14 @@ pub struct EnemyPathGroups(pub Vec<PathGroup>);
 pub struct ItemPathGroups(pub Vec<PathGroup>);
 
 struct Traverser<'a, 'w, 's> {
-    q_kmp_node: Query<'w, 's, &'a KmpPathNode>,
+    q_kmp_node: Query<'w, 's, (&'a KmpPathNode, Option<&'a EnemyPathPoint>, Option<&'a ItemPathPoint>)>,
     q_is_overall_start: Query<'w, 's, With<PathOverallStart>>,
     groups_accum: Vec<Vec<Entity>>,
     visited: HashSet<Entity>,
 }
 impl<'a, 'w, 's> Traverser<'a, 'w, 's> {
     pub fn new(
-        q_kmp_node: Query<'w, 's, &'a KmpPathNode>,
+        q_kmp_node: Query<'w, 's, (&'a KmpPathNode, Option<&'a EnemyPathPoint>, Option<&'a ItemPathPoint>)>,
         q_is_overall_start: Query<'w, 's, With<PathOverallStart>>,
     ) -> Self {
         Self {
@@ -586,7 +601,7 @@ impl<'a, 'w, 's> Traverser<'a, 'w, 's> {
         self.visited = HashSet::new();
     }
     fn traverse_internal(&mut self, cur_node: Entity, mut cur_index: usize) {
-        let kmp_node = self.q_kmp_node.get(cur_node).unwrap();
+        let (kmp_node, enemy_point, item_point) = self.q_kmp_node.get(cur_node).unwrap();
 
         let at_start = self.q_is_overall_start.get(cur_node).is_ok();
         let initial_start = at_start && self.groups_accum.is_empty();
@@ -599,7 +614,9 @@ impl<'a, 'w, 's> Traverser<'a, 'w, 's> {
             || kmp_node
                 .prev_nodes
                 .iter()
-                .any(|e| self.q_kmp_node.get(*e).unwrap().next_nodes.len() > 1);
+                .any(|e| self.q_kmp_node.get(*e).unwrap().0.next_nodes.len() > 1)
+            || enemy_point.map(|x| x.path_start_override).unwrap_or(false)
+            || item_point.map(|x| x.path_start_override).unwrap_or(false);
 
         if we_should_start_new_group {
             self.groups_accum.push(vec![cur_node]);

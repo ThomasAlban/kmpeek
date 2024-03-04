@@ -1,6 +1,4 @@
-use crate::viewer::{
-    camera::CameraSettings, kcl_model::KclModelSettings, kmp::settings::KmpModelSettings,
-};
+use crate::viewer::{camera::CameraSettings, kcl_model::KclModelSettings, kmp::settings::KmpModelSettings};
 use bevy::prelude::*;
 use bevy_pkv::PkvStore;
 use serde::{Deserialize, Serialize};

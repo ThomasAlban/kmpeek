@@ -505,9 +505,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy_egui"
-version = "0.24.0"
-source = "git+https://github.com/ThomasAlban/bevy_egui#165fe4570c7b2c2c38d5f3ee49cdbe01fa5e752c"
+name = "bevy_egui_next"
+version = "0.26.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49ade85fcc0c9d1935d1a44a5fa51741bafb88045c5c9f8e6629d292370f45f3"
 dependencies = [
  "arboard",
  "bevy",
@@ -1486,7 +1487,7 @@ dependencies = [
 [[package]]
 name = "egui-gizmo"
 version = "0.16.0"
-source = "git+https://github.com/ThomasAlban/egui-gizmo#4156fbaf9b40d22a34ea433be4bdada19a5665d6"
+source = "git+https://github.com/urholaukkarinen/egui-gizmo#6b5a8e83e0c2e6a36235ca8ac577dc63a2fb405c"
 dependencies = [
  "egui",
  "glam 0.25.0",
@@ -2195,7 +2196,7 @@ name = "kmpeek"
 version = "0.1.0"
 dependencies = [
  "bevy",
- "bevy_egui",
+ "bevy_egui_next",
  "bevy_infinite_grid",
  "bevy_mod_outline",
  "bevy_mod_raycast",

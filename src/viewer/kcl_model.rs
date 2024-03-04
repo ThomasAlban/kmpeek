@@ -16,10 +16,7 @@ impl Plugin for KclPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<KclModelUpdated>().add_systems(
             Update,
-            (
-                spawn_model.run_if(on_event::<KclFileSelected>()),
-                update_kcl_model,
-            ),
+            (spawn_model.run_if(on_event::<KclFileSelected>()), update_kcl_model),
         );
     }
 }
@@ -147,14 +144,7 @@ pub fn spawn_model(
 }
 
 pub fn update_kcl_model(
-    mut q_kcl: Query<
-        (
-            &mut Visibility,
-            &KCLModelSection,
-            &mut Handle<StandardMaterial>,
-        ),
-        With<KCLModelSection>,
-    >,
+    mut q_kcl: Query<(&mut Visibility, &KCLModelSection, &mut Handle<StandardMaterial>), With<KCLModelSection>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     settings: Res<AppSettings>,
     mut ev_kcl_model_updated: EventReader<KclModelUpdated>,

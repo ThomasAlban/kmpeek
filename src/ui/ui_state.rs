@@ -19,13 +19,14 @@ pub struct UiStatePlugin;
 impl Plugin for UiStatePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(PkvStore::new("ThomasAlban", "kmpeek"))
-            .insert_resource(CustomiseKclOpen(false))
-            .insert_resource(CameraSettingsOpen(false))
-            .insert_resource(FileDialogRes(None))
-            .insert_resource(KmpFilePath(None))
-            .insert_resource(MouseInViewport(false))
-            .insert_resource(ViewportRect(Rect::from_corners(Vec2::ZERO, Vec2::ZERO)))
-            .insert_resource(ShowModesCollapsed(None))
+            .init_resource::<CustomiseKclOpen>()
+            .init_resource::<CameraSettingsOpen>()
+            .init_resource::<FileDialogRes>()
+            .init_resource::<KmpFilePath>()
+            .init_resource::<MouseInViewport>()
+            .init_resource::<ViewportRect>()
+            .init_resource::<ShowModesCollapsed>()
+            .init_resource::<KmpVisibility>()
             .add_event::<SaveDockTree>()
             .add_systems(Update, save_docktree.run_if(on_event::<SaveDockTree>()))
             .add_systems(Update, reset_docktree.run_if(on_event::<ResetDockTree>()))
@@ -49,20 +50,22 @@ pub fn reset_docktree(mut pkv: ResMut<PkvStore>, mut tree: ResMut<DockTree>) {
     pkv.set("tree", tree.as_ref()).unwrap();
 }
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct CustomiseKclOpen(pub bool);
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct CameraSettingsOpen(pub bool);
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct FileDialogRes(pub Option<(FileDialog, DialogType)>);
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct KmpFilePath(pub Option<PathBuf>);
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct MouseInViewport(pub bool);
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct ViewportRect(pub Rect);
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct ShowModesCollapsed(pub Option<f32>);
+#[derive(Resource, Default, Clone, PartialEq)]
+pub struct KmpVisibility(pub [bool; 10]);
 
 #[derive(Serialize, Deserialize, Resource, Deref, DerefMut)]
 pub struct Increment(pub u32);

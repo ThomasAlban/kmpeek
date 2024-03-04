@@ -3,15 +3,14 @@ pub mod gizmo;
 pub mod kcl_snap;
 pub mod select;
 
-use crate::ui::update_ui::UpdateUiSet;
+use crate::ui::{ui_state::KmpVisibility, update_ui::UpdateUiSet};
 
 use self::{
     create_delete::{create_point, delete_point},
     gizmo::TransformGizmoPlugin,
     kcl_snap::snap_to_kcl,
-    select::{deselect_if_not_visible, select, select_box, update_outlines, SelectBox},
+    select::{deselect_if_not_visible, deselect_on_mode_change, select, select_box, update_outlines, SelectBox},
 };
-use super::kmp::KmpVisibilityUpdate;
 use bevy::prelude::*;
 use bevy_mod_outline::OutlinePlugin;
 use bevy_mod_raycast::DefaultRaycastingPlugin;
@@ -26,12 +25,13 @@ impl Plugin for MousePickingPlugin {
             .add_systems(
                 Update,
                 (
+                    create_point,
                     // select stuff and outline it
                     (select, select_box),
                     update_outlines,
                     apply_deferred,
                     // create/delete/drag points around now that we know what is selected
-                    (create_point, delete_point, snap_to_kcl),
+                    (delete_point, snap_to_kcl),
                     apply_deferred,
                 )
                     .chain()
@@ -40,7 +40,10 @@ impl Plugin for MousePickingPlugin {
             )
             .add_systems(
                 Update,
-                deselect_if_not_visible.run_if(on_event::<KmpVisibilityUpdate>()),
+                (
+                    deselect_if_not_visible.run_if(resource_changed::<KmpVisibility>()),
+                    deselect_on_mode_change.after(UpdateUiSet),
+                ),
             );
     }
 }

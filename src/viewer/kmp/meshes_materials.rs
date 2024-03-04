@@ -110,19 +110,19 @@ pub fn setup_kmp_meshes_materials(
         })),
     };
 
-    let sections = &settings.kmp_model.sections;
+    let colors = &settings.kmp_model.color;
 
     let kmp_materials = KmpMaterials {
-        start_points: PointMaterials::from_colors(&mut materials, &sections.color.start_points),
-        enemy_paths: PathMaterials::from_colors(&mut materials, &sections.color.enemy_paths),
-        item_paths: PathMaterials::from_colors(&mut materials, &sections.color.item_paths),
+        start_points: PointMaterials::from_colors(&mut materials, &colors.start_points),
+        enemy_paths: PathMaterials::from_colors(&mut materials, &colors.enemy_paths),
+        item_paths: PathMaterials::from_colors(&mut materials, &colors.item_paths),
         checkpoints: (),
-        respawn_points: PointMaterials::from_colors(&mut materials, &sections.color.respawn_points),
-        objects: PointMaterials::from_colors(&mut materials, &sections.color.objects),
-        areas: PointMaterials::from_colors(&mut materials, &sections.color.areas),
-        cameras: PointMaterials::from_colors(&mut materials, &sections.color.cameras),
-        cannon_points: PointMaterials::from_colors(&mut materials, &sections.color.cannon_points),
-        battle_finish_points: PointMaterials::from_colors(&mut materials, &sections.color.battle_finish_points),
+        respawn_points: PointMaterials::from_colors(&mut materials, &colors.respawn_points),
+        objects: PointMaterials::from_colors(&mut materials, &colors.objects),
+        areas: PointMaterials::from_colors(&mut materials, &colors.areas),
+        cameras: PointMaterials::from_colors(&mut materials, &colors.cameras),
+        cannon_points: PointMaterials::from_colors(&mut materials, &colors.cannon_points),
+        battle_finish_points: PointMaterials::from_colors(&mut materials, &colors.battle_finish_points),
     };
 
     let kmp_meshes_materials = KmpMeshesMaterials {

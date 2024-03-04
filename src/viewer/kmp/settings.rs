@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 pub struct KmpModelSettings {
     pub normalize: bool,
     pub point_scale: f32,
-    pub sections: KmpModelSectionSettings,
+    pub color: KmpModelColors,
     pub outline: OutlineSettings,
 }
 impl Default for KmpModelSettings {
@@ -13,25 +13,8 @@ impl Default for KmpModelSettings {
         KmpModelSettings {
             normalize: true,
             point_scale: 1.,
-            sections: KmpModelSectionSettings::default(),
-            outline: OutlineSettings::default(),
-        }
-    }
-}
-
-// stores whether each section is visible, and the relevant colors for each section
-#[derive(Serialize, Deserialize, Reflect)]
-pub struct KmpModelSectionSettings {
-    pub visible: [bool; 10],
-    pub color: KmpModelColors,
-}
-impl Default for KmpModelSectionSettings {
-    fn default() -> Self {
-        let mut visible = [false; 10];
-        visible[0] = true;
-        Self {
-            visible,
             color: KmpModelColors::default(),
+            outline: OutlineSettings::default(),
         }
     }
 }

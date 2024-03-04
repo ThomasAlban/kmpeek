@@ -1,7 +1,7 @@
 use super::{
     meshes_materials::{KmpMeshes, PointMaterials},
     settings::OutlineSettings,
-    FromKmp, KmpSelectablePoint,
+    FromKmp, KmpError, KmpSelectablePoint,
 };
 use crate::{
     util::kmp_file::{KmpFile, KmpGetSection, KmpPositionPoint, KmpRotationPoint},
@@ -17,6 +17,7 @@ pub fn spawn_point_section<
 >(
     commands: &mut Commands,
     kmp: Arc<KmpFile>,
+    kmp_errors: &mut Vec<KmpError>,
     meshes: KmpMeshes,
     materials: PointMaterials,
     outline: OutlineSettings,
@@ -24,7 +25,7 @@ pub fn spawn_point_section<
     let node_entries = &T::get_section(kmp.as_ref()).entries;
     let mut entities = Vec::with_capacity(node_entries.len());
 
-    for node in node_entries.iter() {
+    for (i, node) in node_entries.iter().enumerate() {
         let position: Vec3 = node.get_position().into();
         let euler_rot: Vec3 = node.get_rotation().into();
         let rotation = Quat::from_euler(
@@ -33,7 +34,7 @@ pub fn spawn_point_section<
             euler_rot.y.to_radians(),
             euler_rot.z.to_radians(),
         );
-        let entity = PointSpawner::new(&meshes, &materials, &outline, U::from_kmp(node))
+        let entity = PointSpawner::new(&meshes, &materials, &outline, U::from_kmp(node, kmp_errors, i))
             .pos(position)
             .rot(rotation)
             .visible(false)
@@ -181,85 +182,6 @@ impl<'a, U: Component + Clone> PointSpawner<'a, U> {
     }
 }
 
-// pub fn spawn_point<
-//     T: KmpGetSection + KmpPositionPoint + KmpRotationPoint + Send + 'static + Clone,
-//     U: Component + FromKmp<T>,
-// >(
-//     commands: &mut Commands,
-//     meshes: &KmpMeshes,
-//     materials: &PointMaterials,
-//     position: Vec3,
-//     rotation: Quat,
-//     kmp_component: U,
-//     outline: &OutlineSettings,
-//     visible: bool,
-// ) -> Entity {
-//     let mut result = commands.spawn((
-//         PbrBundle {
-//             mesh: meshes.sphere.clone(),
-//             material: materials.point.clone(),
-//             transform: Transform::from_translation(position).with_rotation(rotation),
-//             visibility: if visible {
-//                 Visibility::Visible
-//             } else {
-//                 Visibility::Hidden
-//             },
-//             ..default()
-//         },
-//         kmp_component,
-//         KmpSelectablePoint,
-//         Normalize::new(200., 30., BVec3::TRUE),
-//         OutlineBundle {
-//             outline: OutlineVolume {
-//                 visible: false,
-//                 colour: outline.color,
-//                 width: outline.width,
-//             },
-//             ..default()
-//         },
-//     ));
-//     result.with_children(|parent| {
-//         let line_length = 750.;
-//         let mut line_transform = Transform::from_scale(vec3(1., line_length, 1.));
-//         line_transform.translation.z = line_length / 2.;
-//         line_transform.rotate_x(90_f32.to_radians());
-//         parent.spawn((
-//             PbrBundle {
-//                 mesh: meshes.cylinder.clone(),
-//                 material: materials.line.clone(),
-//                 transform: line_transform,
-//                 ..default()
-//             },
-//             NormalizeInheritParent,
-//         ));
-
-//         let mut arrow_transform = Transform::from_translation(vec3(0., 0., line_length));
-//         arrow_transform.rotate_x(90_f32.to_radians());
-//         parent.spawn((
-//             PbrBundle {
-//                 mesh: meshes.cone.clone(),
-//                 material: materials.arrow.clone(),
-//                 transform: arrow_transform,
-//                 ..default()
-//             },
-//             NormalizeInheritParent,
-//         ));
-
-//         let up_arrow_transform =
-//             Transform::from_translation(vec3(0., line_length * 0.75, 0.)).with_scale(vec3(1., 2., 1.));
-//         parent.spawn((
-//             PbrBundle {
-//                 mesh: meshes.cone.clone(),
-//                 material: materials.up_arrow.clone(),
-//                 transform: up_arrow_transform,
-//                 ..default()
-//             },
-//             NormalizeInheritParent,
-//         ));
-//     });
-//     result.id()
-// }
-
 pub fn add_respawn_point_preview(
     parent: Entity,
     commands: &mut Commands,
@@ -291,3 +213,5 @@ pub fn add_respawn_point_preview(
     }
     commands.entity(parent).push_children(&children);
 }
+
+// pub fn show_area_cub

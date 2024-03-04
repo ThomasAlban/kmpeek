@@ -1,3 +1,4 @@
+pub mod area;
 pub mod components;
 pub mod meshes_materials;
 pub mod path;
@@ -6,6 +7,7 @@ pub mod sections;
 pub mod settings;
 
 use self::{
+    area::{show_area_boxes, BoxGizmoOptions},
     components::*,
     meshes_materials::{setup_kmp_meshes_materials, KmpMeshesMaterials},
     path::{spawn_path_section, traverse_paths, update_node_links, KmpPathNodeLink, RecalculatePaths},
@@ -15,10 +17,11 @@ use self::{
 use crate::{
     ui::{
         settings::{AppSettings, SetupAppSettingsSet},
+        ui_state::KmpVisibility,
         update_ui::KmpFileSelected,
     },
     util::kmp_file::*,
-    viewer::kmp::sections::KmpModelSections,
+    viewer::kmp::sections::KmpSections,
 };
 use bevy::{prelude::*, window::RequestRedraw};
 use binrw::BinRead;
@@ -28,9 +31,9 @@ pub struct KmpPlugin;
 
 impl Plugin for KmpPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<KmpVisibilityUpdate>()
-            .add_event::<RecalculatePaths>()
+        app.add_event::<RecalculatePaths>()
             .init_resource::<KmpEditMode>()
+            .init_resource::<BoxGizmoOptions>()
             .add_systems(
                 Startup,
                 (apply_deferred, setup_kmp_meshes_materials)
@@ -42,8 +45,9 @@ impl Plugin for KmpPlugin {
                 (
                     spawn_model.run_if(on_event::<KmpFileSelected>()),
                     update_node_links,
-                    update_visible.run_if(on_event::<KmpVisibilityUpdate>()),
+                    update_visible.run_if(resource_changed::<KmpVisibility>()),
                     traverse_paths.run_if(on_event::<RecalculatePaths>()),
+                    show_area_boxes,
                 ),
             );
     }
@@ -53,7 +57,6 @@ pub fn spawn_model(
     mut ev_kmp_file_selected: EventReader<KmpFileSelected>,
     q_kmp_section: Query<Entity, With<KmpSelectablePoint>>,
     settings: Res<AppSettings>,
-    mut ev_kmp_visibility_update: EventWriter<KmpVisibilityUpdate>,
     mut ev_recalculate_paths: EventWriter<RecalculatePaths>,
     kmp_meshes_materials: Res<KmpMeshesMaterials>,
 ) {
@@ -80,16 +83,19 @@ pub fn spawn_model(
     let meshes = &kmp_meshes_materials.meshes;
     let materials = &kmp_meshes_materials.materials;
 
+    let mut kmp_errors = Vec::new();
+
     // --- TRACK INFO ---
 
     let stgi = kmp.stgi.entries.first().unwrap();
-    commands.spawn(TrackInfo::from_kmp(stgi));
+    commands.insert_resource(TrackInfo::from_kmp(stgi, &mut kmp_errors, 0));
 
     // --- START POINTS ---
 
     spawn_point_section::<Ktpt, StartPoint>(
         &mut commands,
         kmp.clone(),
+        &mut kmp_errors,
         meshes.clone(),
         materials.start_points.clone(),
         settings.kmp_model.outline.clone(),
@@ -100,6 +106,7 @@ pub fn spawn_model(
     spawn_path_section::<Enpt, EnemyPathPoint, EnemyPathMarker>(
         &mut commands,
         kmp.clone(),
+        &mut kmp_errors,
         meshes.clone(),
         materials.enemy_paths.clone(),
         settings.kmp_model.outline.clone(),
@@ -110,6 +117,7 @@ pub fn spawn_model(
     spawn_path_section::<Itpt, ItemPathPoint, ItemPathMarker>(
         &mut commands,
         kmp.clone(),
+        &mut kmp_errors,
         meshes.clone(),
         materials.item_paths.clone(),
         settings.kmp_model.outline.clone(),
@@ -122,6 +130,7 @@ pub fn spawn_model(
     spawn_point_section::<Gobj, Object>(
         &mut commands,
         kmp.clone(),
+        &mut kmp_errors,
         meshes.clone(),
         materials.objects.clone(),
         settings.kmp_model.outline.clone(),
@@ -129,18 +138,12 @@ pub fn spawn_model(
 
     // --- ROUTES ---
 
-    // spawn_route_section(
-    //     &mut commands,
-    //     kmp.clone(),
-    //     path_meshes.clone(),
-    //     PathMaterials::from_colors(&mut materials, &sections.color.routes),
-    // );
-
     // --- AREAS ---
 
     spawn_point_section::<Area, AreaPoint>(
         &mut commands,
         kmp.clone(),
+        &mut kmp_errors,
         meshes.clone(),
         materials.areas.clone(),
         settings.kmp_model.outline.clone(),
@@ -151,6 +154,7 @@ pub fn spawn_model(
     spawn_point_section::<Came, KmpCamera>(
         &mut commands,
         kmp.clone(),
+        &mut kmp_errors,
         meshes.clone(),
         materials.cameras.clone(),
         settings.kmp_model.outline.clone(),
@@ -161,6 +165,7 @@ pub fn spawn_model(
     let respawn_points = spawn_point_section::<Jgpt, RespawnPoint>(
         &mut commands,
         kmp.clone(),
+        &mut kmp_errors,
         meshes.clone(),
         materials.respawn_points.clone(),
         settings.kmp_model.outline.clone(),
@@ -169,29 +174,17 @@ pub fn spawn_model(
         .iter()
         .for_each(|e| add_respawn_point_preview(*e, &mut commands, meshes, &materials.respawn_points));
 
-    // spawn_respawn_point_section(
-    //     &mut commands,
-    //     kmp.clone(),
-    //     meshes.clone(),
-    //     materials.respawn_points.clone(),
-    //     settings.kmp_model.outline.clone(),
-    // );
-
     // --- CANNON POINTS ---
 
     // --- FINISH POINTS ---
 
     // ---
 
-    ev_kmp_visibility_update.send_default();
     ev_recalculate_paths.send_default();
 }
 
-#[derive(Event, Default)]
-pub struct KmpVisibilityUpdate;
-
 fn update_visible(
-    settings: Res<AppSettings>,
+    kmp_visibility: Res<KmpVisibility>,
     mut ev_request_redraw: EventWriter<RequestRedraw>,
     mut q: ParamSet<(
         ParamSet<(
@@ -210,7 +203,7 @@ fn update_visible(
         )>,
     )>,
 ) {
-    let sections = &settings.kmp_model.sections;
+    let visibilities = kmp_visibility.0;
 
     let set_visibility = |visibility: &mut Visibility, visible: bool| {
         *visibility = if visible {
@@ -223,34 +216,28 @@ fn update_visible(
     macro_rules! set_visibility {
         ($query:expr, $i:expr) => {
             for mut visibility in $query.iter_mut() {
-                set_visibility(&mut visibility, sections.visible[$i]);
+                set_visibility(&mut visibility, visibilities[$i]);
             }
         };
     }
 
-    set_visibility!(q.p0().p0(), usize::from(KmpModelSections::StartPoints));
-    set_visibility!(q.p0().p1(), usize::from(KmpModelSections::EnemyPaths));
-    set_visibility!(q.p0().p2(), usize::from(KmpModelSections::ItemPaths));
-    set_visibility!(q.p0().p3(), usize::from(KmpModelSections::Objects));
-    set_visibility!(q.p0().p4(), usize::from(KmpModelSections::Areas));
-    set_visibility!(q.p1().p0(), usize::from(KmpModelSections::Cameras));
-    set_visibility!(q.p1().p1(), usize::from(KmpModelSections::RespawnPoints));
-    set_visibility!(q.p1().p2(), usize::from(KmpModelSections::CannonPoints));
-    set_visibility!(q.p1().p3(), usize::from(KmpModelSections::BattleFinishPoints));
+    set_visibility!(q.p0().p0(), usize::from(KmpSections::StartPoints));
+    set_visibility!(q.p0().p1(), usize::from(KmpSections::EnemyPaths));
+    set_visibility!(q.p0().p2(), usize::from(KmpSections::ItemPaths));
+    set_visibility!(q.p0().p3(), usize::from(KmpSections::Objects));
+    set_visibility!(q.p0().p4(), usize::from(KmpSections::Areas));
+    set_visibility!(q.p1().p0(), usize::from(KmpSections::Cameras));
+    set_visibility!(q.p1().p1(), usize::from(KmpSections::RespawnPoints));
+    set_visibility!(q.p1().p2(), usize::from(KmpSections::CannonPoints));
+    set_visibility!(q.p1().p3(), usize::from(KmpSections::BattleFinishPoints));
 
     for (mut visibility, enemy_route, item_route) in q.p1().p4().iter_mut() {
         if enemy_route.is_some() {
             // if it is an enemy path node link
-            set_visibility(
-                &mut visibility,
-                sections.visible[usize::from(KmpModelSections::EnemyPaths)],
-            );
+            set_visibility(&mut visibility, visibilities[usize::from(KmpSections::EnemyPaths)]);
         } else if item_route.is_some() {
             // if it is an item path node link
-            set_visibility(
-                &mut visibility,
-                sections.visible[usize::from(KmpModelSections::ItemPaths)],
-            );
+            set_visibility(&mut visibility, visibilities[usize::from(KmpSections::ItemPaths)]);
         }
     }
     ev_request_redraw.send(RequestRedraw);

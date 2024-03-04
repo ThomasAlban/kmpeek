@@ -1,9 +1,9 @@
 use self::{
-    keybinds::KeybindsPlugin, settings::AppSettingsPlugin, tabs::DockTreePlugin,
-    ui_state::UiStatePlugin, update_ui::UpdateUIPlugin, viewport::ViewportPlugin,
+    keybinds::KeybindsPlugin, settings::AppSettingsPlugin, tabs::DockTreePlugin, ui_state::UiStatePlugin,
+    update_ui::UpdateUIPlugin, viewport::ViewportPlugin,
 };
 use bevy::app::Plugin;
-use bevy_egui::EguiPlugin;
+use bevy_egui_next::EguiPlugin;
 
 mod file_dialog;
 mod keybinds;

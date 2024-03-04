@@ -3,8 +3,6 @@ name = "kmpeek"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 bevy = { version = "0.12.1", default-features = false, features = [
     "bevy_render",
@@ -16,29 +14,26 @@ bevy = { version = "0.12.1", default-features = false, features = [
     "ktx2",
     "zstd",
     "serialize",
+    "bevy_gizmos",
 ] }
 
-# pending egui update
-bevy_egui = { git = "https://github.com/ThomasAlban/bevy_egui" }
-
-# using my own fork because there's an issue in the main branch where it interferes with parent child visibility
-bevy_infinite_grid = { git = "https://github.com/ThomasAlban/bevy_infinite_grid" }
-
+bevy_egui_next = "0.26"
 bevy_mod_outline = "0.6.0"
 bevy_mod_raycast = "0.16.0"
 bevy_pkv = "0.9.0"
-binrw = "0.13.3"
-bytemuck = "1.13.1"
-byteorder = "1.4.3"
-egui-gizmo = { git = "https://github.com/ThomasAlban/egui-gizmo" }
+# using my own fork because there's an issue in the main branch where it interferes with parent child visibility
+bevy_infinite_grid = { git = "https://github.com/ThomasAlban/bevy_infinite_grid" }
 
+egui-gizmo = { git = "https://github.com/urholaukkarinen/egui-gizmo" }
 egui_dock = { version = "0.11", features = ["serde"] }
-
-
 egui_extras = { version = "0.26.1", default-features = false, features = [
     "all_loaders",
 ] }
 egui_file = "0.15.0"
+
+binrw = "0.13.3"
+bytemuck = "1.13.1"
+byteorder = "1.4.3"
 image = { version = "0.24.8", default-features = false, features = ["png"] }
 num-traits = "0.2.15"
 serde = { version = "1.0.163", features = ["derive"] }
@@ -59,6 +54,7 @@ opt-level = 3
 opt-level = 3
 lto = true
 strip = true
+# for some reason setting codegen-units = 1 for release builds results in a seg fault (at least on macos), no idea why
 # codegen-units = 1
 
 [lints.clippy]

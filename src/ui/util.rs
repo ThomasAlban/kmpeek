@@ -3,20 +3,43 @@ use bevy::{
     math::{vec3, EulerRot, Quat, Vec3},
     transform::components::Transform,
 };
-use bevy_egui::egui::{
+use bevy_egui_next::egui::{
     self, include_image, Align, Align2, Area, CollapsingResponse, Color32, Context, Image, ImageButton, ImageSource,
     Order, Response, Sense, Ui, Vec2, WidgetText,
 };
 use std::{fmt::Display, hash::Hash};
 
+pub enum DragSpeed {
+    Slow,
+    Medium,
+    Fast,
+}
+impl From<DragSpeed> for f64 {
+    fn from(value: DragSpeed) -> Self {
+        match value {
+            DragSpeed::Slow => 0.05,
+            DragSpeed::Medium => 1.,
+            DragSpeed::Fast => 5.,
+        }
+    }
+}
+
 pub mod multi_edit {
-    use super::{euler_to_quat, quat_to_euler};
+    use super::{euler_to_quat, quat_to_euler, DragSpeed};
     use bevy::{math::Vec3, transform::components::Transform};
-    use bevy_egui::egui::{self, emath::Numeric, Checkbox, DragValue, Response, Ui, WidgetText};
+    use bevy_egui_next::egui::{self, emath::Numeric, Checkbox, DragValue, Response, Ui, WidgetText};
     use std::{
         fmt::Display,
-        ops::{AddAssign, Sub},
+        ops::{AddAssign, Sub, SubAssign},
     };
+
+    /// Maps an iterator to a child of each element of that iterator
+    macro_rules! map {
+        ($iter:ident, $($fields:ident).*) => {
+            $iter.iter_mut().map(|x| &mut x$(.$fields)*)
+        };
+    }
+    pub(crate) use map;
 
     pub fn rotation_multi_edit<'a>(
         ui: &mut Ui,
@@ -36,7 +59,11 @@ pub mod multi_edit {
         changed
     }
 
-    pub fn drag_value_multi_edit<'a, T: 'a + Clone + PartialEq + Numeric + Sub<Output = T> + AddAssign<T>>(
+    pub fn drag_value_multi_edit<
+        'a,
+        T: 'a + Clone + PartialEq + Numeric + Sub<Output = T> + AddAssign<T> + SubAssign<T>,
+    >(
+        speed: DragSpeed,
         ui: &mut Ui,
         items: impl IntoIterator<Item = &'a mut T>,
     ) -> Response {
@@ -47,10 +74,14 @@ pub mod multi_edit {
         // if they are all the same
         let res = if items.iter().all(|x| **x == edit) {
             // show normal drag value
-            ui.add(DragValue::new(&mut edit))
+            ui.add(DragValue::new(&mut edit).speed(speed))
         } else {
             // show blank drag value
-            ui.add(DragValue::new(&mut edit).custom_formatter(|_, _| "".into()))
+            ui.add(
+                DragValue::new(&mut edit)
+                    .speed(speed)
+                    .custom_formatter(|_, _| "".into()),
+            )
         };
 
         if res.changed() && !res.dragged() {
@@ -58,10 +89,25 @@ pub mod multi_edit {
             items.iter_mut().for_each(|x| **x = edit);
             return res;
         }
-        let delta = edit - before;
 
+        // we cannot simply calculate the delta and add it to the value, because that might be out of bounds of the type T (for example if it is a usize)
+        let positive_delta = if edit > before { edit - before } else { before - edit };
         for item in items.iter_mut() {
-            **item += delta;
+            // work out the f64 result which may be negative
+            let f64_result = if edit > before {
+                item.to_f64() + positive_delta.to_f64()
+            } else {
+                item.to_f64() - positive_delta.to_f64()
+            };
+            // if the f64 result is out of bounds of the value, then we continue, as attempting to apply this delta would crash the program
+            if f64_result < T::MIN.to_f64() || f64_result > T::MAX.to_f64() {
+                continue;
+            }
+            if edit > before {
+                **item += positive_delta
+            } else {
+                **item -= positive_delta
+            };
         }
         res
     }
@@ -137,7 +183,7 @@ pub mod multi_edit {
         res
     }
 
-    pub fn checkbox_multi_edit<'a>(ui: &mut Ui, items: impl IntoIterator<Item = &'a mut bool>) {
+    pub fn checkbox_multi_edit<'a>(ui: &mut Ui, items: impl IntoIterator<Item = &'a mut bool>) -> Response {
         let mut items: Vec<_> = items.into_iter().collect();
         let mut edit = *items[0];
 
@@ -155,6 +201,7 @@ pub mod multi_edit {
         if res.changed() {
             items.iter_mut().for_each(|x| **x = edit);
         }
+        res
     }
 }
 
@@ -357,7 +404,7 @@ pub fn view_icon_btn(ui: &mut Ui, checked: &mut bool) -> Response {
 pub struct Icons;
 
 impl Icons {
-    pub const SECTION_COLORS: [Color32; 10] = [
+    pub const SECTION_COLORS: [Color32; 11] = [
         Color32::from_rgb(80, 80, 255),  // Start Points
         Color32::RED,                    // Enemy Paths
         Color32::GREEN,                  // Item Paths
@@ -366,8 +413,9 @@ impl Icons {
         Color32::from_rgb(255, 0, 255),  // Objects
         Color32::from_rgb(255, 160, 0),  // Areas
         Color32::from_rgb(160, 0, 255),  // Cameras
-        Color32::from_rgb(255, 50, 0),   // Cannon Points (todo)
-        Color32::from_rgb(50, 170, 170), // Battle Finish Points (todo)
+        Color32::from_rgb(255, 50, 0),   // Cannon Points
+        Color32::from_rgb(50, 170, 170), // Battle Finish Points
+        Color32::WHITE,                  // Track Info
     ];
 
     pub fn view_on<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
@@ -387,6 +435,9 @@ impl Icons {
     }
     pub fn cube<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
         svg_image(include_image!("../../assets/icons/cube.svg"), ctx, size.into())
+    }
+    pub fn track_info<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
+        svg_image(include_image!("../../assets/icons/track_info.svg"), ctx, size.into())
     }
 
     pub fn origin_mean<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {

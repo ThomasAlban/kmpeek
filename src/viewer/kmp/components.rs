@@ -1,8 +1,15 @@
-use crate::util::kmp_file::{Area, Came, Enpt, Gobj, Itpt, Ktpt, Poti, PotiPoint, Stgi};
-use bevy::prelude::*;
-use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
+use std::collections::HashSet;
 
-use super::{meshes_materials::KmpMeshesMaterials, point::PointSpawner, settings::OutlineSettings, Cnpt, Jgpt, Mspt};
+use super::{
+    meshes_materials::KmpMeshesMaterials,
+    path::{KmpPathNode, PathPointSpawner},
+    point::{add_respawn_point_preview, PointSpawner},
+    settings::OutlineSettings,
+    Cnpt, Jgpt, Mspt,
+};
+use crate::util::kmp_file::{Area, Came, Enpt, Gobj, Itpt, Ktpt, Poti, PotiPoint, Stgi};
+use bevy::{math::vec3, prelude::*};
+use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 
 #[derive(Component, Default)]
 pub struct KmpSelectablePoint;
@@ -16,7 +23,7 @@ pub struct PathStart;
 pub struct PathOverallStart;
 
 // --- TRACK INFO COMPONENTS ---
-#[derive(Component, Default)]
+#[derive(Resource, Default)]
 pub struct TrackInfo {
     pub track_type: TrackType,
     pub lap_count: u8,
@@ -53,12 +60,13 @@ impl Default for StartPoint {
 // --- ENEMY PATH COMPONENTS ---
 #[derive(Component, Default)]
 pub struct EnemyPathMarker;
-#[derive(Component, Clone, Copy, PartialEq)]
+#[derive(Component, Clone, Copy, PartialEq, Default)]
 pub struct EnemyPathPoint {
     pub leniency: f32,
     pub setting_1: EnemyPathSetting1,
     pub setting_2: EnemyPathSetting2,
     pub setting_3: u8,
+    pub path_start_override: bool,
 }
 #[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy)]
 pub enum EnemyPathSetting1 {
@@ -87,12 +95,13 @@ pub enum EnemyPathSetting2 {
 // --- ITEM PATH COMPONENTS ---
 #[derive(Component, Default)]
 pub struct ItemPathMarker;
-#[derive(Component, PartialEq, Clone)]
+#[derive(Component, PartialEq, Clone, Default)]
 pub struct ItemPathPoint {
     pub bullet_control: f32,
     pub bullet_height: ItemPathBulletHeight,
     pub bullet_cant_drop: bool,
     pub low_shell_priority: bool,
+    pub path_start_override: bool,
 }
 
 #[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy)]
@@ -108,13 +117,13 @@ pub enum ItemPathBulletHeight {
 }
 
 // --- OBJECT COMPONENTS ---
-#[derive(Component, Default, Clone)]
+#[derive(Component, Default, Clone, PartialEq)]
 pub struct Object {
     pub object_id: u16,
     pub scale: Vec3,
     pub route: u16,
     pub settings: [u16; 8],
-    pub presence_flags: u16,
+    pub presence: u16,
 }
 
 // --- ROUTE COMPONENTS ---
@@ -133,20 +142,32 @@ pub struct RoutePoint {
 }
 
 // --- AREA COMPONENTS ---
-#[derive(Component, Default, Clone)]
+#[derive(Component, Clone, PartialEq)]
 pub struct AreaPoint {
     pub shape: AreaShape,
     pub kind: AreaKind,
     pub priority: u8,
     pub scale: Vec3,
+    pub show_area: bool,
 }
-#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, Clone)]
+impl Default for AreaPoint {
+    fn default() -> Self {
+        Self {
+            shape: AreaShape::default(),
+            kind: AreaKind::default(),
+            priority: 0,
+            scale: vec3(10000., 10000., 10000.),
+            show_area: false,
+        }
+    }
+}
+#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, Clone, PartialEq)]
 pub enum AreaShape {
     #[default]
     Box,
     Cylinder,
 }
-#[derive(Display, EnumString, IntoStaticStr, EnumIter, Clone)]
+#[derive(Display, EnumString, IntoStaticStr, EnumIter, Clone, PartialEq)]
 pub enum AreaKind {
     Camera(AreaCameraIndex),
     #[strum(serialize = "Env Effect")]
@@ -154,7 +175,7 @@ pub enum AreaKind {
     #[strum(serialize = "Fog Effect")]
     FogEffect(AreaBfgEntry, AreaSetting2),
     #[strum(serialize = "Moving Road")]
-    MovingRoad(AreaEnemyPointId),
+    MovingRoad(AreaRouteId),
     #[strum(serialize = "Force Recalc")]
     ForceRecalc,
     #[strum(serialize = "Minimap Control")]
@@ -175,33 +196,31 @@ impl Default for AreaKind {
         Self::Camera(AreaCameraIndex(0))
     }
 }
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq)]
 pub struct AreaCameraIndex(pub u8);
-#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, Clone)]
+#[derive(Default, Clone, PartialEq, Display, EnumString, IntoStaticStr, EnumIter)]
 pub enum AreaEnvEffectObject {
     #[default]
     EnvKareha,
     EnvKarehaUp,
 }
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq)]
 pub struct AreaBfgEntry(pub u16);
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq)]
 pub struct AreaSetting1(pub u16);
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq)]
 pub struct AreaSetting2(pub u16);
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq)]
 pub struct AreaRouteId(pub u8);
-#[derive(Default, Clone)]
-pub struct AreaEnemyPointId(pub u8);
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq)]
 pub struct AreaBblmFile(pub u16);
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq)]
 pub struct AreaFadeTime(pub u16);
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq)]
 pub struct AreaGroupId(pub u16);
 
 // --- CAMERA COMPONENTS ---
-#[derive(Component, Default, Clone)]
+#[derive(Component, Default, Clone, PartialEq)]
 pub struct KmpCamera {
     pub kind: KmpCameraKind,
     pub next_index: u8,
@@ -218,7 +237,7 @@ pub struct KmpCamera {
     pub view_end: Vec3,
     pub time: f32,
 }
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq, Display, EnumString, IntoStaticStr, EnumIter)]
 pub enum KmpCameraKind {
     #[default]
     Goal,
@@ -235,23 +254,54 @@ pub enum KmpCameraKind {
     Unknown,
 }
 
-#[derive(Component, Default, Clone)]
-pub struct RespawnPoint;
-#[derive(Component, Default, Clone)]
-pub struct CannonPoint;
-#[derive(Component, Default, Clone)]
-pub struct BattleFinishPoint;
+// --- RESPAWN POINT COMPONENTS ---
+#[derive(Component, Default, Clone, PartialEq)]
+pub struct RespawnPoint {
+    pub id: u16,
+    pub sound_trigger: i8,
+}
+
+// --- CANNON POINT COMPONENTS
+#[derive(Component, Default, Clone, PartialEq)]
+pub struct CannonPoint {
+    pub id: u16,
+    pub shoot_effect: CannonShootEffect,
+}
+#[derive(Default, Display, EnumIter, EnumString, IntoStaticStr, PartialEq, Clone)]
+pub enum CannonShootEffect {
+    #[default]
+    Straight,
+    Curved,
+    #[strum(serialize = "Curved & Slow")]
+    CurvedSlow,
+}
+
+#[derive(Component, Default, Clone, PartialEq)]
+pub struct BattleFinishPoint {
+    pub id: u16,
+}
 
 //
 // --- CONVERT COMPONENTS FROM KMP STORAGE FORMAT ---
 //
 
+pub struct KmpError {
+    message: String,
+}
+impl KmpError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
 pub trait FromKmp<T> {
-    fn from_kmp(data: &T) -> Self;
+    fn from_kmp(data: &T, errors: &mut Vec<KmpError>, index: usize) -> Self;
 }
 
 impl FromKmp<Stgi> for TrackInfo {
-    fn from_kmp(data: &Stgi) -> Self {
+    fn from_kmp(data: &Stgi, errors: &mut Vec<KmpError>, _: usize) -> Self {
         Self {
             track_type: TrackType::Race,
             lap_count: data.lap_count,
@@ -262,7 +312,7 @@ impl FromKmp<Stgi> for TrackInfo {
                 0 => FirstPlayerPos::Left,
                 1 => FirstPlayerPos::Right,
                 _ => {
-                    warn!("Invalid STGI First Player Pos found");
+                    errors.push(KmpError::new("Invalid STGI First Player Pos found"));
                     FirstPlayerPos::default()
                 }
             },
@@ -271,14 +321,14 @@ impl FromKmp<Stgi> for TrackInfo {
     }
 }
 impl FromKmp<Ktpt> for StartPoint {
-    fn from_kmp(data: &Ktpt) -> Self {
+    fn from_kmp(data: &Ktpt, _: &mut Vec<KmpError>, _: usize) -> Self {
         Self {
             player_index: data.player_index,
         }
     }
 }
 impl FromKmp<Enpt> for EnemyPathPoint {
-    fn from_kmp(data: &Enpt) -> Self {
+    fn from_kmp(data: &Enpt, errors: &mut Vec<KmpError>, _: usize) -> Self {
         Self {
             leniency: data.leniency,
             setting_1: match data.setting_1 {
@@ -288,7 +338,7 @@ impl FromKmp<Enpt> for EnemyPathPoint {
                 3 => EnemyPathSetting1::Wheelie,
                 4 => EnemyPathSetting1::EndWheelie,
                 _ => {
-                    warn!("Invalid ENPT setting 1 found");
+                    errors.push(KmpError::new("Invalid ENPT setting 1 found"));
                     EnemyPathSetting1::default()
                 }
             },
@@ -298,16 +348,17 @@ impl FromKmp<Enpt> for EnemyPathPoint {
                 2 => EnemyPathSetting2::ForbidDrift,
                 3 => EnemyPathSetting2::ForceDrift,
                 _ => {
-                    warn!("Invalid ENPT setting 2 found");
+                    errors.push(KmpError::new("Invalid ENPT setting 2 found"));
                     EnemyPathSetting2::default()
                 }
             },
             setting_3: data.setting_3,
+            path_start_override: false,
         }
     }
 }
 impl FromKmp<Itpt> for ItemPathPoint {
-    fn from_kmp(data: &Itpt) -> Self {
+    fn from_kmp(data: &Itpt, errors: &mut Vec<KmpError>, _: usize) -> Self {
         Self {
             bullet_control: data.bullet_control,
             bullet_height: match data.setting_1 {
@@ -316,7 +367,7 @@ impl FromKmp<Itpt> for ItemPathPoint {
                 2 => ItemPathBulletHeight::FollowPointHeight,
                 3 => ItemPathBulletHeight::MushroomPads,
                 _ => {
-                    warn!("Invalid ITPT setting 1 found");
+                    errors.push(KmpError::new("Invalid ITPT setting 1 found"));
                     ItemPathBulletHeight::default()
                 }
             },
@@ -325,22 +376,23 @@ impl FromKmp<Itpt> for ItemPathPoint {
                 || data.setting_2 == 3
                 || data.setting_2 == 6
                 || data.setting_2 == 7,
+            path_start_override: false,
         }
     }
 }
 impl FromKmp<Gobj> for Object {
-    fn from_kmp(data: &Gobj) -> Self {
+    fn from_kmp(data: &Gobj, _: &mut Vec<KmpError>, _: usize) -> Self {
         Self {
             object_id: data.object_id,
             scale: data.scale.into(),
             route: data.route,
             settings: data.settings,
-            presence_flags: data.presence_flags,
+            presence: data.presence_flags,
         }
     }
 }
 impl FromKmp<Poti> for Route {
-    fn from_kmp(data: &Poti) -> Self {
+    fn from_kmp(data: &Poti, _: &mut Vec<KmpError>, _: usize) -> Self {
         Self {
             setting_1: data.setting_1,
             setting_2: data.setting_2,
@@ -348,7 +400,7 @@ impl FromKmp<Poti> for Route {
     }
 }
 impl FromKmp<PotiPoint> for RoutePoint {
-    fn from_kmp(data: &PotiPoint) -> Self {
+    fn from_kmp(data: &PotiPoint, _: &mut Vec<KmpError>, _: usize) -> Self {
         Self {
             setting_1: data.setting_1,
             setting_2: data.setting_2,
@@ -356,30 +408,30 @@ impl FromKmp<PotiPoint> for RoutePoint {
     }
 }
 impl FromKmp<Area> for AreaPoint {
-    fn from_kmp(data: &Area) -> Self {
+    fn from_kmp(data: &Area, errors: &mut Vec<KmpError>, _: usize) -> Self {
         Self {
             shape: match data.shape {
                 0 => AreaShape::Box,
                 1 => AreaShape::Cylinder,
                 _ => {
-                    warn!("Invalid AREA shape found");
+                    errors.push(KmpError::new("Invalid AREA shape found"));
                     AreaShape::Box
                 }
             },
             priority: data.priority,
-            scale: data.scale.into(),
+            scale: Vec3::from(data.scale) * vec3(5000., 10000., 5000.),
             kind: match data.kind {
                 0 => AreaKind::Camera(AreaCameraIndex(data.came_index)),
                 1 => AreaKind::EnvEffect(match data.setting_1 {
                     0 => AreaEnvEffectObject::EnvKareha,
                     1 => AreaEnvEffectObject::EnvKarehaUp,
                     _ => {
-                        warn!("Invalid AREA env effect object found");
+                        errors.push(KmpError::new("Invalid AREA env effect object found"));
                         AreaEnvEffectObject::EnvKareha
                     }
                 }),
                 2 => AreaKind::FogEffect(AreaBfgEntry(data.setting_1), AreaSetting2(data.setting_2)),
-                3 => AreaKind::MovingRoad(AreaEnemyPointId(data.enpt_id)),
+                3 => AreaKind::MovingRoad(AreaRouteId(data.enpt_id)),
                 4 => AreaKind::ForceRecalc,
                 5 => AreaKind::MinimapControl(AreaSetting1(data.setting_1), AreaSetting2(data.setting_2)),
                 6 => AreaKind::BloomEffect(AreaBblmFile(data.setting_1), AreaFadeTime(data.setting_2)),
@@ -388,15 +440,16 @@ impl FromKmp<Area> for AreaPoint {
                 9 => AreaKind::ObjectUnload(AreaGroupId(data.setting_1)),
                 10 => AreaKind::FallBoundary,
                 _ => {
-                    warn!("Invalid AREA type found, which has been set to Camera");
+                    errors.push(KmpError::new("Invalid AREA type found"));
                     AreaKind::default()
                 }
             },
+            show_area: false,
         }
     }
 }
 impl FromKmp<Came> for KmpCamera {
-    fn from_kmp(data: &Came) -> Self {
+    fn from_kmp(data: &Came, errors: &mut Vec<KmpError>, _: usize) -> Self {
         Self {
             kind: match data.kind {
                 0 => KmpCameraKind::Goal,
@@ -410,7 +463,7 @@ impl FromKmp<Came> for KmpCamera {
                 8 => KmpCameraKind::MissionSuccess,
                 9 => KmpCameraKind::Unknown,
                 _ => {
-                    warn!("Invalid CAME type found, which has been set to Goal");
+                    errors.push(KmpError::new("Invalid CAME type found"));
                     KmpCameraKind::Goal
                 }
             },
@@ -431,18 +484,36 @@ impl FromKmp<Came> for KmpCamera {
     }
 }
 impl FromKmp<Jgpt> for RespawnPoint {
-    fn from_kmp(_data: &Jgpt) -> Self {
-        Self
+    fn from_kmp(data: &Jgpt, _: &mut Vec<KmpError>, index: usize) -> Self {
+        Self {
+            id: index as u16,
+            sound_trigger: if data.extra_data >= 0 {
+                ((data.extra_data / 100) - 1) as i8
+            } else {
+                -1
+            },
+        }
     }
 }
 impl FromKmp<Cnpt> for CannonPoint {
-    fn from_kmp(_data: &Cnpt) -> Self {
-        Self
+    fn from_kmp(data: &Cnpt, errors: &mut Vec<KmpError>, index: usize) -> Self {
+        Self {
+            id: index as u16,
+            shoot_effect: match data.shoot_effect {
+                0 => CannonShootEffect::Straight,
+                1 => CannonShootEffect::Curved,
+                2 => CannonShootEffect::CurvedSlow,
+                _ => {
+                    errors.push(KmpError::new("Invalid CNPT type found"));
+                    CannonShootEffect::Straight
+                }
+            },
+        }
     }
 }
 impl FromKmp<Mspt> for BattleFinishPoint {
-    fn from_kmp(_data: &Mspt) -> Self {
-        Self
+    fn from_kmp(_: &Mspt, _: &mut Vec<KmpError>, index: usize) -> Self {
+        Self { id: index as u16 }
     }
 }
 
@@ -453,7 +524,6 @@ impl FromKmp<Mspt> for BattleFinishPoint {
 pub trait Spawnable {
     fn spawn(commands: &mut Commands, meshes_materials: &KmpMeshesMaterials, pos: Vec3) -> Entity;
 }
-
 macro_rules! impl_spawnable_point {
     ($ty:ty, $s:ident) => {
         impl Spawnable for $ty {
@@ -474,5 +544,100 @@ impl_spawnable_point!(StartPoint, start_points);
 impl_spawnable_point!(Object, objects);
 impl_spawnable_point!(AreaPoint, areas);
 impl_spawnable_point!(KmpCamera, cameras);
-impl_spawnable_point!(CannonPoint, cannon_points);
-impl_spawnable_point!(BattleFinishPoint, battle_finish_points);
+impl RespawnPoint {
+    pub fn spawn(commands: &mut Commands, meshes_materials: &KmpMeshesMaterials, pos: Vec3, id: usize) -> Entity {
+        let entity = PointSpawner::new(
+            &meshes_materials.meshes,
+            &meshes_materials.materials.respawn_points,
+            &OutlineSettings::default(),
+            Self {
+                id: id as u16,
+                ..default()
+            },
+        )
+        .pos(pos)
+        .spawn_command(commands);
+        add_respawn_point_preview(
+            entity,
+            commands,
+            &meshes_materials.meshes,
+            &meshes_materials.materials.respawn_points,
+        );
+        entity
+    }
+}
+impl CannonPoint {
+    pub fn spawn(commands: &mut Commands, meshes_materials: &KmpMeshesMaterials, pos: Vec3, id: usize) -> Entity {
+        PointSpawner::new(
+            &meshes_materials.meshes,
+            &meshes_materials.materials.cannon_points,
+            &OutlineSettings::default(),
+            Self {
+                id: id as u16,
+                ..default()
+            },
+        )
+        .pos(pos)
+        .spawn_command(commands)
+    }
+}
+impl BattleFinishPoint {
+    pub fn spawn(commands: &mut Commands, meshes_materials: &KmpMeshesMaterials, pos: Vec3, id: usize) -> Entity {
+        PointSpawner::new(
+            &meshes_materials.meshes,
+            &meshes_materials.materials.battle_finish_points,
+            &OutlineSettings::default(),
+            Self { id: id as u16 },
+        )
+        .pos(pos)
+        .spawn_command(commands)
+    }
+}
+
+impl ItemPathPoint {
+    pub fn spawn(
+        commands: &mut Commands,
+        meshes_materials: &KmpMeshesMaterials,
+        pos: Vec3,
+        prev_nodes: HashSet<Entity>,
+    ) -> Entity {
+        let entity = PathPointSpawner::<_, ItemPathMarker>::new(
+            &meshes_materials.meshes,
+            &meshes_materials.materials.item_paths,
+            &OutlineSettings::default(),
+            Self::default(),
+        )
+        .pos(pos)
+        .spawn_command(commands);
+        commands.add(move |world: &mut World| {
+            for prev_entity in prev_nodes.iter() {
+                KmpPathNode::link_nodes_world_access(*prev_entity, entity, world).unwrap();
+            }
+        });
+        entity
+    }
+}
+
+impl EnemyPathPoint {
+    pub fn spawn(
+        commands: &mut Commands,
+        meshes_materials: &KmpMeshesMaterials,
+        pos: Vec3,
+        prev_nodes: HashSet<Entity>,
+    ) -> Entity {
+        let entity = PathPointSpawner::<_, EnemyPathMarker>::new(
+            &meshes_materials.meshes,
+            &meshes_materials.materials.enemy_paths,
+            &OutlineSettings::default(),
+            Self::default(),
+        )
+        .pos(pos)
+        .spawn_command(commands);
+        commands.add(move |world: &mut World| {
+            for prev_entity in prev_nodes.iter() {
+                KmpPathNode::link_nodes_world_access(*prev_entity, entity, world).unwrap();
+            }
+        });
+        entity
+    }
+}
