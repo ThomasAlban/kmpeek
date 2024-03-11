@@ -11,8 +11,7 @@ use bevy::{
     math::{vec3, DVec3},
     prelude::*,
 };
-use bevy_egui_next::egui::{Color32, Ui};
-use bevy_mod_raycast::primitives::Ray3d;
+use bevy_egui::egui::{Color32, Ui};
 
 // convert a transform and scale to an area box transform
 pub fn get_area_transform(transform: &Transform, scale: Vec3) -> Transform {
@@ -56,7 +55,7 @@ pub struct ShowBoxHandles<'w, 's> {
     viewport_rect: Res<'w, ViewportRect>,
     q_window: Query<'w, 's, &'static Window>,
     box_gizmo_options: ResMut<'w, BoxGizmoOptions>,
-    mouse_buttons: Res<'w, Input<MouseButton>>,
+    mouse_buttons: Res<'w, ButtonInput<MouseButton>>,
     gizmo_options: Res<'w, GizmoOptions>,
 
     current_interaction: Local<'s, Option<(Entity, usize, Vec2)>>,
@@ -107,11 +106,11 @@ impl UiSubSection for ShowBoxHandles<'_, '_> {
                 let pos = transform.translation;
 
                 let normal = match i {
-                    0 => area_box.left(),
-                    1 => area_box.right(),
-                    2 => area_box.up(),
-                    3 => area_box.forward(),
-                    4 => area_box.back(),
+                    0 => *area_box.left(),
+                    1 => *area_box.right(),
+                    2 => *area_box.up(),
+                    3 => *area_box.forward(),
+                    4 => *area_box.back(),
                     _ => unreachable!(),
                 };
 
@@ -164,7 +163,7 @@ impl UiSubSection for ShowBoxHandles<'_, '_> {
                             // find the closest points on both the rays to each otther
                             let (_ray_t, normal_t) = ray_to_ray(mouse_ray, normal_ray);
                             // the new pos is the position along the normal ray that is the closest to the mouse ray
-                            let new_pos = normal_ray.position(normal_t as f32);
+                            let new_pos = normal_ray.get_point(normal_t as f32);
 
                             let delta = new_pos - pos;
 
@@ -182,7 +181,7 @@ impl UiSubSection for ShowBoxHandles<'_, '_> {
 
                             area.scale = vec3(
                                 dist_with_dir(new_handles_pos[0], new_handles_pos[1], handles_normal[1]),
-                                dist_with_dir(new_handles_pos[2], transform.translation, transform.down()),
+                                dist_with_dir(new_handles_pos[2], transform.translation, *transform.down()),
                                 dist_with_dir(new_handles_pos[3], new_handles_pos[4], handles_normal[4]),
                             );
 
@@ -213,10 +212,10 @@ impl UiSubSection for ShowBoxHandles<'_, '_> {
 /// This can be used to determine the shortest distance between those two rays.
 /// Taken from egui-gizmo
 pub fn ray_to_ray(a_ray: Ray3d, b_ray: Ray3d) -> (f64, f64) {
-    let a1: DVec3 = a_ray.origin().into();
-    let adir: DVec3 = a_ray.direction().into();
-    let b1: DVec3 = b_ray.origin().into();
-    let bdir: DVec3 = b_ray.direction().into();
+    let a1: DVec3 = a_ray.origin.into();
+    let adir: DVec3 = a_ray.direction.as_dvec3();
+    let b1: DVec3 = b_ray.origin.into();
+    let bdir: DVec3 = b_ray.direction.as_dvec3();
 
     let b = adir.dot(bdir);
     let w = a1 - b1;

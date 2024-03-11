@@ -4,7 +4,7 @@ use crate::{
 };
 use bevy::{
     prelude::*,
-    render::{mesh::PrimitiveTopology, render_resource::Face},
+    render::{mesh::PrimitiveTopology, render_asset::RenderAssetUsages, render_resource::Face},
 };
 
 use serde::{Deserialize, Serialize};
@@ -104,7 +104,7 @@ pub fn spawn_model(
     for i in 0..32 {
         let vertex_group = kcl.vertex_groups[i].clone();
 
-        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
 
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertex_group.vertices.clone());
         mesh.compute_flat_normals();

@@ -6,7 +6,7 @@ use crate::viewer::kmp::area::BoxGizmoOptions;
 use crate::viewer::kmp::components::KmpSelectablePoint;
 use crate::viewer::kmp::sections::KmpEditMode;
 use bevy::prelude::*;
-use bevy_egui_next::EguiContexts;
+use bevy_egui::EguiContexts;
 use bevy_mod_outline::*;
 use bevy_mod_raycast::prelude::*;
 
@@ -17,8 +17,8 @@ pub fn select(
     mouse_in_viewport: Res<MouseInViewport>,
     viewport_rect: Res<ViewportRect>,
     q_window: Query<&Window>,
-    keys: Res<Input<KeyCode>>,
-    mouse_buttons: Res<Input<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
     mut raycast: Raycast,
     q_kmp_section: Query<&KmpSelectablePoint>,
@@ -103,7 +103,7 @@ impl SelectBox {
 
 // this handles working out the select box rectangle and actually selecting stuff (the visuals for the box are handled in the UI section)
 pub fn select_box(
-    mouse_buttons: Res<Input<MouseButton>>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_window: Query<&Window>,
     edit_mode: Res<EditMode>,
     mouse_in_viewport: Res<MouseInViewport>,

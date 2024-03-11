@@ -13,7 +13,7 @@ use self::{
 };
 use super::{settings::AppSettings, update_ui::UiSection};
 use bevy::{ecs::system::SystemParam, prelude::*};
-use bevy_egui_next::{egui, EguiContexts};
+use bevy_egui::{egui, EguiContexts};
 use bevy_pkv::PkvStore;
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use serde::{Deserialize, Serialize};

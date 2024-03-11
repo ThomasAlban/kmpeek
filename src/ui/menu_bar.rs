@@ -6,7 +6,7 @@ use super::{
 };
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use bevy_egui_next::{
+use bevy_egui::{
     egui::{self, Align, Layout},
     EguiContexts,
 };

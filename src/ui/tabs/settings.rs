@@ -8,7 +8,7 @@ use crate::{
     },
 };
 use bevy::{ecs::system::SystemParam, prelude::*};
-use bevy_egui_next::egui;
+use bevy_egui::egui;
 use bevy_pkv::PkvStore;
 use strum::IntoEnumIterator;
 
@@ -120,7 +120,7 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
                         ui.horizontal(|ui| {
                             let mut color = self.settings.kcl_model.color[i].as_rgba_f32();
                             ui.color_edit_button_rgba_unmultiplied(&mut color);
-                            self.settings.kcl_model.color[i] = color.into();
+                            self.settings.kcl_model.color[i] = Color::rgba_from_array(color);
                             ui.checkbox(&mut self.settings.kcl_model.visible[i], kcl_flag.to_string());
                         });
                     }

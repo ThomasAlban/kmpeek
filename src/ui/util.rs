@@ -3,7 +3,7 @@ use bevy::{
     math::{vec3, EulerRot, Quat, Vec3},
     transform::components::Transform,
 };
-use bevy_egui_next::egui::{
+use bevy_egui::egui::{
     self, include_image, Align, Align2, Area, CollapsingResponse, Color32, Context, Image, ImageButton, ImageSource,
     Order, Response, Sense, Ui, Vec2, WidgetText,
 };
@@ -27,7 +27,7 @@ impl From<DragSpeed> for f64 {
 pub mod multi_edit {
     use super::{euler_to_quat, quat_to_euler, DragSpeed};
     use bevy::{math::Vec3, transform::components::Transform};
-    use bevy_egui_next::egui::{self, emath::Numeric, Checkbox, DragValue, Response, Ui, WidgetText};
+    use bevy_egui::egui::{self, emath::Numeric, Checkbox, DragValue, Response, Ui, WidgetText};
     use std::{
         fmt::Display,
         ops::{AddAssign, Sub, SubAssign},

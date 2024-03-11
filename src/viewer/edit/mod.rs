@@ -41,7 +41,7 @@ impl Plugin for MousePickingPlugin {
             .add_systems(
                 Update,
                 (
-                    deselect_if_not_visible.run_if(resource_changed::<KmpVisibility>()),
+                    deselect_if_not_visible.run_if(resource_changed::<KmpVisibility>),
                     deselect_on_mode_change.after(UpdateUiSet),
                 ),
             );

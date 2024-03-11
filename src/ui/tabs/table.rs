@@ -10,7 +10,7 @@ use crate::{
     },
 };
 use bevy::{ecs::system::SystemParam, prelude::*};
-use bevy_egui_next::egui::{self, DragValue, Layout, Ui};
+use bevy_egui::egui::{self, DragValue, Layout, Ui};
 use egui_extras::{Column, TableBody, TableBuilder, TableRow};
 
 use super::UiSubSection;

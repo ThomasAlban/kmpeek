@@ -85,10 +85,7 @@ pub fn setup_kmp_meshes_materials(
     settings: Res<AppSettings>,
 ) {
     let kmp_meshes = KmpMeshes {
-        sphere: meshes.add(Mesh::from(shape::UVSphere {
-            radius: 100.,
-            ..default()
-        })),
+        sphere: meshes.add(Sphere::new(100.).mesh()),
         cylinder: meshes.add(Mesh::from(Cylinder {
             height: 1.,
             radius_bottom: 50.,

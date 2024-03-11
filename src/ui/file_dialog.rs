@@ -4,7 +4,7 @@ use super::{
     update_ui::{KclFileSelected, KmpFileSelected, UiSection},
 };
 use bevy::{ecs::system::SystemParam, prelude::*};
-use bevy_egui_next::{egui::Align2, EguiContexts};
+use bevy_egui::{egui::Align2, EguiContexts};
 use egui_file::FileDialog;
 use std::{
     fs::{read_to_string, File},

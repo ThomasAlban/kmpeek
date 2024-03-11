@@ -4,6 +4,7 @@
 use bevy::math::Vec3;
 use bevy::prelude::Vec2;
 use bevy::render::mesh::{Indices, Mesh};
+use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::PrimitiveTopology;
 
 // When indexing a mesh we commonly find flat (occupying a 2 dimensional subspace) trapezes.
@@ -167,8 +168,7 @@ fn add_cylinder_body(mesh: &mut MeshData, cylinder: &Cylinder) {
         for h in 0..=cylinder.height_segments {
             let height_percent = h as f32 / cylinder.height_segments as f32;
             let y = height_percent * cylinder.height - cylinder.height / 2.0;
-            let radius = (1.0 - height_percent) * cylinder.radius_bottom
-                + height_percent * cylinder.radius_top;
+            let radius = (1.0 - height_percent) * cylinder.radius_bottom + height_percent * cylinder.radius_top;
 
             let pos = Vec3::new(x_unit * radius, y, z_unit * radius);
             let uv = Vec2::new(i as f32 / cylinder.radial_segments as f32, height_percent);
@@ -197,30 +197,20 @@ fn add_cylinder_body(mesh: &mut MeshData, cylinder: &Cylinder) {
 impl From<Cylinder> for Mesh {
     fn from(cylinder: Cylinder) -> Self {
         // Input parameter validation
-        assert_ne!(
-            cylinder.radius_top, 0.0,
-            "Radius must not be 0. Use a cone instead."
-        );
-        assert_ne!(
-            cylinder.radius_bottom, 0.0,
-            "Radius must not be 0. Use a cone instead."
-        );
+        assert_ne!(cylinder.radius_top, 0.0, "Radius must not be 0. Use a cone instead.");
+        assert_ne!(cylinder.radius_bottom, 0.0, "Radius must not be 0. Use a cone instead.");
         assert!(cylinder.radius_bottom > 0.0, "Must have positive radius.");
         assert!(cylinder.radius_top > 0.0, "Must have positive radius.");
         assert!(
             cylinder.radial_segments > 2,
             "Must have at least 3 subdivisions to close the surface."
         );
-        assert!(
-            cylinder.height_segments >= 1,
-            "Must have at least one height segment."
-        );
+        assert!(cylinder.height_segments >= 1, "Must have at least one height segment.");
         assert!(cylinder.height > 0.0, "Must have positive height");
 
         let num_vertices = (cylinder.radial_segments + 1) * (cylinder.height_segments + 3) + 2;
         // top&bottom + body
-        let num_indices = cylinder.radial_segments * 3 * 2
-            + cylinder.radial_segments * cylinder.height_segments * 6;
+        let num_indices = cylinder.radial_segments * 3 * 2 + cylinder.radial_segments * cylinder.height_segments * 6;
 
         let mut mesh = MeshData::new(num_vertices as usize, num_indices as usize);
 
@@ -228,11 +218,11 @@ impl From<Cylinder> for Mesh {
         add_cylinder_bottom(&mut mesh, &cylinder);
         add_cylinder_body(&mut mesh, &cylinder);
 
-        let mut m = Mesh::new(PrimitiveTopology::TriangleList);
+        let mut m = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
         m.insert_attribute(Mesh::ATTRIBUTE_POSITION, mesh.positions);
         m.insert_attribute(Mesh::ATTRIBUTE_NORMAL, mesh.normals);
         m.insert_attribute(Mesh::ATTRIBUTE_UV_0, mesh.uvs);
-        m.set_indices(Some(Indices::U32(mesh.indices)));
+        m.insert_indices(Indices::U32(mesh.indices));
         m
     }
 }
@@ -270,11 +260,7 @@ fn add_cone_bottom(mesh: &mut MeshData, cone: &Cone) {
         let x_unit = f32::cos(theta);
         let z_unit = f32::sin(theta);
 
-        let pos = Vec3::new(
-            cone.radius * x_unit,
-            -cone.height / 2.0,
-            cone.radius * z_unit,
-        );
+        let pos = Vec3::new(cone.radius * x_unit, -cone.height / 2.0, cone.radius * z_unit);
         let uv = Vec2::new((z_unit * 0.5) + 0.5, (x_unit * -0.5) + 0.5);
 
         mesh.positions.push(pos);
@@ -363,8 +349,8 @@ impl From<Cone> for Mesh {
         add_cone_bottom(&mut mesh, &cone);
         add_cone_body(&mut mesh, &cone);
 
-        let mut m = Mesh::new(PrimitiveTopology::TriangleList);
-        m.set_indices(Some(Indices::U32(mesh.indices)));
+        let mut m = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+        m.insert_indices(Indices::U32(mesh.indices));
         m.insert_attribute(Mesh::ATTRIBUTE_POSITION, mesh.positions);
         m.insert_attribute(Mesh::ATTRIBUTE_NORMAL, mesh.normals);
         m.insert_attribute(Mesh::ATTRIBUTE_UV_0, mesh.uvs);

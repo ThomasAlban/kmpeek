@@ -95,9 +95,9 @@ fn orbit_cam(
     q_window: Query<&mut Window>,
     mut ev_mouse_motion: EventReader<MouseMotion>,
     mut ev_mouse_scroll: EventReader<MouseWheel>,
-    mouse_buttons: Res<Input<MouseButton>>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut q_orbit_cam: Query<(&mut OrbitCam, &mut Transform, &Projection)>,
-    keys: Res<Input<KeyCode>>,
+    keys: Res<ButtonInput<KeyCode>>,
     settings: Res<AppSettings>,
     mouse_in_viewport: Res<MouseInViewport>,
 ) {

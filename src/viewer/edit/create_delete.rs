@@ -21,13 +21,13 @@ use bevy::prelude::*;
 use bevy_mod_raycast::prelude::*;
 
 pub fn create_point(
-    keys: Res<Input<KeyCode>>,
-    mouse_buttons: Res<Input<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
     q_window: Query<&Window>,
     viewport_rect: Res<ViewportRect>,
     mut raycast: Raycast,
-    q_kcl: Query<With<KCLModelSection>>,
+    q_kcl: Query<(), With<KCLModelSection>>,
     kmp_edit_mode: Res<KmpEditMode>,
     kmp_meshes_materials: Res<KmpMeshesMaterials>,
     mut commands: Commands,
@@ -35,9 +35,9 @@ pub fn create_point(
     q_selected_enemy_points: Query<Entity, (With<EnemyPathPoint>, With<Selected>)>,
     mut ev_recalc_paths: EventWriter<RecalculatePaths>,
 
-    q_cannon_point: Query<With<CannonPoint>>,
-    q_respawn_point: Query<With<CannonPoint>>,
-    q_battle_finish_point: Query<With<BattleFinishPoint>>,
+    q_cannon_point: Query<(), With<CannonPoint>>,
+    q_respawn_point: Query<(), With<CannonPoint>>,
+    q_battle_finish_point: Query<(), With<BattleFinishPoint>>,
 ) {
     if !keys.pressed(KeyCode::AltLeft) || !mouse_buttons.just_pressed(MouseButton::Left) {
         return;
@@ -98,7 +98,7 @@ pub fn create_point(
 }
 
 pub fn delete_point(
-    keys: Res<Input<KeyCode>>,
+    keys: Res<ButtonInput<KeyCode>>,
     mut q_selected: Query<Entity, With<Selected>>,
     mut q_kmp_path_node: Query<&mut KmpPathNode>,
     mut commands: Commands,
@@ -107,7 +107,7 @@ pub fn delete_point(
     if !mouse_in_viewport.0 {
         return;
     };
-    if !keys.just_pressed(KeyCode::Back) && !keys.just_pressed(KeyCode::Delete) {
+    if !keys.just_pressed(KeyCode::Backspace) && !keys.just_pressed(KeyCode::Delete) {
         return;
     }
     for entity in q_selected.iter_mut() {

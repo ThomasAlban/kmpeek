@@ -10,7 +10,7 @@ impl Plugin for KeybindsPlugin {
     }
 }
 
-fn keybinds(keys: Res<Input<KeyCode>>, mut file_dialog: ResMut<FileDialogRes>, mut edit_mode: ResMut<EditMode>) {
+fn keybinds(keys: Res<ButtonInput<KeyCode>>, mut file_dialog: ResMut<FileDialogRes>, mut edit_mode: ResMut<EditMode>) {
     // keybinds
     // if the control/command key is pressed
     if (!cfg!(target_os = "macos") && (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight)))
@@ -18,11 +18,11 @@ fn keybinds(keys: Res<Input<KeyCode>>, mut file_dialog: ResMut<FileDialogRes>, m
     {
         if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
             // keybinds with shift held
-            if keys.just_pressed(KeyCode::Z) {
+            if keys.just_pressed(KeyCode::KeyZ) {
                 // redo!();
             }
         // keybinds without shift held
-        } else if keys.just_pressed(KeyCode::O) {
+        } else if keys.just_pressed(KeyCode::KeyO) {
             if file_dialog.0.is_none() {
                 ShowFileDialog::open_kmp_kcl(&mut file_dialog);
             } else {
@@ -35,7 +35,7 @@ fn keybinds(keys: Res<Input<KeyCode>>, mut file_dialog: ResMut<FileDialogRes>, m
         //     // undo!();
         // }
     }
-    if keys.just_pressed(KeyCode::G) {
+    if keys.just_pressed(KeyCode::KeyG) {
         *edit_mode = match *edit_mode {
             EditMode::Tweak => EditMode::SelectBox,
             EditMode::SelectBox => EditMode::Translate,

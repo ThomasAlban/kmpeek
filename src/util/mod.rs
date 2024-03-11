@@ -4,10 +4,11 @@ pub mod read_write_arrays;
 pub mod shapes;
 
 use bevy::{math::vec2, prelude::*};
-use bevy_egui_next::egui::{self, Pos2};
+use bevy_egui::egui::{self, Pos2};
 use bevy_mod_raycast::{
     immediate::{Raycast, RaycastSettings},
-    primitives::{IntersectionData, Ray3d},
+    prelude::*,
+    primitives::IntersectionData,
 };
 
 // World <-> Ui Viewport
@@ -41,12 +42,12 @@ pub fn ui_viewport_to_screen(viewport_pos: Vec2, window: &Window, viewport_rect:
     // make (0,0) be the top left corner of the viewport
     let mut screen_pos = viewport_pos - viewport_rect.min;
     screen_pos = screen_pos.clamp(Vec2::ZERO, viewport_rect.max);
-    screen_pos *= window.scale_factor() as f32;
+    screen_pos *= window.scale_factor();
     screen_pos
 }
 /// Convert a point from the overall screenspace to the UI viewport rect space
 pub fn screen_to_ui_viewport(screen_pos: Vec2, window: &Window, viewport_rect: Rect) -> Vec2 {
-    let mut viewport_pos = screen_pos / window.scale_factor() as f32;
+    let mut viewport_pos = screen_pos / window.scale_factor();
     viewport_pos += viewport_rect.min;
     viewport_pos
 }
@@ -119,11 +120,10 @@ pub fn get_ray_from_cam(cam: (&Camera, &GlobalTransform), ndc: Vec2) -> Option<R
     let Some(world_far_plane) = cam.0.ndc_to_world(cam.1, ndc.extend(f32::EPSILON)) else {
         return None;
     };
-    let ray = (!world_near_plane.is_nan() && !world_far_plane.is_nan()).then_some(Ray {
-        origin: world_near_plane,
-        direction: (world_far_plane - world_near_plane).normalize(),
-    });
-    ray.map(Ray3d::from)
+    (!world_near_plane.is_nan() && !world_far_plane.is_nan()).then_some(Ray3d::new(
+        world_near_plane,
+        (world_far_plane - world_near_plane).normalize(),
+    ))
 }
 
 pub fn cast_ray_from_cam(

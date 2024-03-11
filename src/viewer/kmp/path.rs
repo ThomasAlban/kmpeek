@@ -12,7 +12,7 @@ use crate::{
     viewer::normalize::Normalize,
 };
 use bevy::{
-    ecs::query::{ReadOnlyWorldQuery, WorldQuery},
+    ecs::query::{QueryData, QueryFilter, WorldQuery},
     prelude::*,
     utils::HashMap,
 };
@@ -76,11 +76,8 @@ impl KmpPathNode {
         self.is_next_node_of(other) || self.is_prev_node_of(other)
     }
     #[allow(dead_code)]
-    pub fn delete<Q: WorldQuery, F: ReadOnlyWorldQuery>(
-        self,
-        self_entity: Entity,
-        q_kmp_path_node: &mut Query<'_, '_, Q, F>,
-    ) where
+    pub fn delete<Q: QueryData, F: QueryFilter>(self, self_entity: Entity, q_kmp_path_node: &mut Query<'_, '_, Q, F>)
+    where
         for<'a> Q: WorldQuery<Item<'a> = Mut<'a, KmpPathNode>>,
     {
         // for all next nodes
@@ -527,7 +524,7 @@ pub fn traverse_paths<'a>(
         Query<Entity, (With<PathOverallStart>, With<ItemPathMarker>)>,
     )>,
     q_kmp_node: Query<(&'a KmpPathNode, Option<&'a EnemyPathPoint>, Option<&'a ItemPathPoint>)>,
-    q_is_overall_start: Query<With<PathOverallStart>>,
+    q_is_overall_start: Query<(), With<PathOverallStart>>,
     mut commands: Commands,
 ) {
     let Ok(enemy_start) = p.p0().get_single() else {
@@ -574,14 +571,14 @@ pub struct ItemPathGroups(pub Vec<PathGroup>);
 
 struct Traverser<'a, 'w, 's> {
     q_kmp_node: Query<'w, 's, (&'a KmpPathNode, Option<&'a EnemyPathPoint>, Option<&'a ItemPathPoint>)>,
-    q_is_overall_start: Query<'w, 's, With<PathOverallStart>>,
+    q_is_overall_start: Query<'w, 's, (), With<PathOverallStart>>,
     groups_accum: Vec<Vec<Entity>>,
     visited: HashSet<Entity>,
 }
 impl<'a, 'w, 's> Traverser<'a, 'w, 's> {
     pub fn new(
         q_kmp_node: Query<'w, 's, (&'a KmpPathNode, Option<&'a EnemyPathPoint>, Option<&'a ItemPathPoint>)>,
-        q_is_overall_start: Query<'w, 's, With<PathOverallStart>>,
+        q_is_overall_start: Query<'w, 's, (), With<PathOverallStart>>,
     ) -> Self {
         Self {
             q_kmp_node,

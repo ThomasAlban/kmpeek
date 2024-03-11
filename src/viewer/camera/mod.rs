@@ -50,12 +50,12 @@ pub struct CameraSettings {
 fn add_ambient_light(mut commands: Commands) {
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
-        brightness: 1.,
+        brightness: 1000.,
     });
 }
 
 fn cursor_grab(
-    mouse_buttons: Res<Input<MouseButton>>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut q_window: Query<&mut Window>,
     settings: Res<AppSettings>,
     mouse_in_viewport: Res<MouseInViewport>,

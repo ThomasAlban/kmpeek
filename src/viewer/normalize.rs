@@ -111,7 +111,7 @@ fn update_normalize(
 
         let scale_before = transform_cp.scale; // save what the scale was before we change it
 
-        transform_cp.scale = transform_cp.scale * required_scale * window.scale_factor() as f32 / 2.; // change the scale
+        transform_cp.scale = transform_cp.scale * required_scale * window.scale_factor() / 2.; // change the scale
 
         // reset the scale if we didn't want to affect any axes
         if !normalize.axes.x {

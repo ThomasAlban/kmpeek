@@ -17,7 +17,7 @@ use crate::{
     },
 };
 use bevy::{ecs::system::SystemParam, math::vec2, prelude::*, render::render_resource::Extent3d};
-use bevy_egui_next::egui::{self, Color32, Margin, Pos2, Rounding, Stroke, Ui};
+use bevy_egui::egui::{self, Color32, Margin, Pos2, Rounding, Stroke, Ui};
 use egui_gizmo::GizmoOrientation;
 
 #[derive(SystemParam)]
@@ -42,7 +42,7 @@ impl UiSubSection for ShowViewportTab<'_, '_> {
     fn show(&mut self, ui: &mut egui::Ui) {
         let mut p = self.p.p0();
         let window = p.q_window.get_single().unwrap();
-        let window_sf = window.scale_factor() as f32;
+        let window_sf = window.scale_factor();
 
         let viewport_image = p.image_assets.get_mut(p.viewport.handle.id()).unwrap();
         // let viewport_tex_id = p.contexts.image_id(&p.viewport).unwrap();

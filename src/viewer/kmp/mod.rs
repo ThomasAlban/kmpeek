@@ -45,7 +45,7 @@ impl Plugin for KmpPlugin {
                 (
                     spawn_model.run_if(on_event::<KmpFileSelected>()),
                     update_node_links,
-                    update_visible.run_if(resource_changed::<KmpVisibility>()),
+                    update_visible.run_if(resource_changed::<KmpVisibility>),
                     traverse_paths.run_if(on_event::<RecalculatePaths>()),
                     show_area_boxes,
                 ),

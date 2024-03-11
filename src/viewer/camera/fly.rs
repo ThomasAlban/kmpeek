@@ -63,12 +63,12 @@ pub struct FlyKeyBindings {
 impl Default for FlyKeyBindings {
     fn default() -> Self {
         Self {
-            move_forward: vec![KeyCode::W, KeyCode::Up],
-            move_backward: vec![KeyCode::S, KeyCode::Down],
-            move_left: vec![KeyCode::A, KeyCode::Left],
-            move_right: vec![KeyCode::D, KeyCode::Right],
-            move_ascend: vec![KeyCode::E, KeyCode::PageUp],
-            move_descend: vec![KeyCode::Q, KeyCode::PageDown],
+            move_forward: vec![KeyCode::KeyW, KeyCode::ArrowUp],
+            move_backward: vec![KeyCode::KeyS, KeyCode::ArrowDown],
+            move_left: vec![KeyCode::KeyA, KeyCode::ArrowLeft],
+            move_right: vec![KeyCode::KeyD, KeyCode::ArrowRight],
+            move_ascend: vec![KeyCode::KeyE, KeyCode::PageUp],
+            move_descend: vec![KeyCode::KeyQ, KeyCode::PageDown],
             speed_boost: vec![KeyCode::ShiftLeft, KeyCode::ShiftRight],
             mouse_button: MouseButton::Right,
         }
@@ -93,7 +93,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
 }
 
 fn fly_cam_move(
-    keys: Res<Input<KeyCode>>,
+    keys: Res<ButtonInput<KeyCode>>,
     q_window: Query<&Window>,
     mut q_fly_cam: Query<&mut Transform, With<FlyCam>>,
     mut ev_request_redraw: EventWriter<RequestRedraw>,
@@ -154,7 +154,7 @@ fn fly_cam_move(
 
     let mut transform_cp = *transform;
 
-    transform_cp.translation += velocity * 200. * settings.camera.fly.speed / window.scale_factor() as f32;
+    transform_cp.translation += velocity * 200. * settings.camera.fly.speed / window.scale_factor();
 
     transform.set_if_neq(transform_cp);
 }

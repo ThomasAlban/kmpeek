@@ -9,12 +9,12 @@ use bevy_mod_raycast::prelude::*;
 
 pub fn snap_to_kcl(
     mut q_selected: Query<(&mut Transform, Entity), With<Selected>>,
-    mouse_buttons: Res<Input<MouseButton>>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
     q_window: Query<&Window>,
     viewport_rect: Res<ViewportRect>,
     mut raycast: Raycast,
-    q_kcl: Query<With<KCLModelSection>>,
+    q_kcl: Query<(), With<KCLModelSection>>,
     edit_mode: Res<EditMode>,
     mouse_in_viewport: Res<MouseInViewport>,
 
@@ -99,12 +99,11 @@ pub fn snap_to_kcl(
             let Some(position_difference) = position_differences.get(&selected.1) else {
                 continue;
             };
-            let camera_plane = Primitive3d::Plane {
-                point: *initial_intersection_point,
-                normal: (-*initial_intersection_point + cam.1.translation()).normalize(),
-            };
-            if let Some(intersection) = ray.intersects_primitive(camera_plane) {
-                selected.0.translation = intersection.position() + *position_difference;
+            let camera_plane = Plane3d::new((-*initial_intersection_point + cam.1.translation()).normalize());
+            let camera_plane_origin = *initial_intersection_point;
+            if let Some(intersection_distance) = ray.intersect_plane(camera_plane_origin, camera_plane) {
+                let pos_on_plane = ray.get_point(intersection_distance);
+                selected.0.translation = pos_on_plane + *position_difference;
             }
         }
     }

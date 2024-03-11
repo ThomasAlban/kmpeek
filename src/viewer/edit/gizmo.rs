@@ -1,5 +1,5 @@
 use bevy::{ecs::system::SystemParam, prelude::*};
-use bevy_egui_next::egui::Ui;
+use bevy_egui::egui::Ui;
 use egui_gizmo::{Gizmo, GizmoMode, GizmoOrientation, GizmoResult, GizmoVisuals};
 use strum_macros::{Display, EnumIter};
 
@@ -42,7 +42,7 @@ impl Default for GizmoOptions {
 
 #[derive(SystemParam)]
 pub struct ShowGizmo<'w, 's> {
-    keys: Res<'w, Input<KeyCode>>,
+    keys: Res<'w, ButtonInput<KeyCode>>,
     q_selected: Query<'w, 's, &'static mut Transform, (With<Selected>, Without<Camera>)>,
     q_camera: Query<'w, 's, (&'static Camera, &'static Transform)>,
     edit_mode: Res<'w, EditMode>,

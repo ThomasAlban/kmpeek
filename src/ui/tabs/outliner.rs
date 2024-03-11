@@ -17,7 +17,7 @@ use crate::{
     },
 };
 use bevy::{ecs::system::SystemParam, prelude::*};
-use bevy_egui_next::egui::{self, collapsing_header::CollapsingState, Align, Color32, Layout, Ui};
+use bevy_egui::egui::{self, collapsing_header::CollapsingState, Align, Color32, Layout, Ui};
 
 /// collects an iterator into a vector in a concise way
 macro_rules! to_vec {
@@ -48,7 +48,7 @@ pub struct ShowOutlinerTab<'w, 's> {
     q_visibility: Query<'w, 's, &'static mut Visibility>,
     q_selected: Query<'w, 's, Entity, With<Selected>>,
     link_visibilities: Local<'s, bool>,
-    keys: Res<'w, Input<KeyCode>>,
+    keys: Res<'w, ButtonInput<KeyCode>>,
     kmp_visibility: ResMut<'w, KmpVisibility>,
 }
 impl UiSubSection for ShowOutlinerTab<'_, '_> {

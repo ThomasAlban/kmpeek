@@ -18,7 +18,7 @@ use crate::{
     },
 };
 use bevy::{ecs::system::SystemParam, prelude::*};
-use bevy_egui_next::egui::{self, Checkbox, DragValue, Layout, Ui, WidgetText};
+use bevy_egui::egui::{self, Checkbox, DragValue, Layout, Ui, WidgetText};
 
 #[derive(SystemParam)]
 pub struct ShowEditTab<'w, 's> {
