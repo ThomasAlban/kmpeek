@@ -1,7 +1,7 @@
 use super::{select::Selected, EditMode};
 use crate::{
     ui::ui_state::{MouseInViewport, ViewportRect},
-    util::{cast_ray_from_cam, get_ray_from_cam, ui_viewport_to_ndc},
+    util::{get_ray_from_cam, ui_viewport_to_ndc, RaycastFromCam},
     viewer::kcl_model::KCLModelSection,
 };
 use bevy::{prelude::*, utils::HashMap};
@@ -47,9 +47,10 @@ pub fn snap_to_kcl(
     if mouse_buttons.just_pressed(MouseButton::Left) {
         *initial_mouse_pos = mouse_pos;
         // get the transform of the thing the mouse has just clicked on
-        let mouse_over = cast_ray_from_cam(cam, mouse_pos_ndc, &mut raycast, |e| q_selected.contains(e));
-        let mouse_over = mouse_over.first();
-        let Some((mouse_over, _)) = mouse_over else {
+        let ray = RaycastFromCam::new(cam, mouse_pos_ndc, &mut raycast)
+            .filter(&|e| q_selected.contains(e))
+            .cast();
+        let Some((mouse_over, _)) = ray.first() else {
             return;
         };
         let (main_point_transform, _) = q_selected.get(*mouse_over).unwrap();
@@ -80,9 +81,9 @@ pub fn snap_to_kcl(
 
     // send out a ray from the mouse position + the offset
     // so that when an entity is initially clicked, it's transform doesn't change even though they weren't perfectly accurate with the click
-    let intersections = cast_ray_from_cam(cam, mouse_pos_ndc + *initial_offset_ndc, &mut raycast, |e| {
-        q_kcl.contains(e)
-    });
+    let intersections = RaycastFromCam::new(cam, mouse_pos_ndc + *initial_offset_ndc, &mut raycast)
+        .filter(&|e| q_kcl.contains(e))
+        .cast();
 
     if let Some(intersection) = intersections.first() {
         // if there is an intersection with the kcl, snap to the kcl

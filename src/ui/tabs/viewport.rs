@@ -9,7 +9,7 @@ use crate::{
     viewer::{
         camera::{CameraMode, CameraModeChanged},
         edit::{
-            gizmo::{GizmoOptions, GizmoOrigin, ShowGizmo},
+            gizmo::{GizmoOrigin, GizmoRes, ShowGizmo},
             select::SelectBox,
             EditMode,
         },
@@ -17,8 +17,8 @@ use crate::{
     },
 };
 use bevy::{ecs::system::SystemParam, math::vec2, prelude::*, render::render_resource::Extent3d};
-use bevy_egui::egui::{self, Color32, Margin, Pos2, Rounding, Stroke, Ui};
-use egui_gizmo::GizmoOrientation;
+use bevy_egui::egui::{self, Color32, Margin, Pos2, Rounding, Sense, Stroke, Ui};
+use transform_gizmo_egui::GizmoOrientation;
 
 #[derive(SystemParam)]
 struct ViewportParams<'w, 's> {
@@ -28,10 +28,11 @@ struct ViewportParams<'w, 's> {
     mouse_in_viewport: ResMut<'w, MouseInViewport>,
     viewport_rect: ResMut<'w, ViewportRect>,
     edit_mode: ResMut<'w, EditMode>,
-    gizmo_options: ResMut<'w, GizmoOptions>,
     select_box: Res<'w, SelectBox>,
     settings: ResMut<'w, AppSettings>,
     ev_camera_mode_changed: EventWriter<'w, CameraModeChanged>,
+    gizmo: ResMut<'w, GizmoRes>,
+    gizmo_origin: ResMut<'w, GizmoOrigin>,
 }
 
 #[derive(SystemParam)]
@@ -77,10 +78,18 @@ impl UiSubSection for ShowViewportTab<'_, '_> {
         }
 
         // show the viewport image
-        ui.image(egui::load::SizedTexture::new(
-            p.viewport.tex_id,
-            viewport_rect.size().to_array(),
-        ));
+
+        ui.allocate_ui_at_rect(egui_viewport_rect, |ui| {
+            // make the image sense clicks and drags, so that any events that aren't consumed by buttons above it are consumed by this
+            // so we don't start dragging around the window when trying to select stuff etc
+            ui.add(
+                egui::Image::new(egui::load::SizedTexture::new(
+                    p.viewport.tex_id,
+                    viewport_rect.size().to_array(),
+                ))
+                .sense(Sense::click_and_drag()),
+            );
+        });
 
         p.mouse_in_viewport.0 = ui.rect_contains_pointer(egui_viewport_rect);
 
@@ -114,7 +123,7 @@ impl ShowViewportTab<'_, '_> {
                         let size = 25.;
                         ui.label("Origin:");
                         ui.horizontal(|ui| {
-                            let origin = &mut p.gizmo_options.gizmo_origin;
+                            let origin = &mut *p.gizmo_origin;
 
                             image_selectable_value(
                                 ui,
@@ -148,10 +157,11 @@ impl ShowViewportTab<'_, '_> {
 
                         ui.label("Orientation");
                         ui.horizontal(|ui| {
-                            let orient = &mut p.gizmo_options.gizmo_orientation;
+                            let mut orientation = p.gizmo.config().orientation;
+                            let before = orientation;
                             image_selectable_value(
                                 ui,
-                                orient,
+                                &mut orientation,
                                 GizmoOrientation::Global,
                                 Icons::orient_global(ui.ctx(), size),
                                 size,
@@ -159,12 +169,19 @@ impl ShowViewportTab<'_, '_> {
                             .on_hover_text_at_pointer("Orient the gizmo to the global space");
                             image_selectable_value(
                                 ui,
-                                orient,
+                                &mut orientation,
                                 GizmoOrientation::Local,
                                 Icons::orient_local(ui.ctx(), size),
                                 size,
                             )
                             .on_hover_text_at_pointer("Orient the gizmo to the selected point");
+
+                            if before != orientation {
+                                p.gizmo.update_config(transform_gizmo_egui::GizmoConfig {
+                                    orientation,
+                                    ..default()
+                                })
+                            }
                         });
                     });
 

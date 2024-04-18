@@ -52,28 +52,20 @@ impl KmpPathNode {
     pub fn get_previous(&self) -> HashSet<Entity> {
         self.prev_nodes.clone()
     }
-    pub fn is_next_node_of(&self, other: &KmpPathNode) -> bool {
-        for self_prev in self.prev_nodes.iter() {
-            for other_next in other.next_nodes.iter() {
-                if self.prev_nodes.contains(other_next) && other.next_nodes.contains(self_prev) {
-                    return true;
-                }
-            }
+    pub fn is_next_node_of(&self, self_e: Entity, other: &KmpPathNode, other_e: Entity) -> bool {
+        if self.prev_nodes.contains(&other_e) || other.next_nodes.contains(&self_e) {
+            return true;
         }
         false
     }
-    pub fn is_prev_node_of(&self, other: &KmpPathNode) -> bool {
-        for self_next in self.next_nodes.iter() {
-            for other_prev in other.prev_nodes.iter() {
-                if self.next_nodes.contains(other_prev) && other.prev_nodes.contains(self_next) {
-                    return true;
-                }
-            }
+    pub fn is_prev_node_of(&self, self_e: Entity, other: &KmpPathNode, other_e: Entity) -> bool {
+        if self.next_nodes.contains(&other_e) || other.prev_nodes.contains(&self_e) {
+            return true;
         }
         false
     }
-    pub fn is_linked_with(&self, other: &KmpPathNode) -> bool {
-        self.is_next_node_of(other) || self.is_prev_node_of(other)
+    pub fn is_linked_with(&self, self_e: Entity, other: &KmpPathNode, other_e: Entity) -> bool {
+        self.is_next_node_of(self_e, other, other_e) || self.is_prev_node_of(self_e, other, other_e)
     }
     #[allow(dead_code)]
     pub fn delete<Q: QueryData, F: QueryFilter>(self, self_entity: Entity, q_kmp_path_node: &mut Query<'_, '_, Q, F>)
@@ -97,56 +89,50 @@ impl KmpPathNode {
             prev_node.next_nodes.retain(|x| *x != self_entity);
         }
     }
-    // link nodes, taking in a kmp node query
-    pub fn link_nodes(
-        prev_node_entity: Entity,
-        next_node_entity: Entity,
-        q_kmp_node: &mut Query<&mut KmpPathNode>,
-    ) -> Result<(), KmpPathNodeError> {
-        let mut next_node = match q_kmp_node.get_mut(next_node_entity) {
-            Ok(next_node) => next_node,
-            Err(_) => return Err(KmpPathNodeError),
-        };
-        if next_node.prev_nodes.len() >= 6 {
-            return Err(KmpPathNodeError);
+
+    pub fn link_nodes(prev_node_entity: Entity, next_node_entity: Entity, world: &mut World) -> bool {
+        if prev_node_entity == next_node_entity {
+            return false;
         }
+        // get next and prev nodes immutably first so we can check if they are linked
+        let Some(next_node) = world.get::<KmpPathNode>(next_node_entity) else {
+            return false;
+        };
+        let Some(prev_node) = world.get::<KmpPathNode>(prev_node_entity) else {
+            return false;
+        };
+        if prev_node.is_linked_with(prev_node_entity, next_node, next_node_entity) {
+            return false;
+        }
+        if next_node.prev_nodes.len() >= 6 || prev_node.next_nodes.len() >= 6 {
+            return false;
+        }
+
+        // now get them mutably one at a time to link them
+        let mut next_node = world.get_mut::<KmpPathNode>(next_node_entity).unwrap();
         next_node.prev_nodes.insert(prev_node_entity);
-
-        let mut prev_node = match q_kmp_node.get_mut(prev_node_entity) {
-            Ok(prev_node) => prev_node,
-            Err(_) => return Err(KmpPathNodeError),
-        };
-        if prev_node.next_nodes.len() >= 6 {
-            return Err(KmpPathNodeError);
-        }
-        prev_node.next_nodes.insert(prev_node_entity);
-
-        Ok(())
-    }
-    // link nodes if direct world access is available
-    pub fn link_nodes_world_access(
-        prev_node_entity: Entity,
-        next_node_entity: Entity,
-        world: &mut World,
-    ) -> Result<(), KmpPathNodeError> {
-        let mut next_node = match world.get_mut::<KmpPathNode>(next_node_entity) {
-            Some(next_node) => next_node,
-            None => return Err(KmpPathNodeError),
-        };
-        if next_node.prev_nodes.len() >= 6 {
-            return Err(KmpPathNodeError);
-        }
-        next_node.prev_nodes.insert(prev_node_entity);
-
-        let mut prev_node = match world.get_mut::<KmpPathNode>(prev_node_entity) {
-            Some(prev_node) => prev_node,
-            None => return Err(KmpPathNodeError),
-        };
-        if prev_node.next_nodes.len() >= 6 {
-            return Err(KmpPathNodeError);
-        }
+        let mut prev_node = world.get_mut::<KmpPathNode>(prev_node_entity).unwrap();
         prev_node.next_nodes.insert(next_node_entity);
-        Ok(())
+
+        true
+    }
+    pub fn unlink_nodes(prev_node_entity: Entity, next_node_entity: Entity, world: &mut World) -> bool {
+        let Some(next_node) = world.get::<KmpPathNode>(next_node_entity) else {
+            return false;
+        };
+        let Some(prev_node) = world.get::<KmpPathNode>(prev_node_entity) else {
+            return false;
+        };
+        if !prev_node.is_linked_with(prev_node_entity, next_node, next_node_entity) {
+            return false;
+        }
+
+        let mut next_node = world.get_mut::<KmpPathNode>(next_node_entity).unwrap();
+        next_node.prev_nodes.remove(&prev_node_entity);
+        let mut prev_node = world.get_mut::<KmpPathNode>(prev_node_entity).unwrap();
+        prev_node.next_nodes.remove(&next_node_entity);
+
+        true
     }
 }
 
@@ -331,7 +317,7 @@ pub fn spawn_path_section<
             // in each group, link the previous node to the current node
             for entity in group.entities.iter() {
                 if let Some(prev_entity) = prev_entity {
-                    KmpPathNode::link_nodes_world_access(prev_entity, *entity, world).unwrap();
+                    KmpPathNode::link_nodes(prev_entity, *entity, world);
                 }
                 prev_entity = Some(*entity);
             }
@@ -342,7 +328,7 @@ pub fn spawn_path_section<
                 // get the first entity in the next group
                 let next_entity = entity_groups[*next_group_index as usize].entities[0];
                 // link the last entity in the current group with the first entity in the next group
-                KmpPathNode::link_nodes_world_access(entity, next_entity, world).unwrap();
+                KmpPathNode::link_nodes(entity, next_entity, world);
             }
         }
     });

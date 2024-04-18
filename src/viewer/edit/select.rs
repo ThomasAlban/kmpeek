@@ -1,7 +1,8 @@
-use super::gizmo::GizmoOptions;
+use super::create_delete::JustCreatedPoint;
+use super::gizmo::GizmoRes;
 use super::EditMode;
 use crate::ui::ui_state::{MouseInViewport, ViewportRect};
-use crate::util::{cast_ray_from_cam, ui_viewport_to_ndc, world_to_ui_viewport};
+use crate::util::{ui_viewport_to_ndc, world_to_ui_viewport, RaycastFromCam};
 use crate::viewer::kmp::area::BoxGizmoOptions;
 use crate::viewer::kmp::components::KmpSelectablePoint;
 use crate::viewer::kmp::sections::KmpEditMode;
@@ -23,16 +24,19 @@ pub fn select(
     mut raycast: Raycast,
     q_kmp_section: Query<&KmpSelectablePoint>,
     mut commands: Commands,
-    gizmo_options: Res<GizmoOptions>,
+    gizmo: Res<GizmoRes>,
     box_gizmo_options: Res<BoxGizmoOptions>,
     q_selected: Query<Entity, With<Selected>>,
     q_visibility: Query<&Visibility>,
     mut contexts: EguiContexts,
+    mut ev_just_created_point: EventReader<JustCreatedPoint>,
 ) {
-    if !mouse_in_viewport.0
-        || !mouse_buttons.just_pressed(MouseButton::Left)
-        || contexts.ctx_mut().wants_pointer_input()
+    if !mouse_in_viewport.0 || !mouse_buttons.just_pressed(MouseButton::Left)
+    // || contexts.ctx_mut().wants_pointer_input()
     {
+        return;
+    }
+    if ev_just_created_point.is_empty() && (keys.pressed(KeyCode::AltLeft)) || keys.pressed(KeyCode::AltRight) {
         return;
     }
     let window = q_window.single();
@@ -40,7 +44,7 @@ pub fn select(
         return;
     };
 
-    if gizmo_options.last_result.is_some() || box_gizmo_options.mouse_interacting {
+    if gizmo.is_focused() || box_gizmo_options.mouse_interacting {
         return;
     }
     let shift_key_down = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
@@ -50,10 +54,9 @@ pub fn select(
 
     let mouse_pos_ndc = ui_viewport_to_ndc(mouse_pos, viewport_rect.0);
 
-    let intersections = cast_ray_from_cam(cam, mouse_pos_ndc, &mut raycast, |e| {
-        let visibility = q_visibility.get(e).unwrap();
-        q_kmp_section.contains(e) && visibility == Visibility::Visible
-    });
+    let intersections = RaycastFromCam::new(cam, mouse_pos_ndc, &mut raycast)
+        .filter(&|e| q_kmp_section.contains(e))
+        .cast();
     let intersection = intersections.first();
 
     // deselect everything if we already have something selected but don't have the shift key down
@@ -70,6 +73,9 @@ pub fn select(
         for selected in q_selected.iter() {
             commands.entity(selected).remove::<Selected>();
         }
+    }
+    for created_point in ev_just_created_point.read() {
+        commands.entity(created_point.0).insert(Selected);
     }
 }
 

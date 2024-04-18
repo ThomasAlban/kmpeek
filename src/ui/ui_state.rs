@@ -31,10 +31,7 @@ impl Plugin for UiStatePlugin {
             .add_systems(Update, save_docktree.run_if(on_event::<SaveDockTree>()))
             .add_systems(Update, reset_docktree.run_if(on_event::<ResetDockTree>()))
             .add_event::<ResetDockTree>()
-            .add_systems(
-                Startup,
-                (apply_deferred, check_cmd_args).chain().after(SetupAppSettingsSet),
-            );
+            .add_systems(Startup, check_cmd_args.after(SetupAppSettingsSet));
     }
 }
 

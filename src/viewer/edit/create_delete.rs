@@ -3,13 +3,13 @@ use std::collections::HashSet;
 use super::select::Selected;
 use crate::{
     ui::ui_state::{MouseInViewport, ViewportRect},
-    util::{cast_ray_from_cam, ui_viewport_to_ndc},
+    util::{ui_viewport_to_ndc, RaycastFromCam},
     viewer::{
         kcl_model::KCLModelSection,
         kmp::{
             components::{
-                AreaPoint, BattleFinishPoint, CannonPoint, EnemyPathPoint, ItemPathPoint, KmpCamera, Object,
-                RespawnPoint, Spawnable, StartPoint,
+                AreaPoint, BattleFinishPoint, CannonPoint, EnemyPathPoint, ItemPathPoint, KmpCamera,
+                KmpSelectablePoint, Object, RespawnPoint, Spawnable, StartPoint,
             },
             meshes_materials::KmpMeshesMaterials,
             path::{KmpPathNode, RecalculatePaths},
@@ -20,6 +20,9 @@ use crate::{
 use bevy::prelude::*;
 use bevy_mod_raycast::prelude::*;
 
+#[derive(Event)]
+pub struct JustCreatedPoint(pub Entity);
+
 pub fn create_point(
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
@@ -28,22 +31,27 @@ pub fn create_point(
     viewport_rect: Res<ViewportRect>,
     mut raycast: Raycast,
     q_kcl: Query<(), With<KCLModelSection>>,
+    q_visibility: Query<&Visibility>,
     kmp_edit_mode: Res<KmpEditMode>,
     kmp_meshes_materials: Res<KmpMeshesMaterials>,
     mut commands: Commands,
     q_selected_item_points: Query<Entity, (With<ItemPathPoint>, With<Selected>)>,
     q_selected_enemy_points: Query<Entity, (With<EnemyPathPoint>, With<Selected>)>,
     mut ev_recalc_paths: EventWriter<RecalculatePaths>,
+    mut ev_just_created_point: EventWriter<JustCreatedPoint>,
 
-    q_cannon_point: Query<(), With<CannonPoint>>,
-    q_respawn_point: Query<(), With<CannonPoint>>,
-    q_battle_finish_point: Query<(), With<BattleFinishPoint>>,
+    q_kmp_pts: (
+        Query<(), With<KmpSelectablePoint>>,
+        Query<(), With<CannonPoint>>,
+        Query<(), With<RespawnPoint>>,
+        Query<(), With<BattleFinishPoint>>,
+    ),
 ) {
+    // only run the function if the alt key is held and the mouse has just been clicked
     if !keys.pressed(KeyCode::AltLeft) || !mouse_buttons.just_pressed(MouseButton::Left) {
         return;
     }
-    let window = q_window.single();
-    let Some(mouse_pos) = window.cursor_position() else {
+    let Some(mouse_pos) = q_window.single().cursor_position() else {
         return;
     };
 
@@ -51,13 +59,24 @@ pub fn create_point(
     let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
 
     let ndc_mouse_pos = ui_viewport_to_ndc(mouse_pos, viewport_rect.0);
-    let mouse_ray = cast_ray_from_cam(cam, ndc_mouse_pos, &mut raycast, |_| true);
+    let mouse_ray = RaycastFromCam::new(cam, ndc_mouse_pos, &mut raycast).cast();
+
+    if mouse_ray.iter().any(|e| q_kmp_pts.0.contains(e.0)) {
+        return;
+    };
+
+    for (e, i) in mouse_ray.iter() {
+        dbg!(e, i);
+        dbg!(q_kcl.contains(*e));
+    }
 
     let Some(kcl_intersection) = mouse_ray.iter().find(|e| q_kcl.contains(e.0)) else {
         return;
     };
+    println!("4");
 
     let mouse_3d_pos = kcl_intersection.1.position();
+    println!("creating");
 
     use KmpSections::*;
     let created_entity = match kmp_edit_mode.0 {
@@ -74,7 +93,7 @@ pub fn create_point(
             &mut commands,
             &kmp_meshes_materials,
             mouse_3d_pos,
-            q_respawn_point.iter().count(),
+            q_kmp_pts.1.iter().count(),
         ),
         Objects => Object::spawn(&mut commands, &kmp_meshes_materials, mouse_3d_pos),
         Areas => AreaPoint::spawn(&mut commands, &kmp_meshes_materials, mouse_3d_pos),
@@ -83,17 +102,23 @@ pub fn create_point(
             &mut commands,
             &kmp_meshes_materials,
             mouse_3d_pos,
-            q_cannon_point.iter().count(),
+            q_kmp_pts.2.iter().count(),
         ),
         BattleFinishPoints => BattleFinishPoint::spawn(
             &mut commands,
             &kmp_meshes_materials,
             mouse_3d_pos,
-            q_battle_finish_point.iter().count(),
+            q_kmp_pts.3.iter().count(),
         ),
         _ => Entity::PLACEHOLDER,
     };
+    println!("created");
     commands.entity(created_entity).insert(Selected);
+    // we send this event which is recieved by the Select system, so it knows to add the Selected component
+    // we can't add it now, because then in the select system it will just be deselected again
+    // the select system has to run after this so that we know which previous points we have to link to this one
+    // if it ran after, everything would already be deselected by the time we create the point
+    ev_just_created_point.send(JustCreatedPoint(created_entity));
     ev_recalc_paths.send_default();
 }
 

@@ -34,12 +34,7 @@ impl Plugin for KmpPlugin {
         app.add_event::<RecalculatePaths>()
             .init_resource::<KmpEditMode>()
             .init_resource::<BoxGizmoOptions>()
-            .add_systems(
-                Startup,
-                (apply_deferred, setup_kmp_meshes_materials)
-                    .chain()
-                    .after(SetupAppSettingsSet),
-            )
+            .add_systems(Startup, setup_kmp_meshes_materials.after(SetupAppSettingsSet))
             .add_systems(
                 Update,
                 (

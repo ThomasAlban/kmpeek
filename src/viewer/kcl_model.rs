@@ -137,7 +137,6 @@ pub fn spawn_model(
                 ..default()
             },
             KCLModelSection(i),
-            // RaycastMesh::<KclRaycastSet>::default(),
         ));
     }
     commands.insert_resource(kcl);

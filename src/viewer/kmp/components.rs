@@ -611,7 +611,7 @@ impl ItemPathPoint {
         .spawn_command(commands);
         commands.add(move |world: &mut World| {
             for prev_entity in prev_nodes.iter() {
-                KmpPathNode::link_nodes_world_access(*prev_entity, entity, world).unwrap();
+                KmpPathNode::link_nodes(*prev_entity, entity, world);
             }
         });
         entity
@@ -635,7 +635,7 @@ impl EnemyPathPoint {
         .spawn_command(commands);
         commands.add(move |world: &mut World| {
             for prev_entity in prev_nodes.iter() {
-                KmpPathNode::link_nodes_world_access(*prev_entity, entity, world).unwrap();
+                KmpPathNode::link_nodes(*prev_entity, entity, world);
             }
         });
         entity

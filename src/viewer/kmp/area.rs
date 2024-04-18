@@ -1,14 +1,14 @@
-use std::f32::consts::PI;
+use std::f32::consts::{PI, TAU};
 
 use super::{AreaPoint, AreaShape};
 use crate::{
     ui::{tabs::UiSubSection, ui_state::ViewportRect},
     util::{get_ray_from_cam, ui_viewport_to_ndc, world_to_ui_viewport, ToEguiPos2},
-    viewer::edit::{gizmo::GizmoOptions, select::Selected},
+    viewer::edit::{gizmo::GizmoRes, select::Selected},
 };
 use bevy::{
     ecs::system::SystemParam,
-    math::{vec3, DVec3},
+    math::{vec2, vec3, DVec3},
     prelude::*,
 };
 use bevy_egui::egui::{Color32, Ui};
@@ -25,6 +25,14 @@ pub struct BoxGizmoOptions {
     pub mouse_interacting: bool,
 }
 
+fn ellipse_inner(half_size: Vec2, segments: usize) -> impl Iterator<Item = Vec2> {
+    (0..segments + 1).map(move |i| {
+        let angle = i as f32 * TAU / segments as f32;
+        let (x, y) = angle.sin_cos();
+        Vec2::new(x, y) * half_size
+    })
+}
+
 pub fn show_area_boxes(mut gizmos: Gizmos, q_areas: Query<(&mut Transform, &mut AreaPoint, Has<Selected>)>) {
     for (transform, area, is_selected) in q_areas.iter() {
         if !is_selected && !area.show_area {
@@ -32,15 +40,31 @@ pub fn show_area_boxes(mut gizmos: Gizmos, q_areas: Query<(&mut Transform, &mut 
         }
         // draw the box for the area
         let area_transform = get_area_transform(transform, area.scale);
-        let cuboid_color = if area.scale.min_element() < 0. {
+        let gizmo_color = if area.scale.min_element() < 0. {
             Color::RED
         } else {
             Color::WHITE
         };
+
         match area.shape {
-            AreaShape::Box => gizmos.cuboid(area_transform, cuboid_color),
+            AreaShape::Box => gizmos.cuboid(area_transform, gizmo_color),
             AreaShape::Cylinder => {
-                // todo: Cylinder
+                let segments = 32;
+                let ellipse_h_size = vec2(area.scale.x, area.scale.z) / 2.;
+                let ellipse_rot = transform.rotation * Quat::from_rotation_x(PI / 2.);
+                let top_pos = transform.translation + transform.up() * area.scale.y;
+                let bottom_pos = transform.translation;
+                gizmos
+                    .ellipse(top_pos, ellipse_rot, ellipse_h_size, gizmo_color)
+                    .segments(segments);
+                gizmos
+                    .ellipse(bottom_pos, ellipse_rot, ellipse_h_size, gizmo_color)
+                    .segments(segments);
+
+                ellipse_inner(ellipse_h_size, segments)
+                    .map(|vec2| ellipse_rot * vec2.extend(0.))
+                    .map(|vec3| (vec3 + bottom_pos, vec3 + top_pos))
+                    .for_each(|(bottom, top)| gizmos.line(bottom, top, gizmo_color));
             }
         }
         // gizmos.cuboid(area_transform, cuboid_color);
@@ -56,7 +80,7 @@ pub struct ShowBoxHandles<'w, 's> {
     q_window: Query<'w, 's, &'static Window>,
     box_gizmo_options: ResMut<'w, BoxGizmoOptions>,
     mouse_buttons: Res<'w, ButtonInput<MouseButton>>,
-    gizmo_options: Res<'w, GizmoOptions>,
+    gizmo: Res<'w, GizmoRes>,
 
     current_interaction: Local<'s, Option<(Entity, usize, Vec2)>>,
     initial_mouse_pos: Local<'s, Vec2>,
@@ -140,7 +164,7 @@ impl UiSubSection for ShowBoxHandles<'_, '_> {
                 }
             }
 
-            if self.mouse_buttons.pressed(MouseButton::Left) && self.gizmo_options.last_result.is_none() {
+            if self.mouse_buttons.pressed(MouseButton::Left) && !self.gizmo.is_focused() {
                 if let (Some((e, i, mouse_offset)), Some(mouse_pos)) =
                     (*self.current_interaction, window.cursor_position())
                 {
