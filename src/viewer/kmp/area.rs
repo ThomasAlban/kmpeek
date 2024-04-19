@@ -25,6 +25,7 @@ pub struct BoxGizmoOptions {
     pub mouse_interacting: bool,
 }
 
+// work out where each corner of an ellipse is with a given number of segments
 fn ellipse_inner(half_size: Vec2, segments: usize) -> impl Iterator<Item = Vec2> {
     (0..segments + 1).map(move |i| {
         let angle = i as f32 * TAU / segments as f32;
@@ -67,7 +68,6 @@ pub fn show_area_boxes(mut gizmos: Gizmos, q_areas: Query<(&mut Transform, &mut 
                     .for_each(|(bottom, top)| gizmos.line(bottom, top, gizmo_color));
             }
         }
-        // gizmos.cuboid(area_transform, cuboid_color);
     }
 }
 

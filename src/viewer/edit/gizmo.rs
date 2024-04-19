@@ -75,33 +75,43 @@ impl UiSubSection for ShowGizmo<'_, '_> {
 
         let gizmo_transform_point: Transform;
         let mut single_selected = false;
-        if let Ok(selected) = self.q_selected.get_single() {
-            // if we only have a single point selected, then pass the transform of that single point to the gizmo
-            gizmo_transform_point = *selected;
-            single_selected = true;
-        } else {
-            gizmo_transform_point = match *self.gizmo_origin {
-                GizmoOrigin::Mean => {
-                    // if we have multiple selected, calculate the average transform (ignoring rotation / scale) and pass that to the gizmo
-                    let mut avg_transform = Transform::default();
-                    let mut count = 0.;
-                    for selected in self.q_selected.iter() {
-                        avg_transform.translation += selected.translation;
-                        count += 1.;
+
+        match self.q_selected.iter().count() {
+            0 => {
+                return;
+            }
+            1 => {
+                let selected = self.q_selected.single();
+                // if we only have a single point selected, then pass the transform of that single point to the gizmo
+                gizmo_transform_point = *selected;
+                dbg!(gizmo_transform_point);
+                single_selected = true;
+            }
+            // if there are more than 1
+            _ => {
+                gizmo_transform_point = match *self.gizmo_origin {
+                    GizmoOrigin::Mean => {
+                        // if we have multiple selected, calculate the average transform (ignoring rotation / scale) and pass that to the gizmo
+                        let mut avg_transform = Transform::default();
+                        let mut count = 0.;
+                        for selected in self.q_selected.iter() {
+                            avg_transform.translation += selected.translation;
+                            count += 1.;
+                        }
+                        avg_transform.translation /= count;
+                        avg_transform
                     }
-                    avg_transform.translation /= count;
-                    avg_transform
-                }
-                _ => {
-                    let Some(first_selected_transform) = self.q_selected.iter().next() else {
-                        return;
-                    };
-                    Transform {
-                        translation: first_selected_transform.translation,
-                        ..default()
+                    _ => {
+                        let Some(first_selected_transform) = self.q_selected.iter().next() else {
+                            return;
+                        };
+                        Transform {
+                            translation: first_selected_transform.translation,
+                            ..default()
+                        }
                     }
-                }
-            };
+                };
+            }
         }
 
         let mode = match *self.edit_mode {
@@ -111,8 +121,8 @@ impl UiSubSection for ShowGizmo<'_, '_> {
         };
 
         self.gizmo.update_config(GizmoConfig {
-            view_matrix: view_matrix.as_dmat4().to_cols_array_2d().into(),
-            projection_matrix: projection_matrix.as_dmat4().to_cols_array_2d().into(),
+            view_matrix: view_matrix.as_dmat4().transpose().to_cols_array_2d().into(),
+            projection_matrix: projection_matrix.as_dmat4().transpose().to_cols_array_2d().into(),
             modes: EnumSet::only(mode),
             snapping,
             snap_angle,
@@ -140,9 +150,6 @@ impl UiSubSection for ShowGizmo<'_, '_> {
                     selected.rotate(gizmo_transform.rotation);
                 } else {
                     selected.rotate_around(gizmo_transform.translation, gizmo_transform.rotation);
-                    // someone went onto my laptop and wrote this when I was gone
-                    // so I guess I'm leaving it here
-                    // cum on my ballsac and call me a meercat
                 }
                 // this prevents a weird issue where the points would slowly squash
                 selected.rotation = selected.rotation.normalize();

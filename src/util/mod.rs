@@ -12,7 +12,7 @@ use bevy_mod_raycast::{
     immediate::{Raycast, RaycastSettings},
     primitives::IntersectionData,
 };
-use transform_gizmo_egui::mint::{Quaternion, Vector3};
+use transform_gizmo_egui::mint::{Quaternion, Vector3, Vector4};
 
 // World <-> Ui Viewport
 pub fn world_to_ui_viewport(cam: (&Camera, &GlobalTransform), viewport_rect: Rect, world_pos: Vec3) -> Option<Vec2> {
@@ -145,6 +145,19 @@ impl ToGizmoVec3 for Vec3 {
             x: self.x as f64,
             y: self.y as f64,
             z: self.z as f64,
+        }
+    }
+}
+pub trait ToGizmoVec4 {
+    fn to_gizmo_vec4(self) -> Vector4<f64>;
+}
+impl ToGizmoVec4 for Vec4 {
+    fn to_gizmo_vec4(self) -> Vector4<f64> {
+        Vector4 {
+            x: self.x as f64,
+            y: self.y as f64,
+            z: self.z as f64,
+            w: self.w as f64,
         }
     }
 }
