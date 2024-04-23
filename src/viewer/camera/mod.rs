@@ -1,27 +1,33 @@
-use self::{fly::FlyCamPlugin, orbit::OrbitCamPlugin, topdown::TopDownCamPlugin};
+use self::{fly::FlyCamPlugin, gizmo_2d::Gizmo2dCamPlugin, orbit::OrbitCamPlugin, topdown::TopDownCamPlugin};
 pub use self::{
     fly::{FlyCam, FlySettings},
+    gizmo_2d::Gizmo2dCam,
     orbit::{OrbitCam, OrbitSettings},
     topdown::{TopDownCam, TopDownSettings},
 };
-use crate::ui::{settings::AppSettings, ui_state::MouseInViewport};
+use crate::ui::{settings::AppSettings, ui_state::MouseInViewport, update_ui::UpdateUiSet};
 use bevy::{prelude::*, window::CursorGrabMode};
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString, IntoStaticStr};
 
 mod fly;
+mod gizmo_2d;
 mod orbit;
 mod topdown;
 
 pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((FlyCamPlugin, OrbitCamPlugin, TopDownCamPlugin))
+        app.add_plugins((FlyCamPlugin, OrbitCamPlugin, TopDownCamPlugin, Gizmo2dCamPlugin))
+            .configure_sets(Update, UpdateCameraSet.before(UpdateUiSet))
             .add_event::<CameraModeChanged>()
             .add_systems(Startup, add_ambient_light)
             .add_systems(Update, (cursor_grab, update_active_camera));
     }
 }
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct UpdateCameraSet;
 
 #[derive(PartialEq, Clone, Copy, Serialize, Deserialize, Debug, IntoStaticStr, EnumString, Display)]
 pub enum CameraMode {

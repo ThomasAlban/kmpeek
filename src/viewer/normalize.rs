@@ -1,6 +1,8 @@
 use crate::ui::settings::AppSettings;
 use bevy::prelude::*;
 
+use super::camera::Gizmo2dCam;
+
 pub struct NormalizePlugin;
 impl Plugin for NormalizePlugin {
     fn build(&self, app: &mut App) {
@@ -35,7 +37,7 @@ pub struct NormalizeInheritParent;
 // of entities which follow the transform of the parent but aren't necesssarily normalized
 fn update_normalize(
     mut p: ParamSet<(
-        Query<(&GlobalTransform, &Camera)>,
+        Query<(&GlobalTransform, &Camera), Without<Gizmo2dCam>>,
         Query<(&mut GlobalTransform, &Normalize, &ViewVisibility, Option<&Children>)>,
         Query<(&mut GlobalTransform, &Transform), With<NormalizeInheritParent>>,
     )>,
@@ -69,17 +71,11 @@ fn update_normalize(
     }
     let window = q_window.single();
 
-    let (mut camera_position, mut camera) = (None, None);
-    for cam in p.p0().iter() {
-        if cam.1.is_active {
-            if camera.is_some() {
-                panic!("More than one active camera");
-            }
-            (camera_position, camera) = (Some(cam.0.to_owned()), Some(cam.1.to_owned()));
-        }
-    }
-    let camera_position = camera_position.expect("Could not find active camera");
-    let camera = camera.expect("Could not find active camera");
+    let (camera_position, camera) = {
+        let q_cam = p.p0();
+        let res = q_cam.iter().find(|x| x.1.is_active).unwrap();
+        (res.0.to_owned(), res.1.to_owned())
+    };
 
     let view = camera_position.compute_matrix().inverse();
 

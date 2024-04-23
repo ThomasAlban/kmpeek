@@ -1,4 +1,3 @@
-pub mod area;
 pub mod components;
 pub mod meshes_materials;
 pub mod path;
@@ -7,7 +6,6 @@ pub mod sections;
 pub mod settings;
 
 use self::{
-    area::{show_area_boxes, BoxGizmoOptions},
     components::*,
     meshes_materials::{setup_kmp_meshes_materials, KmpMeshesMaterials},
     path::{spawn_path_section, traverse_paths, update_node_links, KmpPathNodeLink, RecalculatePaths},
@@ -33,7 +31,6 @@ impl Plugin for KmpPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<RecalculatePaths>()
             .init_resource::<KmpEditMode>()
-            .init_resource::<BoxGizmoOptions>()
             .add_systems(Startup, setup_kmp_meshes_materials.after(SetupAppSettingsSet))
             .add_systems(
                 Update,
@@ -42,7 +39,6 @@ impl Plugin for KmpPlugin {
                     update_node_links,
                     update_visible.run_if(resource_changed::<KmpVisibility>),
                     traverse_paths.run_if(on_event::<RecalculatePaths>()),
-                    show_area_boxes,
                 ),
             );
     }

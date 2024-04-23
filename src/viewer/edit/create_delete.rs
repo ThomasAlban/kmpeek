@@ -1,10 +1,11 @@
 use std::collections::HashSet;
 
-use super::select::Selected;
+use super::select::{SelectSet, Selected};
 use crate::{
     ui::ui_state::{MouseInViewport, ViewportRect},
     util::{ui_viewport_to_ndc, RaycastFromCam},
     viewer::{
+        camera::Gizmo2dCam,
         kcl_model::KCLModelSection,
         kmp::{
             components::{
@@ -20,13 +21,22 @@ use crate::{
 use bevy::prelude::*;
 use bevy_mod_raycast::prelude::*;
 
+pub struct CreateDeletePlugin;
+impl Plugin for CreateDeletePlugin {
+    fn build(&self, app: &mut App) {
+        app.add_event::<JustCreatedPoint>()
+            .add_systems(Update, create_point.before(SelectSet))
+            .add_systems(Update, delete_point.after(SelectSet));
+    }
+}
+
 #[derive(Event)]
 pub struct JustCreatedPoint(pub Entity);
 
-pub fn create_point(
+fn create_point(
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
-    q_camera: Query<(&Camera, &GlobalTransform)>,
+    q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
     q_window: Query<&Window>,
     viewport_rect: Res<ViewportRect>,
     mut raycast: Raycast,
@@ -122,7 +132,7 @@ pub fn create_point(
     ev_recalc_paths.send_default();
 }
 
-pub fn delete_point(
+fn delete_point(
     keys: Res<ButtonInput<KeyCode>>,
     mut q_selected: Query<Entity, With<Selected>>,
     mut q_kmp_path_node: Query<&mut KmpPathNode>,

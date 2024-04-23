@@ -1,7 +1,6 @@
 use crate::ui::{
     settings::AppSettings,
     ui_state::MouseInViewport,
-    update_ui::UpdateUiSet,
     viewport::{SetupViewportSet, ViewportImage},
 };
 use bevy::{
@@ -12,14 +11,15 @@ use bevy::{
     window::{CursorGrabMode, RequestRedraw},
 };
 use serde::{Deserialize, Serialize};
+use transform_gizmo_bevy::GizmoCamera;
 
-use super::CameraMode;
+use super::{CameraMode, UpdateCameraSet};
 
 pub struct FlyCamPlugin;
 impl Plugin for FlyCamPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, camera_setup.after(SetupViewportSet))
-            .add_systems(Update, (fly_cam_look, fly_cam_move).before(UpdateUiSet));
+            .add_systems(Update, (fly_cam_look, fly_cam_move).in_set(UpdateCameraSet));
     }
 }
 
@@ -89,6 +89,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
             ..default()
         },
         FlyCam,
+        GizmoCamera,
     ));
 }
 

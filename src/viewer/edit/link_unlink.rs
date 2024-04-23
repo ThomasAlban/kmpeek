@@ -1,14 +1,24 @@
-use super::select::Selected;
+use super::select::{SelectSet, Selected};
 use crate::{
     ui::ui_state::ViewportRect,
     util::{ui_viewport_to_ndc, RaycastFromCam},
-    viewer::kmp::{
-        components::{EnemyPathPoint, ItemPathPoint, KmpSelectablePoint},
-        path::KmpPathNode,
+    viewer::{
+        camera::Gizmo2dCam,
+        kmp::{
+            components::{EnemyPathPoint, ItemPathPoint, KmpSelectablePoint},
+            path::KmpPathNode,
+        },
     },
 };
 use bevy::prelude::*;
 use bevy_mod_raycast::prelude::*;
+
+pub struct LinkUnlinkPlugin;
+impl Plugin for LinkUnlinkPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, (link_points, unlink_points).after(SelectSet));
+    }
+}
 
 pub fn link_points(
     mut commands: Commands,
@@ -19,7 +29,7 @@ pub fn link_points(
     q_enemy_point: Query<Entity, With<EnemyPathPoint>>,
     q_item_point: Query<Entity, With<ItemPathPoint>>,
     q_transform: Query<&Transform, With<KmpSelectablePoint>>,
-    q_camera: Query<(&Camera, &GlobalTransform)>,
+    q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
     q_window: Query<&Window>,
     mut raycast: Raycast,
     viewport_rect: Res<ViewportRect>,

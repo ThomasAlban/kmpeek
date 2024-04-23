@@ -1,8 +1,7 @@
-use super::CameraMode;
+use super::{CameraMode, UpdateCameraSet};
 use crate::ui::{
     settings::AppSettings,
     ui_state::MouseInViewport,
-    update_ui::UpdateUiSet,
     viewport::{SetupViewportSet, ViewportImage},
 };
 use bevy::{
@@ -12,12 +11,13 @@ use bevy::{
     render::camera::RenderTarget,
 };
 use serde::{Deserialize, Serialize};
+use transform_gizmo_bevy::GizmoCamera;
 
 pub struct OrbitCamPlugin;
 impl Plugin for OrbitCamPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, camera_setup.after(SetupViewportSet))
-            .add_systems(Update, orbit_cam.before(UpdateUiSet));
+            .add_systems(Update, orbit_cam.in_set(UpdateCameraSet));
     }
 }
 
@@ -88,6 +88,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
             radius: OrbitSettings::default().start_pos.length(),
             ..default()
         },
+        GizmoCamera,
     ));
 }
 

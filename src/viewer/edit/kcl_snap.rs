@@ -1,16 +1,26 @@
-use super::{select::Selected, EditMode};
+use super::{
+    select::{SelectSet, Selected},
+    EditMode,
+};
 use crate::{
     ui::ui_state::{MouseInViewport, ViewportRect},
     util::{get_ray_from_cam, ui_viewport_to_ndc, RaycastFromCam},
-    viewer::kcl_model::KCLModelSection,
+    viewer::{camera::Gizmo2dCam, kcl_model::KCLModelSection},
 };
 use bevy::{prelude::*, utils::HashMap};
 use bevy_mod_raycast::prelude::*;
 
-pub fn snap_to_kcl(
+pub struct KclSnapPlugin;
+impl Plugin for KclSnapPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, snap_to_kcl.after(SelectSet));
+    }
+}
+
+fn snap_to_kcl(
     mut q_selected: Query<(&mut Transform, Entity), With<Selected>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
-    q_camera: Query<(&Camera, &GlobalTransform)>,
+    q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
     q_window: Query<&Window>,
     viewport_rect: Res<ViewportRect>,
     mut raycast: Raycast,

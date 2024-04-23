@@ -12,7 +12,6 @@ use bevy_mod_raycast::{
     immediate::{Raycast, RaycastSettings},
     primitives::IntersectionData,
 };
-use transform_gizmo_egui::mint::{Quaternion, Vector3, Vector4};
 
 // World <-> Ui Viewport
 pub fn world_to_ui_viewport(cam: (&Camera, &GlobalTransform), viewport_rect: Rect, world_pos: Vec3) -> Option<Vec2> {
@@ -47,23 +46,23 @@ pub fn screen_to_ui_viewport(screen_pos: Vec2, window: &Window, viewport_rect: R
     (screen_pos / window.scale_factor()) + viewport_rect.min
 }
 
-pub trait ToBevyQuat {
-    fn to_bevy_quat(self) -> Quat;
-}
-impl ToBevyQuat for Quaternion<f64> {
-    fn to_bevy_quat(self) -> Quat {
-        Quat::from_array([self.v.x as f32, self.v.y as f32, self.v.z as f32, self.s as f32])
-    }
-}
+// pub trait ToBevyQuat {
+//     fn to_bevy_quat(self) -> Quat;
+// }
+// impl ToBevyQuat for Quaternion<f64> {
+//     fn to_bevy_quat(self) -> Quat {
+//         Quat::from_array([self.v.x as f32, self.v.y as f32, self.v.z as f32, self.s as f32])
+//     }
+// }
 
-pub trait ToBevyVec3 {
-    fn to_bevy_vec3(self) -> Vec3;
-}
-impl ToBevyVec3 for Vector3<f64> {
-    fn to_bevy_vec3(self) -> Vec3 {
-        vec3(self.x as f32, self.y as f32, self.z as f32)
-    }
-}
+// pub trait ToBevyVec3 {
+//     fn to_bevy_vec3(self) -> Vec3;
+// }
+// impl ToBevyVec3 for Vector3<f64> {
+//     fn to_bevy_vec3(self) -> Vec3 {
+//         vec3(self.x as f32, self.y as f32, self.z as f32)
+//     }
+// }
 
 pub trait ToBevyVec2 {
     fn to_bevy_vec2(self) -> Vec2;
@@ -127,63 +126,63 @@ impl ToEguiRect for Rect {
 pub trait ToBevyTransform {
     fn to_bevy_transform(self) -> bevy::prelude::Transform;
 }
-impl ToBevyTransform for transform_gizmo_egui::math::Transform {
-    fn to_bevy_transform(self) -> bevy::prelude::Transform {
-        bevy::prelude::Transform {
-            translation: self.translation.to_bevy_vec3(),
-            rotation: self.rotation.to_bevy_quat(),
-            scale: self.scale.to_bevy_vec3(),
-        }
-    }
-}
-pub trait ToGizmoVec3 {
-    fn to_gizmo_vec3(self) -> Vector3<f64>;
-}
-impl ToGizmoVec3 for Vec3 {
-    fn to_gizmo_vec3(self) -> Vector3<f64> {
-        Vector3 {
-            x: self.x as f64,
-            y: self.y as f64,
-            z: self.z as f64,
-        }
-    }
-}
-pub trait ToGizmoVec4 {
-    fn to_gizmo_vec4(self) -> Vector4<f64>;
-}
-impl ToGizmoVec4 for Vec4 {
-    fn to_gizmo_vec4(self) -> Vector4<f64> {
-        Vector4 {
-            x: self.x as f64,
-            y: self.y as f64,
-            z: self.z as f64,
-            w: self.w as f64,
-        }
-    }
-}
-pub trait ToGizmoQuat {
-    fn to_gizmo_quat(self) -> transform_gizmo_egui::mint::Quaternion<f64>;
-}
-impl ToGizmoQuat for Quat {
-    fn to_gizmo_quat(self) -> transform_gizmo_egui::mint::Quaternion<f64> {
-        transform_gizmo_egui::mint::Quaternion {
-            v: self.xyz().to_gizmo_vec3(),
-            s: self.w as f64,
-        }
-    }
-}
-pub trait ToGizmoTransform {
-    fn to_gizmo_transform(self) -> transform_gizmo_egui::math::Transform;
-}
-impl ToGizmoTransform for Transform {
-    fn to_gizmo_transform(self) -> transform_gizmo_egui::math::Transform {
-        transform_gizmo_egui::math::Transform {
-            translation: self.translation.to_gizmo_vec3(),
-            rotation: self.rotation.to_gizmo_quat(),
-            scale: self.scale.to_gizmo_vec3(),
-        }
-    }
-}
+// impl ToBevyTransform for transform-gizmo-egui::math::Transform {
+//     fn to_bevy_transform(self) -> bevy::prelude::Transform {
+//         bevy::prelude::Transform {
+//             translation: self.translation.to_bevy_vec3(),
+//             rotation: self.rotation.to_bevy_quat(),
+//             scale: self.scale.to_bevy_vec3(),
+//         }
+//     }
+// }
+// pub trait ToGizmoVec3 {
+//     fn to_gizmo_vec3(self) -> Vector3<f64>;
+// }
+// impl ToGizmoVec3 for Vec3 {
+//     fn to_gizmo_vec3(self) -> Vector3<f64> {
+//         Vector3 {
+//             x: self.x as f64,
+//             y: self.y as f64,
+//             z: self.z as f64,
+//         }
+//     }
+// }
+// pub trait ToGizmoVec4 {
+//     fn to_gizmo_vec4(self) -> Vector4<f64>;
+// }
+// impl ToGizmoVec4 for Vec4 {
+//     fn to_gizmo_vec4(self) -> Vector4<f64> {
+//         Vector4 {
+//             x: self.x as f64,
+//             y: self.y as f64,
+//             z: self.z as f64,
+//             w: self.w as f64,
+//         }
+//     }
+// }
+// pub trait ToGizmoQuat {
+//     fn to_gizmo_quat(self) -> transform-gizmo-egui::mint::Quaternion<f64>;
+// }
+// impl ToGizmoQuat for Quat {
+//     fn to_gizmo_quat(self) -> transform-gizmo-egui::mint::Quaternion<f64> {
+//         transform-gizmo-egui::mint::Quaternion {
+//             v: self.xyz().to_gizmo_vec3(),
+//             s: self.w as f64,
+//         }
+//     }
+// }
+// pub trait ToGizmoTransform {
+//     fn to_gizmo_transform(self) -> transform-gizmo-egui::math::Transform;
+// }
+// impl ToGizmoTransform for Transform {
+//     fn to_gizmo_transform(self) -> transform-gizmo-egui::math::Transform {
+//         transform-gizmo-egui::math::Transform {
+//             translation: self.translation.to_gizmo_vec3(),
+//             rotation: self.rotation.to_gizmo_quat(),
+//             scale: self.scale.to_gizmo_vec3(),
+//         }
+//     }
+// }
 
 // Ray related stuff
 pub fn get_ray_from_cam(cam: (&Camera, &GlobalTransform), ndc: Vec2) -> Option<Ray3d> {

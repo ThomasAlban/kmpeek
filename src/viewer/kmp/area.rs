@@ -4,7 +4,7 @@ use super::{AreaPoint, AreaShape};
 use crate::{
     ui::{tabs::UiSubSection, ui_state::ViewportRect},
     util::{get_ray_from_cam, ui_viewport_to_ndc, world_to_ui_viewport, ToEguiPos2},
-    viewer::edit::{gizmo::GizmoRes, select::Selected},
+    viewer::{camera::Gizmo2dCam, edit::select::Selected},
 };
 use bevy::{
     ecs::system::SystemParam,
@@ -75,12 +75,11 @@ pub fn show_area_boxes(mut gizmos: Gizmos, q_areas: Query<(&mut Transform, &mut 
 #[derive(SystemParam)]
 pub struct ShowBoxHandles<'w, 's> {
     q_areas: Query<'w, 's, (Entity, &'static mut Transform, &'static mut AreaPoint), With<Selected>>,
-    q_camera: Query<'w, 's, (&'static Camera, &'static GlobalTransform), Without<Selected>>,
+    q_camera: Query<'w, 's, (&'static Camera, &'static GlobalTransform), (Without<Selected>, Without<Gizmo2dCam>)>,
     viewport_rect: Res<'w, ViewportRect>,
     q_window: Query<'w, 's, &'static Window>,
     box_gizmo_options: ResMut<'w, BoxGizmoOptions>,
     mouse_buttons: Res<'w, ButtonInput<MouseButton>>,
-    gizmo: Res<'w, GizmoRes>,
 
     current_interaction: Local<'s, Option<(Entity, usize, Vec2)>>,
     initial_mouse_pos: Local<'s, Vec2>,
@@ -164,7 +163,9 @@ impl UiSubSection for ShowBoxHandles<'_, '_> {
                 }
             }
 
-            if self.mouse_buttons.pressed(MouseButton::Left) && !self.gizmo.is_focused() {
+            if self.mouse_buttons.pressed(MouseButton::Left)
+            /* && !self.gizmo.is_focused() */
+            {
                 if let (Some((e, i, mouse_offset)), Some(mouse_pos)) =
                     (*self.current_interaction, window.cursor_position())
                 {

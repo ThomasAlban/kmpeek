@@ -1,39 +1,55 @@
+use super::area_gizmo::AreaGizmoOptions;
 use super::create_delete::JustCreatedPoint;
-use super::gizmo::GizmoRes;
 use super::EditMode;
-use crate::ui::ui_state::{MouseInViewport, ViewportRect};
+use crate::ui::ui_state::{KmpVisibility, MouseInViewport, ViewportRect};
+use crate::ui::update_ui::UpdateUiSet;
 use crate::util::{ui_viewport_to_ndc, world_to_ui_viewport, RaycastFromCam};
-use crate::viewer::kmp::area::BoxGizmoOptions;
+use crate::viewer::camera::Gizmo2dCam;
 use crate::viewer::kmp::components::KmpSelectablePoint;
 use crate::viewer::kmp::sections::KmpEditMode;
 use bevy::prelude::*;
-use bevy_egui::EguiContexts;
 use bevy_mod_outline::*;
 use bevy_mod_raycast::prelude::*;
+use transform_gizmo_bevy::GizmoTarget;
+
+#[derive(SystemSet, Debug, PartialEq, Eq, Hash, Clone)]
+pub struct SelectSet;
+
+pub struct SelectPlugin;
+impl Plugin for SelectPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<SelectBox>()
+            .add_systems(Update, (select, select_box).in_set(SelectSet))
+            .add_systems(Update, update_outlines.after(SelectSet))
+            .add_systems(
+                Update,
+                (
+                    deselect_if_not_visible.run_if(resource_changed::<KmpVisibility>),
+                    deselect_on_mode_change.after(UpdateUiSet),
+                ),
+            );
+    }
+}
 
 #[derive(Component, Default)]
 pub struct Selected;
 
-pub fn select(
+fn select(
     mouse_in_viewport: Res<MouseInViewport>,
     viewport_rect: Res<ViewportRect>,
     q_window: Query<&Window>,
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
-    q_camera: Query<(&Camera, &GlobalTransform)>,
+    q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
+    q_gizmos: Query<&GizmoTarget>,
     mut raycast: Raycast,
     q_kmp_section: Query<&KmpSelectablePoint>,
     mut commands: Commands,
-    gizmo: Res<GizmoRes>,
-    box_gizmo_options: Res<BoxGizmoOptions>,
+    area_gizmo_opts: Res<AreaGizmoOptions>,
     q_selected: Query<Entity, With<Selected>>,
-    q_visibility: Query<&Visibility>,
-    mut contexts: EguiContexts,
     mut ev_just_created_point: EventReader<JustCreatedPoint>,
 ) {
-    if !mouse_in_viewport.0 || !mouse_buttons.just_pressed(MouseButton::Left)
-    // || contexts.ctx_mut().wants_pointer_input()
-    {
+    if !mouse_in_viewport.0 || !mouse_buttons.just_pressed(MouseButton::Left) {
         return;
     }
     if ev_just_created_point.is_empty() && (keys.pressed(KeyCode::AltLeft)) || keys.pressed(KeyCode::AltRight) {
@@ -44,7 +60,7 @@ pub fn select(
         return;
     };
 
-    if gizmo.is_focused() || box_gizmo_options.mouse_interacting {
+    if q_gizmos.iter().any(|x| x.is_focused()) || area_gizmo_opts.mouse_hovering {
         return;
     }
     let shift_key_down = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
@@ -79,7 +95,7 @@ pub fn select(
     }
 }
 
-pub fn deselect_if_not_visible(mut commands: Commands, q_selected: Query<(Entity, &Visibility), With<Selected>>) {
+fn deselect_if_not_visible(mut commands: Commands, q_selected: Query<(Entity, &Visibility), With<Selected>>) {
     for (e, selected) in q_selected.iter() {
         if selected != Visibility::Visible {
             commands.entity(e).remove::<Selected>();
@@ -87,7 +103,7 @@ pub fn deselect_if_not_visible(mut commands: Commands, q_selected: Query<(Entity
     }
 }
 
-pub fn deselect_on_mode_change(
+fn deselect_on_mode_change(
     edit_mode: Res<KmpEditMode>,
     mut commands: Commands,
     q_selected: Query<Entity, With<Selected>>,
@@ -108,13 +124,13 @@ impl SelectBox {
 }
 
 // this handles working out the select box rectangle and actually selecting stuff (the visuals for the box are handled in the UI section)
-pub fn select_box(
+fn select_box(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_window: Query<&Window>,
     edit_mode: Res<EditMode>,
     mouse_in_viewport: Res<MouseInViewport>,
     q_selectable: Query<(&Transform, Entity, &Visibility, Has<Selected>), With<KmpSelectablePoint>>,
-    q_camera: Query<(&Camera, &GlobalTransform)>,
+    q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
     mut commands: Commands,
     mut select_box: ResMut<SelectBox>,
     viewport_rect: Res<ViewportRect>,
@@ -173,7 +189,7 @@ pub fn select_box(
 }
 
 // put outlines on any entities which are selected, and remove them if they aren't selected
-pub fn update_outlines(
+fn update_outlines(
     q_entities: Query<(Entity, Has<Selected>, &Visibility), With<KmpSelectablePoint>>,
     mut q_outline: Query<&mut OutlineVolume>,
 ) {
