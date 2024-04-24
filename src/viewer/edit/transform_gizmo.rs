@@ -1,5 +1,5 @@
 use super::{select::Selected, EditMode};
-use crate::{ui::ui_state::ViewportRect, viewer::kmp::components::KmpSelectablePoint};
+use crate::{ui::viewport::ViewportInfo, viewer::kmp::components::KmpSelectablePoint};
 use bevy::prelude::*;
 use transform_gizmo_bevy::{enum_set, GizmoMode, GizmoOptions, GizmoTarget, GizmoVisuals};
 
@@ -25,13 +25,12 @@ fn update_gizmo(
     edit_mode: Res<EditMode>,
     q_selectable: Query<(Entity, Has<Selected>, Has<GizmoTarget>), With<KmpSelectablePoint>>,
     mut gizmo_options: ResMut<GizmoOptions>,
-    viewport_rect: Res<ViewportRect>,
+    viewport_info: Res<ViewportInfo>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
     // update gizmo viewport
-    if viewport_rect.is_changed() {
-        gizmo_options.viewport_rect = Some(viewport_rect.0);
-    }
+    gizmo_options.viewport_rect = Some(viewport_info.viewport_rect);
+
     // update gizmo mode
     if edit_mode.is_changed() {
         match *edit_mode {

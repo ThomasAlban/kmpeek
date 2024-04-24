@@ -1,8 +1,7 @@
 use super::{CameraMode, UpdateCameraSet};
 use crate::ui::{
     settings::AppSettings,
-    ui_state::MouseInViewport,
-    viewport::{SetupViewportSet, ViewportImage},
+    viewport::{SetupViewportSet, ViewportImage, ViewportInfo},
 };
 use bevy::{
     input::mouse::{MouseMotion, MouseWheel},
@@ -91,9 +90,9 @@ fn topdown_cam(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut q_topdown_cam: Query<(&mut Transform, &mut Projection), With<TopDownCam>>,
     settings: Res<AppSettings>,
-    mouse_in_viewport: Res<MouseInViewport>,
+    viewport_info: Res<ViewportInfo>,
 ) {
-    if !mouse_in_viewport.0 || settings.camera.mode != CameraMode::TopDown {
+    if !viewport_info.mouse_in_viewport || settings.camera.mode != CameraMode::TopDown {
         return;
     }
 

@@ -1,12 +1,11 @@
+#![allow(dead_code)]
+
 pub mod kcl_file;
 pub mod kmp_file;
 pub mod read_write_arrays;
 pub mod shapes;
 
-use bevy::{
-    math::{vec2, vec3},
-    prelude::*,
-};
+use bevy::{math::vec2, prelude::*};
 use bevy_egui::egui::{self, Pos2};
 use bevy_mod_raycast::{
     immediate::{Raycast, RaycastSettings},

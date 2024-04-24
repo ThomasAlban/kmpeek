@@ -2,9 +2,8 @@ use super::UiSubSection;
 use crate::{
     ui::{
         settings::AppSettings,
-        ui_state::{MouseInViewport, ViewportRect},
         util::{button_triggered_popup, image_selectable_value, Icons},
-        viewport::ViewportImage,
+        viewport::{ViewportImage, ViewportInfo},
     },
     viewer::{
         camera::{CameraMode, CameraModeChanged},
@@ -12,19 +11,20 @@ use crate::{
     },
 };
 use bevy::{ecs::system::SystemParam, math::vec2, prelude::*, render::render_resource::Extent3d};
-use bevy_egui::egui::{self, Color32, Margin, Pos2, Rounding, Sense, Stroke, Ui};
+use bevy_egui::egui::{self, Color32, Margin, Pos2, Response, Rounding, Sense, Stroke, Ui};
+use transform_gizmo_bevy::{config::TransformPivotPoint, GizmoOptions, GizmoOrientation};
 
 #[derive(SystemParam)]
 struct ViewportParams<'w, 's> {
     q_window: Query<'w, 's, &'static Window>,
     image_assets: ResMut<'w, Assets<Image>>,
     viewport: ResMut<'w, ViewportImage>,
-    mouse_in_viewport: ResMut<'w, MouseInViewport>,
-    viewport_rect: ResMut<'w, ViewportRect>,
+    viewport_info: ResMut<'w, ViewportInfo>,
     edit_mode: ResMut<'w, EditMode>,
     select_box: Res<'w, SelectBox>,
     settings: ResMut<'w, AppSettings>,
     ev_camera_mode_changed: EventWriter<'w, CameraModeChanged>,
+    gizmo_options: ResMut<'w, GizmoOptions>,
 }
 
 #[derive(SystemParam)]
@@ -79,21 +79,24 @@ impl UiSubSection for ShowViewportTab<'_, '_> {
                     viewport_rect.size().to_array(),
                 ))
                 .sense(Sense::click_and_drag()),
-            );
+            )
         });
 
-        self.p.mouse_in_viewport.0 = ui.rect_contains_pointer(egui_viewport_rect);
+        self.p.viewport_info.mouse_in_viewport = ui.rect_contains_pointer(egui_viewport_rect);
 
-        self.p.viewport_rect.0 = viewport_rect;
+        self.p.viewport_info.viewport_rect = viewport_rect;
 
         self.show_select_box(ui, egui_viewport_rect);
 
-        self.show_overlayed_ui(ui, egui_viewport_rect);
+        let responses = self.show_overlayed_ui(ui, egui_viewport_rect);
+
+        self.p.viewport_info.mouse_on_overlayed_ui = responses.iter().any(|x| x.contains_pointer());
     }
 }
 
 impl ShowViewportTab<'_, '_> {
-    fn show_overlayed_ui(&mut self, ui: &mut Ui, viewport_rect: egui::Rect) {
+    fn show_overlayed_ui(&mut self, ui: &mut Ui, viewport_rect: egui::Rect) -> Vec<Response> {
+        let mut responses = Vec::new();
         // viewport overlayed ui
         ui.allocate_ui_at_rect(viewport_rect, |ui| {
             ui.style_mut().spacing.item_spacing = egui::Vec2::splat(5.);
@@ -102,76 +105,66 @@ impl ShowViewportTab<'_, '_> {
                 // popups for things such as gizmo options, camera options, etc
                 ui.horizontal(|ui| {
                     let gizmo_options_btn = ui.button("Gizmo Options");
-                    button_triggered_popup(ui, "gizmo_options_popup", gizmo_options_btn, |ui| {
+                    responses.push(gizmo_options_btn.clone());
+                    let r = button_triggered_popup(ui, "gizmo_options_popup", gizmo_options_btn, |ui| {
                         ui.style_mut().spacing.button_padding = egui::Vec2::ZERO;
                         let size = 25.;
-                        ui.label("Origin:");
+                        ui.label("Pivot:");
                         ui.horizontal(|ui| {
-                            // let origin = &mut *p.gizmo_origin;
-
-                            // image_selectable_value(
-                            //     ui,
-                            //     origin,
-                            //     GizmoOrigin::Mean,
-                            //     Icons::origin_mean(ui.ctx(), size),
-                            //     size,
-                            // )
-                            // .on_hover_text_at_pointer(
-                            //     "Takes the mean average of each point's position, and places the gizmo there",
-                            // );
-                            // image_selectable_value(
-                            //     ui,
-                            //     origin,
-                            //     GizmoOrigin::FirstSelected,
-                            //     Icons::origin_first_selected(ui.ctx(), size),
-                            //     size,
-                            // )
-                            // .on_hover_text_at_pointer("Places the gizmo at the first selected point");
-                            // image_selectable_value(
-                            //     ui,
-                            //     origin,
-                            //     GizmoOrigin::Individual,
-                            //     Icons::origin_individual(ui.ctx(), size),
-                            //     size,
-                            // )
-                            // .on_hover_text_at_pointer(
-                            //     "Places the gizmo at the first selected point, with each point's origin as its own",
-                            // );
+                            let pivot = &mut self.p.gizmo_options.pivot_point;
+                            image_selectable_value(
+                                ui,
+                                pivot,
+                                TransformPivotPoint::MedianPoint,
+                                Icons::pivot_median(ui.ctx(), size),
+                                size,
+                            )
+                            .on_hover_text_at_pointer("Median point");
+                            image_selectable_value(
+                                ui,
+                                pivot,
+                                TransformPivotPoint::IndividualOrigins,
+                                Icons::pivot_individual(ui.ctx(), size),
+                                size,
+                            )
+                            .on_hover_text_at_pointer("Individual origins");
                         });
 
-                        ui.label("Orientation");
+                        ui.label("Orientation:");
                         ui.horizontal(|ui| {
-                            // let mut orientation = p.gizmo.config().orientation;
-                            // let before = orientation;
-                            // image_selectable_value(
-                            //     ui,
-                            //     &mut orientation,
-                            //     GizmoOrientation::Global,
-                            //     Icons::orient_global(ui.ctx(), size),
-                            //     size,
-                            // )
-                            // .on_hover_text_at_pointer("Orient the gizmo to the global space");
-                            // image_selectable_value(
-                            //     ui,
-                            //     &mut orientation,
-                            //     GizmoOrientation::Local,
-                            //     Icons::orient_local(ui.ctx(), size),
-                            //     size,
-                            // )
-                            // .on_hover_text_at_pointer("Orient the gizmo to the selected point");
-
-                            // if before != orientation {
-                            //     p.gizmo.update_config(transform_gizmo_egui::GizmoConfig {
-                            //         orientation,
-                            //         ..default()
-                            //     })
-                            // }
+                            let orientation = &mut self.p.gizmo_options.gizmo_orientation;
+                            image_selectable_value(
+                                ui,
+                                orientation,
+                                GizmoOrientation::Global,
+                                Icons::orient_global(ui.ctx(), size),
+                                size,
+                            )
+                            .on_hover_text_at_pointer("Global orientation");
+                            image_selectable_value(
+                                ui,
+                                orientation,
+                                GizmoOrientation::Local,
+                                Icons::orient_local(ui.ctx(), size),
+                                size,
+                            )
+                            .on_hover_text_at_pointer("Local orientation");
+                        });
+                        ui.horizontal(|ui| {
+                            ui.checkbox(&mut self.p.gizmo_options.group_targets, "Group targets")
+                                .on_hover_text_at_pointer(
+                                    "Use a single gizmo for all targets, rather than individual gizmos",
+                                )
                         });
                     });
+                    if let Some(r) = r {
+                        responses.push(r);
+                    }
 
                     let camera_mode = &mut self.p.settings.camera.mode;
                     let camera_btn = ui.button(format!("Camera: {}", camera_mode));
-                    button_triggered_popup(ui, "camera_button_popup", camera_btn, |ui| {
+                    responses.push(camera_btn.clone());
+                    let r = button_triggered_popup(ui, "camera_button_popup", camera_btn, |ui| {
                         ui.horizontal(|ui| {
                             ui.label("Camera Mode:");
                             if ui.selectable_value(camera_mode, CameraMode::Fly, "Fly").clicked() {
@@ -190,24 +183,31 @@ impl ShowViewportTab<'_, '_> {
                             }
                         });
                     });
+                    if let Some(r) = r {
+                        responses.push(r);
+                    }
                 });
                 // cursor/gizmo mode
-                ui.vertical(|ui| {
-                    ui.style_mut().spacing.button_padding = egui::Vec2::ZERO;
-                    let mode = &mut *self.p.edit_mode;
-                    let size = 35.;
+                let vertical_res = ui
+                    .vertical(|ui| {
+                        ui.style_mut().spacing.button_padding = egui::Vec2::ZERO;
+                        let mode = &mut *self.p.edit_mode;
+                        let size = 35.;
 
-                    image_selectable_value(ui, mode, EditMode::Tweak, Icons::tweak(ui.ctx(), size), size)
-                        .on_hover_text_at_pointer("Drag points around freely");
-                    image_selectable_value(ui, mode, EditMode::SelectBox, Icons::select_box(ui.ctx(), size), size)
-                        .on_hover_text_at_pointer("Select points with a selection box");
-                    image_selectable_value(ui, mode, EditMode::Translate, Icons::translate(ui.ctx(), size), size)
-                        .on_hover_text_at_pointer("Translate points with a gizmo");
-                    image_selectable_value(ui, mode, EditMode::Rotate, Icons::rotate(ui.ctx(), size), size)
-                        .on_hover_text_at_pointer("Rotate points with a gizmo");
-                });
+                        image_selectable_value(ui, mode, EditMode::Tweak, Icons::tweak(ui.ctx(), size), size)
+                            .on_hover_text_at_pointer("Drag points around freely");
+                        image_selectable_value(ui, mode, EditMode::SelectBox, Icons::select_box(ui.ctx(), size), size)
+                            .on_hover_text_at_pointer("Select points with a selection box");
+                        image_selectable_value(ui, mode, EditMode::Translate, Icons::translate(ui.ctx(), size), size)
+                            .on_hover_text_at_pointer("Translate points with a gizmo");
+                        image_selectable_value(ui, mode, EditMode::Rotate, Icons::rotate(ui.ctx(), size), size)
+                            .on_hover_text_at_pointer("Rotate points with a gizmo");
+                    })
+                    .response;
+                responses.push(vertical_res);
             });
         });
+        responses
     }
 
     fn show_select_box(&mut self, ui: &mut Ui, viewport_rect: egui::Rect) {

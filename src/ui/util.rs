@@ -345,16 +345,22 @@ pub fn framed_collapsing_header<R>(
         .show_unindented(ui, add_body)
 }
 
-pub fn button_triggered_popup<R>(ui: &mut Ui, id: impl Hash, btn: Response, add_contents: impl FnOnce(&mut Ui) -> R) {
+pub fn button_triggered_popup<R>(
+    ui: &mut Ui,
+    id: impl Hash,
+    btn: Response,
+    add_contents: impl FnOnce(&mut Ui) -> R,
+) -> Option<Response> {
     let popup_id = ui.make_persistent_id(id);
     if btn.clicked() {
         ui.memory_mut(|mem| mem.toggle_popup(popup_id));
     }
+    let mut res: Option<Response> = None;
 
     if ui.memory(|mem| mem.is_popup_open(popup_id)) {
         let (pos, pivot) = (btn.rect.left_bottom(), Align2::LEFT_TOP);
 
-        let res = Area::new(popup_id)
+        let r = Area::new(popup_id)
             .order(Order::Foreground)
             .constrain(true)
             .fixed_pos(pos)
@@ -371,14 +377,17 @@ pub fn button_triggered_popup<R>(ui: &mut Ui, id: impl Hash, btn: Response, add_
                         .inner
                     })
                     .inner
-            });
+            })
+            .response;
+        res = Some(r.clone());
 
-        let clicked_elsewhere = res.response.clicked_elsewhere() && btn.clicked_elsewhere();
+        let clicked_elsewhere = r.clicked_elsewhere() && btn.clicked_elsewhere();
 
         if ui.input(|i| i.key_pressed(egui::Key::Escape)) || clicked_elsewhere {
             ui.memory_mut(|mem| mem.close_popup());
         }
     }
+    res
 }
 
 pub fn view_icon_btn(ui: &mut Ui, checked: &mut bool) -> Response {
@@ -440,19 +449,19 @@ impl Icons {
         svg_image(include_image!("../../assets/icons/track_info.svg"), ctx, size.into())
     }
 
-    pub fn origin_mean<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(include_image!("../../assets/icons/origin_mean.svg"), ctx, size.into())
+    pub fn pivot_median<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
+        svg_image(include_image!("../../assets/icons/pivot_median.svg"), ctx, size.into())
     }
-    pub fn origin_first_selected<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
+    pub fn pivot_first_selected<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
         svg_image(
-            include_image!("../../assets/icons/origin_first_selected.svg"),
+            include_image!("../../assets/icons/pivot_first_selected.svg"),
             ctx,
             size.into(),
         )
     }
-    pub fn origin_individual<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
+    pub fn pivot_individual<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
         svg_image(
-            include_image!("../../assets/icons/origin_individual.svg"),
+            include_image!("../../assets/icons/pivot_individual.svg"),
             ctx,
             size.into(),
         )

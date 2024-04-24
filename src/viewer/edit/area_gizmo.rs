@@ -1,5 +1,5 @@
 use crate::{
-    ui::ui_state::ViewportRect,
+    ui::viewport::ViewportInfo,
     util::{get_ray_from_cam, ui_viewport_to_ndc, world_to_ui_viewport},
     viewer::{
         camera::Gizmo2dCam,
@@ -33,6 +33,7 @@ impl Plugin for AreaGizmoPlugin {
         })
         .init_resource::<AreaGizmoOptions>()
         .add_systems(Update, draw_area_bounds)
+        // drawing handles after TransformPropagate fixes an issue where they would lag behind the camera position for 1 frame
         .add_systems(PostUpdate, draw_area_handles.after(TransformSystem::TransformPropagate));
     }
 }
@@ -98,7 +99,7 @@ fn draw_area_handles(
     mut q_areas: Query<(Entity, &mut Transform, &mut AreaPoint), With<Selected>>,
     q_cam: Query<(&Camera, &GlobalTransform), (Without<Selected>, Without<Gizmo2dCam>)>,
     q_gizmo_cam: Query<(&Camera, &GlobalTransform), With<Gizmo2dCam>>,
-    viewport_rect: Res<ViewportRect>,
+    viewport_info: Res<ViewportInfo>,
     q_window: Query<&Window>,
     mut area_gizmo_opts: ResMut<AreaGizmoOptions>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
@@ -158,7 +159,7 @@ fn draw_area_handles(
             };
 
             let ndc_pos = cam.0.world_to_ndc(cam.1, pos);
-            let viewport_pos = world_to_ui_viewport(cam, viewport_rect.0, pos);
+            let viewport_pos = world_to_ui_viewport(cam, viewport_info.viewport_rect, pos);
 
             handles_pos[i] = pos;
             handles_normal[i] = normal;
@@ -215,9 +216,9 @@ fn draw_area_handles(
                     // this adds a certain amount of 'wiggle room' in the mouse position before it actually starts
                     // dragging the point
                     let mouse_ndc = if initial_mouse_pos.distance(mouse_pos) > LENIENCY_BEFORE_DRAG {
-                        ui_viewport_to_ndc(mouse_pos + mouse_offset, viewport_rect.0)
+                        ui_viewport_to_ndc(mouse_pos + mouse_offset, viewport_info.viewport_rect)
                     } else {
-                        ui_viewport_to_ndc(*initial_mouse_pos + mouse_offset, viewport_rect.0)
+                        ui_viewport_to_ndc(*initial_mouse_pos + mouse_offset, viewport_info.viewport_rect)
                     };
 
                     // send out a ray from the mouse

@@ -3,7 +3,7 @@ use super::{
     EditMode,
 };
 use crate::{
-    ui::ui_state::{MouseInViewport, ViewportRect},
+    ui::viewport::ViewportInfo,
     util::{get_ray_from_cam, ui_viewport_to_ndc, RaycastFromCam},
     viewer::{camera::Gizmo2dCam, kcl_model::KCLModelSection},
 };
@@ -22,18 +22,17 @@ fn snap_to_kcl(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
     q_window: Query<&Window>,
-    viewport_rect: Res<ViewportRect>,
     mut raycast: Raycast,
     q_kcl: Query<(), With<KCLModelSection>>,
     edit_mode: Res<EditMode>,
-    mouse_in_viewport: Res<MouseInViewport>,
+    viewport_info: Res<ViewportInfo>,
 
     mut initial_offset_ndc: Local<Vec2>,
     mut initial_intersection_point: Local<Vec3>,
     mut initial_mouse_pos: Local<Vec2>,
     mut position_differences: Local<HashMap<Entity, Vec3>>,
 ) {
-    if *edit_mode != EditMode::Tweak || !mouse_in_viewport.0 {
+    if *edit_mode != EditMode::Tweak || !viewport_info.mouse_in_viewport {
         return;
     }
 
@@ -52,7 +51,7 @@ fn snap_to_kcl(
     // get the active camera
     let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
 
-    let mouse_pos_ndc = ui_viewport_to_ndc(mouse_pos, viewport_rect.0);
+    let mouse_pos_ndc = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
 
     if mouse_buttons.just_pressed(MouseButton::Left) {
         *initial_mouse_pos = mouse_pos;

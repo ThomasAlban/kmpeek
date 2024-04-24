@@ -286,6 +286,7 @@ pub struct BattleFinishPoint {
 //
 
 pub struct KmpError {
+    #[allow(unused)]
     message: String,
 }
 impl KmpError {

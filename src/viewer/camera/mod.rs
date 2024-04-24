@@ -5,7 +5,7 @@ pub use self::{
     orbit::{OrbitCam, OrbitSettings},
     topdown::{TopDownCam, TopDownSettings},
 };
-use crate::ui::{settings::AppSettings, ui_state::MouseInViewport, update_ui::UpdateUiSet};
+use crate::ui::{settings::AppSettings, update_ui::UpdateUiSet, viewport::ViewportInfo};
 use bevy::{prelude::*, window::CursorGrabMode};
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString, IntoStaticStr};
@@ -64,9 +64,9 @@ fn cursor_grab(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut q_window: Query<&mut Window>,
     settings: Res<AppSettings>,
-    mouse_in_viewport: Res<MouseInViewport>,
+    viewport_info: Res<ViewportInfo>,
 ) {
-    if !mouse_in_viewport.0 {
+    if !viewport_info.mouse_in_viewport {
         return;
     }
     let mut window = q_window.get_single_mut().unwrap();

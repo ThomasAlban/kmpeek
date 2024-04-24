@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use super::select::{SelectSet, Selected};
 use crate::{
-    ui::ui_state::{MouseInViewport, ViewportRect},
+    ui::viewport::ViewportInfo,
     util::{ui_viewport_to_ndc, RaycastFromCam},
     viewer::{
         camera::Gizmo2dCam,
@@ -38,10 +38,9 @@ fn create_point(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
     q_window: Query<&Window>,
-    viewport_rect: Res<ViewportRect>,
+    viewport_info: Res<ViewportInfo>,
     mut raycast: Raycast,
     q_kcl: Query<(), With<KCLModelSection>>,
-    q_visibility: Query<&Visibility>,
     kmp_edit_mode: Res<KmpEditMode>,
     kmp_meshes_materials: Res<KmpMeshesMaterials>,
     mut commands: Commands,
@@ -68,7 +67,7 @@ fn create_point(
     // get the active camera
     let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
 
-    let ndc_mouse_pos = ui_viewport_to_ndc(mouse_pos, viewport_rect.0);
+    let ndc_mouse_pos = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
     let mouse_ray = RaycastFromCam::new(cam, ndc_mouse_pos, &mut raycast).cast();
 
     if mouse_ray.iter().any(|e| q_kmp_pts.0.contains(e.0)) {
@@ -137,9 +136,9 @@ fn delete_point(
     mut q_selected: Query<Entity, With<Selected>>,
     mut q_kmp_path_node: Query<&mut KmpPathNode>,
     mut commands: Commands,
-    mouse_in_viewport: Res<MouseInViewport>,
+    viewport_info: Res<ViewportInfo>,
 ) {
-    if !mouse_in_viewport.0 {
+    if !viewport_info.mouse_in_viewport {
         return;
     };
     if !keys.just_pressed(KeyCode::Backspace) && !keys.just_pressed(KeyCode::Delete) {

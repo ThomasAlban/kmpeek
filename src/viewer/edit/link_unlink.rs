@@ -1,11 +1,11 @@
 use super::select::{SelectSet, Selected};
 use crate::{
-    ui::ui_state::ViewportRect,
+    ui::viewport::ViewportInfo,
     util::{ui_viewport_to_ndc, RaycastFromCam},
     viewer::{
         camera::Gizmo2dCam,
         kmp::{
-            components::{EnemyPathPoint, ItemPathPoint, KmpSelectablePoint},
+            components::{EnemyPathPoint, KmpSelectablePoint},
             path::KmpPathNode,
         },
     },
@@ -25,15 +25,12 @@ pub fn link_points(
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_selected: Query<Entity, With<Selected>>,
-    q_visibility: Query<&Visibility>,
     q_enemy_point: Query<Entity, With<EnemyPathPoint>>,
-    q_item_point: Query<Entity, With<ItemPathPoint>>,
     q_transform: Query<&Transform, With<KmpSelectablePoint>>,
     q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
     q_window: Query<&Window>,
     mut raycast: Raycast,
-    viewport_rect: Res<ViewportRect>,
-    q_kmp_path_node: Query<&KmpPathNode>,
+    viewport_info: Res<ViewportInfo>,
 ) {
     if !mouse_buttons.just_pressed(MouseButton::Left) {
         return;
@@ -48,7 +45,7 @@ pub fn link_points(
         return;
     };
     let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
-    let ndc_mouse_pos = ui_viewport_to_ndc(mouse_pos, viewport_rect.0);
+    let ndc_mouse_pos = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
     let ray = RaycastFromCam::new(cam, ndc_mouse_pos, &mut raycast)
         .filter(&|e| q_transform.contains(e))
         .cast();
@@ -58,7 +55,7 @@ pub fn link_points(
     };
 
     if q_enemy_point.contains(*alt_clicked_point) {
-        let node = q_kmp_path_node.get(*alt_clicked_point).unwrap();
+        //let node = q_kmp_path_node.get(*alt_clicked_point).unwrap();
         // we have just alt clicked an enemy point, link any selected enemy points to this
         for selected in q_selected.iter().filter(|e| q_enemy_point.contains(*e)) {
             let alt_clicked_point = *alt_clicked_point;

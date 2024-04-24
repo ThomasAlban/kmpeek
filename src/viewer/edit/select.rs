@@ -1,13 +1,15 @@
 use super::area_gizmo::AreaGizmoOptions;
 use super::create_delete::JustCreatedPoint;
 use super::EditMode;
-use crate::ui::ui_state::{KmpVisibility, MouseInViewport, ViewportRect};
+use crate::ui::ui_state::KmpVisibility;
 use crate::ui::update_ui::UpdateUiSet;
+use crate::ui::viewport::ViewportInfo;
 use crate::util::{ui_viewport_to_ndc, world_to_ui_viewport, RaycastFromCam};
 use crate::viewer::camera::Gizmo2dCam;
 use crate::viewer::kmp::components::KmpSelectablePoint;
 use crate::viewer::kmp::sections::KmpEditMode;
 use bevy::prelude::*;
+use bevy_egui::EguiContexts;
 use bevy_mod_outline::*;
 use bevy_mod_raycast::prelude::*;
 use transform_gizmo_bevy::GizmoTarget;
@@ -35,8 +37,7 @@ impl Plugin for SelectPlugin {
 pub struct Selected;
 
 fn select(
-    mouse_in_viewport: Res<MouseInViewport>,
-    viewport_rect: Res<ViewportRect>,
+    viewport_info: Res<ViewportInfo>,
     q_window: Query<&Window>,
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
@@ -49,26 +50,26 @@ fn select(
     q_selected: Query<Entity, With<Selected>>,
     mut ev_just_created_point: EventReader<JustCreatedPoint>,
 ) {
-    if !mouse_in_viewport.0 || !mouse_buttons.just_pressed(MouseButton::Left) {
+    if !viewport_info.mouse_in_viewport
+        || viewport_info.mouse_on_overlayed_ui
+        || !mouse_buttons.just_pressed(MouseButton::Left)
+        || (ev_just_created_point.is_empty() && (keys.pressed(KeyCode::AltLeft)) || keys.pressed(KeyCode::AltRight))
+        || area_gizmo_opts.mouse_hovering
+        || q_gizmos.iter().any(|x| x.is_focused())
+    {
         return;
     }
-    if ev_just_created_point.is_empty() && (keys.pressed(KeyCode::AltLeft)) || keys.pressed(KeyCode::AltRight) {
-        return;
-    }
-    let window = q_window.single();
-    let Some(mouse_pos) = window.cursor_position() else {
+
+    let Some(mouse_pos) = q_window.single().cursor_position() else {
         return;
     };
 
-    if q_gizmos.iter().any(|x| x.is_focused()) || area_gizmo_opts.mouse_hovering {
-        return;
-    }
     let shift_key_down = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
 
     // get the active camera
     let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
 
-    let mouse_pos_ndc = ui_viewport_to_ndc(mouse_pos, viewport_rect.0);
+    let mouse_pos_ndc = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
 
     let intersections = RaycastFromCam::new(cam, mouse_pos_ndc, &mut raycast)
         .filter(&|e| q_kmp_section.contains(e))
@@ -128,12 +129,11 @@ fn select_box(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_window: Query<&Window>,
     edit_mode: Res<EditMode>,
-    mouse_in_viewport: Res<MouseInViewport>,
+    viewport_info: Res<ViewportInfo>,
     q_selectable: Query<(&Transform, Entity, &Visibility, Has<Selected>), With<KmpSelectablePoint>>,
     q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
     mut commands: Commands,
     mut select_box: ResMut<SelectBox>,
-    viewport_rect: Res<ViewportRect>,
     mut initial_mouse_pos: Local<Vec2>,
 ) {
     if *edit_mode != EditMode::SelectBox {
@@ -154,7 +154,7 @@ fn select_box(
         && initial_mouse_pos.distance(mouse_pos) > SelectBox::LENIENCY_BEFORE_SELECT
     {
         // delete the select box if mouse isn't in viewport
-        if !mouse_in_viewport.0 {
+        if !viewport_info.mouse_in_viewport {
             *select_box = SelectBox::default();
             return;
         }
@@ -176,7 +176,8 @@ fn select_box(
             if selectable.2 != Visibility::Visible || selectable.3 {
                 continue;
             }
-            let Some(viewport_pos) = world_to_ui_viewport(cam, viewport_rect.0, selectable.0.translation) else {
+            let Some(viewport_pos) = world_to_ui_viewport(cam, viewport_info.viewport_rect, selectable.0.translation)
+            else {
                 continue;
             };
             if select_rect.contains(viewport_pos) {

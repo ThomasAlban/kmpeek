@@ -23,8 +23,6 @@ impl Plugin for UiStatePlugin {
             .init_resource::<CameraSettingsOpen>()
             .init_resource::<FileDialogRes>()
             .init_resource::<KmpFilePath>()
-            .init_resource::<MouseInViewport>()
-            .init_resource::<ViewportRect>()
             .init_resource::<ShowModesCollapsed>()
             .init_resource::<KmpVisibility>()
             .add_event::<SaveDockTree>()
@@ -55,10 +53,6 @@ pub struct CameraSettingsOpen(pub bool);
 pub struct FileDialogRes(pub Option<(FileDialog, DialogType)>);
 #[derive(Resource, Default)]
 pub struct KmpFilePath(pub Option<PathBuf>);
-#[derive(Resource, Default)]
-pub struct MouseInViewport(pub bool);
-#[derive(Resource, Default)]
-pub struct ViewportRect(pub Rect);
 #[derive(Resource, Default)]
 pub struct ShowModesCollapsed(pub Option<f32>);
 #[derive(Resource, Default, Clone, PartialEq)]

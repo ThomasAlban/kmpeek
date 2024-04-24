@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::{
     ui::util::{combobox_enum, drag_vec3},
     viewer::{

@@ -10,7 +10,7 @@ pub struct SetupViewportSet;
 pub struct ViewportPlugin;
 impl Plugin for ViewportPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.init_resource::<ViewportInfo>().add_systems(
             Startup,
             // this makes sure all the 'Commands' are completed before moving onto other startup systems
             // so that other startup systems can make use of the Viewport image handle
@@ -24,6 +24,13 @@ impl Plugin for ViewportPlugin {
 pub struct ViewportImage {
     pub handle: Handle<Image>,
     pub tex_id: TextureId,
+}
+
+#[derive(Resource, Default)]
+pub struct ViewportInfo {
+    pub mouse_in_viewport: bool,
+    pub viewport_rect: Rect,
+    pub mouse_on_overlayed_ui: bool,
 }
 
 fn setup_viewport(

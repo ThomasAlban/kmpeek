@@ -1,8 +1,10 @@
 use super::{CameraMode, UpdateCameraSet};
-use crate::ui::{
-    settings::AppSettings,
-    ui_state::MouseInViewport,
-    viewport::{SetupViewportSet, ViewportImage},
+use crate::{
+    ui::{
+        settings::AppSettings,
+        viewport::{SetupViewportSet, ViewportImage, ViewportInfo},
+    },
+    viewer,
 };
 use bevy::{
     input::mouse::{MouseMotion, MouseWheel},
@@ -100,9 +102,9 @@ fn orbit_cam(
     mut q_orbit_cam: Query<(&mut OrbitCam, &mut Transform, &Projection)>,
     keys: Res<ButtonInput<KeyCode>>,
     settings: Res<AppSettings>,
-    mouse_in_viewport: Res<MouseInViewport>,
+    viewport_info: Res<ViewportInfo>,
 ) {
-    if !mouse_in_viewport.0 || settings.camera.mode != CameraMode::Orbit {
+    if !viewport_info.mouse_in_viewport || settings.camera.mode != CameraMode::Orbit {
         return;
     }
 

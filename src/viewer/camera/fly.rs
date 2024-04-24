@@ -1,7 +1,6 @@
 use crate::ui::{
     settings::AppSettings,
-    ui_state::MouseInViewport,
-    viewport::{SetupViewportSet, ViewportImage},
+    viewport::{SetupViewportSet, ViewportImage, ViewportInfo},
 };
 use bevy::{
     input::mouse::MouseMotion,
@@ -99,9 +98,9 @@ fn fly_cam_move(
     mut q_fly_cam: Query<&mut Transform, With<FlyCam>>,
     mut ev_request_redraw: EventWriter<RequestRedraw>,
     settings: Res<AppSettings>,
-    mouse_in_viewport: Res<MouseInViewport>,
+    viewport_info: Res<ViewportInfo>,
 ) {
-    if !mouse_in_viewport.0 || settings.camera.mode != CameraMode::Fly {
+    if !viewport_info.mouse_in_viewport || settings.camera.mode != CameraMode::Fly {
         return;
     }
     // if we are pressing the control / cmd key, return
@@ -165,9 +164,9 @@ fn fly_cam_look(
     mut ev_mouse_motion: EventReader<MouseMotion>,
     mut q_fly_cam: Query<&mut Transform, With<FlyCam>>,
     settings: Res<AppSettings>,
-    mouse_in_viewport: Res<MouseInViewport>,
+    viewport_info: Res<ViewportInfo>,
 ) {
-    if !mouse_in_viewport.0 || settings.camera.mode != CameraMode::Fly {
+    if !viewport_info.mouse_in_viewport || settings.camera.mode != CameraMode::Fly {
         return;
     }
 
