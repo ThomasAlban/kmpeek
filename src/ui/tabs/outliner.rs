@@ -8,8 +8,8 @@ use crate::{
         edit::select::Selected,
         kmp::{
             components::{
-                AreaPoint, BattleFinishPoint, CannonPoint, EnemyPathMarker, ItemPathMarker, KmpCamera, Object,
-                RespawnPoint, StartPoint,
+                AreaPoint, BattleFinishPoint, CannonPoint, CheckpointLeft, EnemyPathMarker, ItemPathMarker, KmpCamera,
+                Object, RespawnPoint, StartPoint,
             },
             path::{EnemyPathGroups, ItemPathGroups, PathGroup},
             sections::{KmpEditMode, KmpSections},
@@ -28,13 +28,13 @@ macro_rules! to_vec {
 
 #[derive(SystemParam)]
 pub struct ShowOutlinerTab<'w, 's> {
-    // keys: Res<'w, Input<KeyCode>>,
     edit_mode: ResMut<'w, KmpEditMode>,
     commands: Commands<'w, 's>,
 
     start_points: Query<'w, 's, Entity, With<StartPoint>>,
     enemy_paths: Query<'w, 's, Entity, With<EnemyPathMarker>>,
     item_paths: Query<'w, 's, Entity, With<ItemPathMarker>>,
+    checkpoints: Query<'w, 's, Entity, With<CheckpointLeft>>,
     respawn_points: Query<'w, 's, Entity, With<RespawnPoint>>,
     objects: Query<'w, 's, Entity, With<Object>>,
     areas: Query<'w, 's, Entity, With<AreaPoint>>,
@@ -57,8 +57,6 @@ impl UiSubSection for ShowOutlinerTab<'_, '_> {
 
         use KmpSections::*;
 
-        let checkpoints: Vec<Entity> = Vec::new();
-
         self.show_track_info_header(ui);
 
         self.show_point_outliner(ui, StartPoints, to_vec!(self.start_points));
@@ -74,7 +72,7 @@ impl UiSubSection for ShowOutlinerTab<'_, '_> {
             to_vec!(self.item_paths),
             &self.item_groups.as_ref().map(|e| e.0.clone()),
         );
-        self.show_path_outliner(ui, Checkpoints, checkpoints.iter().copied(), &None);
+        self.show_path_outliner(ui, Checkpoints, to_vec!(self.checkpoints), &None);
         self.show_point_outliner(ui, RespawnPoints, to_vec!(self.respawn_points));
         self.show_point_outliner(ui, Objects, to_vec!(self.objects));
         self.show_point_outliner(ui, Areas, to_vec!(self.areas));
@@ -95,7 +93,7 @@ impl ShowOutlinerTab<'_, '_> {
         entities: impl IntoIterator<Item = Entity>,
         group_info: &Option<Vec<PathGroup>>,
     ) {
-        CollapsingState::load_with_default_open(ui.ctx(), format!("{}_outliner", selected).into(), false)
+        CollapsingState::load_with_default_open(ui.ctx(), format!("{selected}_outliner").into(), false)
             .show_header(ui, |ui| {
                 self.show_header(ui, selected, entities, true);
             })

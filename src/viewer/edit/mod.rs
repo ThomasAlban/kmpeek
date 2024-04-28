@@ -1,13 +1,13 @@
 pub mod area_gizmo;
 pub mod create_delete;
-pub mod kcl_snap;
 pub mod link_unlink;
 pub mod select;
 pub mod transform_gizmo;
+pub mod tweak;
 
 use self::{
-    area_gizmo::AreaGizmoPlugin, create_delete::CreateDeletePlugin, kcl_snap::KclSnapPlugin,
-    link_unlink::LinkUnlinkPlugin, select::SelectPlugin, transform_gizmo::TransformGizmoPlugin,
+    area_gizmo::AreaGizmoPlugin, create_delete::CreateDeletePlugin, link_unlink::LinkUnlinkPlugin,
+    select::SelectPlugin, transform_gizmo::TransformGizmoPlugin, tweak::TweakPlugin,
 };
 use bevy::prelude::*;
 use bevy_mod_outline::OutlinePlugin;
@@ -25,7 +25,7 @@ impl Plugin for MousePickingPlugin {
             SelectPlugin,
             CreateDeletePlugin,
             LinkUnlinkPlugin,
-            KclSnapPlugin,
+            TweakPlugin,
         ))
         .init_resource::<EditMode>();
     }

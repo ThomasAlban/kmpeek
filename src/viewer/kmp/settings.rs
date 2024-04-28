@@ -7,6 +7,7 @@ pub struct KmpModelSettings {
     pub point_scale: f32,
     pub color: KmpModelColors,
     pub outline: OutlineSettings,
+    pub checkpoint_height: f32,
 }
 impl Default for KmpModelSettings {
     fn default() -> Self {
@@ -15,6 +16,7 @@ impl Default for KmpModelSettings {
             point_scale: 1.,
             color: KmpModelColors::default(),
             outline: OutlineSettings::default(),
+            checkpoint_height: 10000.,
         }
     }
 }
@@ -24,7 +26,7 @@ pub struct KmpModelColors {
     pub start_points: PointColor,
     pub enemy_paths: PathColor,
     pub item_paths: PathColor,
-    pub checkpoints: (),
+    pub checkpoints: CheckpointColour,
     pub respawn_points: PointColor,
     pub objects: PointColor,
     pub routes: PathColor,
@@ -52,7 +54,9 @@ impl Default for KmpModelColors {
                 line: Color::rgb(0., 1., 0.),
                 arrow: Color::rgb(0., 0.6, 0.),
             },
-            checkpoints: (),
+            checkpoints: CheckpointColour {
+                point: Color::rgb(1., 0., 0.),
+            },
             objects: PointColor {
                 point: Color::rgb(0.8, 0., 0.8),
                 line: Color::rgba(1., 0.4, 1., 0.9),
@@ -111,6 +115,12 @@ pub struct PointColor {
     pub line: Color,
     pub arrow: Color,
     pub up_arrow: Color,
+}
+
+#[derive(Serialize, Deserialize, Reflect)]
+pub struct CheckpointColour {
+    pub point: Color,
+    // more to come
 }
 
 #[derive(Serialize, Deserialize, Reflect, Clone)]

@@ -1,4 +1,4 @@
-use super::settings::{PathColor, PointColor};
+use super::settings::{CheckpointColour, PathColor, PointColor};
 use crate::{
     ui::settings::AppSettings,
     util::shapes::{Cone, Cylinder},
@@ -22,7 +22,7 @@ pub struct KmpMaterials {
     pub start_points: PointMaterials,
     pub enemy_paths: PathMaterials,
     pub item_paths: PathMaterials,
-    pub checkpoints: (),
+    pub checkpoints: CheckpointMaterials,
     pub respawn_points: PointMaterials,
     pub objects: PointMaterials,
     pub areas: PointMaterials,
@@ -61,6 +61,19 @@ impl PointMaterials {
             line: unlit_material(materials, colors.line),
             arrow: unlit_material(materials, colors.arrow),
             up_arrow: unlit_material(materials, colors.up_arrow),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct CheckpointMaterials {
+    pub point: Handle<StandardMaterial>,
+    // more to come
+}
+impl CheckpointMaterials {
+    pub fn from_colors(materials: &mut Assets<StandardMaterial>, colors: &CheckpointColour) -> Self {
+        Self {
+            point: unlit_material(materials, colors.point),
         }
     }
 }
@@ -113,7 +126,7 @@ pub fn setup_kmp_meshes_materials(
         start_points: PointMaterials::from_colors(&mut materials, &colors.start_points),
         enemy_paths: PathMaterials::from_colors(&mut materials, &colors.enemy_paths),
         item_paths: PathMaterials::from_colors(&mut materials, &colors.item_paths),
-        checkpoints: (),
+        checkpoints: CheckpointMaterials::from_colors(&mut materials, &colors.checkpoints),
         respawn_points: PointMaterials::from_colors(&mut materials, &colors.respawn_points),
         objects: PointMaterials::from_colors(&mut materials, &colors.objects),
         areas: PointMaterials::from_colors(&mut materials, &colors.areas),

@@ -5,7 +5,13 @@ use super::{
 };
 use crate::{
     util::kmp_file::{KmpFile, KmpGetSection, KmpPositionPoint, KmpRotationPoint},
-    viewer::normalize::{Normalize, NormalizeInheritParent},
+    viewer::{
+        edit::{
+            transform_gizmo::GizmoTransformable,
+            tweak::{SnapTo, SnapToKcl, Tweakable},
+        },
+        normalize::{Normalize, NormalizeInheritParent},
+    },
 };
 use bevy::{math::vec3, prelude::*};
 use bevy_mod_outline::{OutlineBundle, OutlineVolume};
@@ -89,6 +95,8 @@ impl<'a, U: Component + Clone> PointSpawner<'a, U> {
         bevy::prelude::MaterialMeshBundle<bevy::prelude::StandardMaterial>,
         U,
         KmpSelectablePoint,
+        Tweakable,
+        GizmoTransformable,
         Normalize,
         bevy_mod_outline::OutlineBundle,
     ) {
@@ -106,6 +114,8 @@ impl<'a, U: Component + Clone> PointSpawner<'a, U> {
             },
             self.kmp_component.clone(),
             KmpSelectablePoint,
+            Tweakable(SnapTo::Kcl),
+            GizmoTransformable,
             Normalize::new(200., 30., BVec3::TRUE),
             OutlineBundle {
                 outline: OutlineVolume {
@@ -213,5 +223,3 @@ pub fn add_respawn_point_preview(
     }
     commands.entity(parent).push_children(&children);
 }
-
-// pub fn show_area_cub

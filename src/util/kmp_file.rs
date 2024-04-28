@@ -115,12 +115,12 @@ pub struct Itpt {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[binrw]
 pub struct Ckpt {
-    cp_left: [f32; 2],
-    cp_right: [f32; 2],
-    respawn_pos: u8,
-    cp_type: u8,
-    prev_cp: u8,
-    next_cp: u8,
+    pub cp_left: [f32; 2],
+    pub cp_right: [f32; 2],
+    pub respawn_pos: u8,
+    pub cp_type: i8,
+    pub prev_cp: u8,
+    pub next_cp: u8,
 }
 
 /// The GOBJ (geo object) section describes objects; things such as item boxes, pipes and also controlled objects such as sound triggers.

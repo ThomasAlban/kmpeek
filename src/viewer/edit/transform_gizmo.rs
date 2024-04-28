@@ -3,6 +3,9 @@ use crate::{ui::viewport::ViewportInfo, viewer::kmp::components::KmpSelectablePo
 use bevy::prelude::*;
 use transform_gizmo_bevy::{enum_set, GizmoMode, GizmoOptions, GizmoTarget, GizmoVisuals};
 
+#[derive(Component)]
+pub struct GizmoTransformable;
+
 pub struct TransformGizmoPlugin;
 impl Plugin for TransformGizmoPlugin {
     fn build(&self, app: &mut App) {
@@ -23,7 +26,10 @@ impl Plugin for TransformGizmoPlugin {
 fn update_gizmo(
     mut commands: Commands,
     edit_mode: Res<EditMode>,
-    q_selectable: Query<(Entity, Has<Selected>, Has<GizmoTarget>), With<KmpSelectablePoint>>,
+    q_selectable: Query<
+        (Entity, Has<Selected>, Has<GizmoTarget>),
+        (With<KmpSelectablePoint>, With<GizmoTransformable>),
+    >,
     mut gizmo_options: ResMut<GizmoOptions>,
     viewport_info: Res<ViewportInfo>,
     keys: Res<ButtonInput<KeyCode>>,

@@ -9,7 +9,13 @@ use super::{
 };
 use crate::{
     util::kmp_file::{KmpFile, KmpGetPathSection, KmpGetSection, KmpPositionPoint},
-    viewer::normalize::Normalize,
+    viewer::{
+        edit::{
+            transform_gizmo::GizmoTransformable,
+            tweak::{SnapTo, SnapToKcl, Tweakable},
+        },
+        normalize::Normalize,
+    },
 };
 use bevy::{
     ecs::query::{QueryData, QueryFilter, WorldQuery},
@@ -142,9 +148,9 @@ pub struct EntityGroup {
     pub next_groups: Vec<u8>,
 }
 
-struct KmpDataGroup<T> {
-    nodes: Vec<T>,
-    next_groups: Vec<u8>,
+pub struct KmpDataGroup<T> {
+    pub nodes: Vec<T>,
+    pub next_groups: Vec<u8>,
 }
 
 pub struct PathPointSpawner<'a, U, Marker> {
@@ -201,6 +207,8 @@ impl<'a, U: Component + Clone, Marker: Component + Default> PathPointSpawner<'a,
         Marker,
         U,
         KmpSelectablePoint,
+        Tweakable,
+        GizmoTransformable,
         Normalize,
         OutlineBundle,
     ) {
@@ -223,6 +231,8 @@ impl<'a, U: Component + Clone, Marker: Component + Default> PathPointSpawner<'a,
             Marker::default(),
             self.kmp_component.clone(),
             KmpSelectablePoint,
+            Tweakable(SnapTo::Kcl),
+            GizmoTransformable,
             Normalize::new(200., 30., BVec3::TRUE),
             OutlineBundle {
                 outline: OutlineVolume {
@@ -242,18 +252,10 @@ impl<'a, U: Component + Clone, Marker: Component + Default> PathPointSpawner<'a,
     }
 }
 
-pub fn spawn_path_section<
-    T: KmpGetSection + KmpGetPathSection + KmpPositionPoint + Send + 'static + Clone,
-    U: Component + FromKmp<T> + Clone,
-    Marker: Component + Default,
->(
-    commands: &mut Commands,
+/// converts points and paths in the kmp to a list of groups containing the data
+pub fn get_kmp_data_groups<T: KmpGetSection + KmpGetPathSection + Send + 'static + Clone>(
     kmp: Arc<KmpFile>,
-    kmp_errors: &mut Vec<KmpError>,
-    meshes: KmpMeshes,
-    materials: PathMaterials,
-    outline: OutlineSettings,
-) {
+) -> Vec<KmpDataGroup<T>> {
     let pathgroup_entries = &T::get_path_section(kmp.as_ref()).entries;
     let node_entries = &T::get_section(kmp.as_ref()).entries;
 
@@ -273,9 +275,44 @@ pub fn spawn_path_section<
         }
         kmp_data_groups.push(KmpDataGroup { nodes, next_groups });
     }
+    kmp_data_groups
+}
+
+pub fn spawn_enemy_item_path_section<
+    T: KmpGetSection + KmpGetPathSection + KmpPositionPoint + Send + 'static + Clone,
+    U: Component + FromKmp<T> + Clone,
+    Marker: Component + Default,
+>(
+    commands: &mut Commands,
+    kmp: Arc<KmpFile>,
+    kmp_errors: &mut Vec<KmpError>,
+    meshes: KmpMeshes,
+    materials: PathMaterials,
+    outline: OutlineSettings,
+) {
+    spawn_path_section::<T, U>(commands, kmp, kmp_errors, move |node, kmp_component, world| {
+        let position: Vec3 = node.get_position().into();
+        PathPointSpawner::<_, Marker>::new(&meshes, &materials, &outline, kmp_component)
+            .pos(position)
+            .visible(false)
+            .spawn_world(world)
+    });
+}
+
+pub fn spawn_path_section<
+    // this is the original kmp data from the file
+    T: KmpGetSection + KmpGetPathSection + Send + 'static + Clone,
+    // this is the kmp component which corresponds to the kmp data
+    U: Component + FromKmp<T> + Clone,
+>(
+    commands: &mut Commands,
+    kmp: Arc<KmpFile>,
+    kmp_errors: &mut Vec<KmpError>,
+    spawn: impl Fn(&T, U, &mut World) -> Entity + Send + 'static,
+) {
+    let kmp_data_groups = get_kmp_data_groups::<T>(kmp);
 
     let mut kmp_component_groups = Vec::new();
-
     let mut acc = 0;
 
     for group in kmp_data_groups.iter() {
@@ -297,12 +334,10 @@ pub fn spawn_path_section<
                 next_groups: group.next_groups.clone(),
             };
             for (j, node) in group.nodes.iter().enumerate() {
-                let position: Vec3 = node.get_position().into();
                 let kmp_component = kmp_component_groups[i][j].clone();
-                let spawned_entity = PathPointSpawner::<_, Marker>::new(&meshes, &materials, &outline, kmp_component)
-                    .pos(position)
-                    .visible(false)
-                    .spawn_world(world);
+                // we don't know how each entity is going to be spawned in this function
+                // this is good because we can use it both for checkpoints and enemy/item paths
+                let spawned_entity = spawn(node, kmp_component, world);
                 // if we are at the start then add the start marker to the point
                 if i == 0 && j == 0 {
                     world.entity_mut(spawned_entity).insert(PathOverallStart);

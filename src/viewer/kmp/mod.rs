@@ -1,3 +1,4 @@
+pub mod checkpoints;
 pub mod components;
 pub mod meshes_materials;
 pub mod path;
@@ -6,9 +7,10 @@ pub mod sections;
 pub mod settings;
 
 use self::{
+    checkpoints::{checkpoint_visibility_propagate, spawn_checkpoint_section, CheckpointHeight, CheckpointPlugin},
     components::*,
     meshes_materials::{setup_kmp_meshes_materials, KmpMeshesMaterials},
-    path::{spawn_path_section, traverse_paths, update_node_links, KmpPathNodeLink, RecalculatePaths},
+    path::{spawn_enemy_item_path_section, traverse_paths, update_node_links, KmpPathNodeLink, RecalculatePaths},
     point::{add_respawn_point_preview, spawn_point_section},
     sections::KmpEditMode,
 };
@@ -21,15 +23,17 @@ use crate::{
     util::kmp_file::*,
     viewer::kmp::sections::KmpSections,
 };
-use bevy::{prelude::*, window::RequestRedraw};
+use bevy::{core_pipeline::core_3d::check_msaa, prelude::*, window::RequestRedraw};
 use binrw::BinRead;
+use num_traits::CheckedDiv;
 use std::{ffi::OsStr, fs::File, sync::Arc};
 
 pub struct KmpPlugin;
 
 impl Plugin for KmpPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<RecalculatePaths>()
+        app.add_plugins(CheckpointPlugin)
+            .add_event::<RecalculatePaths>()
             .init_resource::<KmpEditMode>()
             .add_systems(Startup, setup_kmp_meshes_materials.after(SetupAppSettingsSet))
             .add_systems(
@@ -50,6 +54,7 @@ pub fn spawn_model(
     settings: Res<AppSettings>,
     mut ev_recalculate_paths: EventWriter<RecalculatePaths>,
     kmp_meshes_materials: Res<KmpMeshesMaterials>,
+    checkpoint_height: Res<CheckpointHeight>,
 ) {
     // if there is no kmp file selected event return
     let Some(ev) = ev_kmp_file_selected.read().next() else {
@@ -94,7 +99,7 @@ pub fn spawn_model(
 
     // --- ENEMY PATHS ---
 
-    spawn_path_section::<Enpt, EnemyPathPoint, EnemyPathMarker>(
+    spawn_enemy_item_path_section::<Enpt, EnemyPathPoint, EnemyPathMarker>(
         &mut commands,
         kmp.clone(),
         &mut kmp_errors,
@@ -105,7 +110,7 @@ pub fn spawn_model(
 
     // --- ITEM PATHS ---
 
-    spawn_path_section::<Itpt, ItemPathPoint, ItemPathMarker>(
+    spawn_enemy_item_path_section::<Itpt, ItemPathPoint, ItemPathMarker>(
         &mut commands,
         kmp.clone(),
         &mut kmp_errors,
@@ -115,6 +120,16 @@ pub fn spawn_model(
     );
 
     // --- CHECKPOINTS ---
+    //
+    spawn_checkpoint_section(
+        &mut commands,
+        kmp.clone(),
+        &mut kmp_errors,
+        meshes.clone(),
+        materials.checkpoints.clone(),
+        settings.kmp_model.outline.clone(),
+        checkpoint_height.0,
+    );
 
     // --- OBJECTS ---
 
@@ -182,6 +197,7 @@ fn update_visible(
             Query<&mut Visibility, With<StartPoint>>,
             Query<&mut Visibility, With<EnemyPathMarker>>,
             Query<&mut Visibility, With<ItemPathMarker>>,
+            Query<&mut Visibility, With<CheckpointLeft>>,
             Query<&mut Visibility, With<Object>>,
             Query<&mut Visibility, With<AreaPoint>>,
         )>,
@@ -215,8 +231,9 @@ fn update_visible(
     set_visibility!(q.p0().p0(), usize::from(KmpSections::StartPoints));
     set_visibility!(q.p0().p1(), usize::from(KmpSections::EnemyPaths));
     set_visibility!(q.p0().p2(), usize::from(KmpSections::ItemPaths));
-    set_visibility!(q.p0().p3(), usize::from(KmpSections::Objects));
-    set_visibility!(q.p0().p4(), usize::from(KmpSections::Areas));
+    set_visibility!(q.p0().p3(), usize::from(KmpSections::Checkpoints));
+    set_visibility!(q.p0().p4(), usize::from(KmpSections::Objects));
+    set_visibility!(q.p0().p5(), usize::from(KmpSections::Areas));
     set_visibility!(q.p1().p0(), usize::from(KmpSections::Cameras));
     set_visibility!(q.p1().p1(), usize::from(KmpSections::RespawnPoints));
     set_visibility!(q.p1().p2(), usize::from(KmpSections::CannonPoints));

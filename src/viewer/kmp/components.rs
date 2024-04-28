@@ -1,15 +1,22 @@
-use std::collections::HashSet;
-
 use super::{
     meshes_materials::KmpMeshesMaterials,
     path::{KmpPathNode, PathPointSpawner},
     point::{add_respawn_point_preview, PointSpawner},
     settings::OutlineSettings,
-    Cnpt, Jgpt, Mspt,
+    Ckpt, Cnpt, Jgpt, Mspt,
 };
 use crate::util::kmp_file::{Area, Came, Enpt, Gobj, Itpt, Ktpt, Poti, PotiPoint, Stgi};
 use bevy::{math::vec3, prelude::*};
+use std::collections::HashSet;
 use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
+
+#[derive(Component)]
+pub struct TransformOptions {
+    /// whether or not the object's rotation should be editable
+    pub use_rotation: bool,
+    /// whether or not the object's scale should be editable
+    pub use_scale: bool,
+}
 
 #[derive(Component, Default)]
 pub struct KmpSelectablePoint;
@@ -114,6 +121,27 @@ pub enum ItemPathBulletHeight {
     FollowPointHeight,
     #[strum(serialize = "Mushroom Pads (?)")]
     MushroomPads,
+}
+
+// --- CHECKPOINT COMPONENTS ---
+// for checkpoints, the left checkpoint entity stores all the info
+#[derive(Component, Clone, PartialEq)]
+pub struct CheckpointLeft {
+    pub right: Entity,
+    pub kind: CheckpointKind,
+    // will contain link to respawn entity
+}
+#[derive(Component, Clone, PartialEq)]
+pub struct CheckpointRight {
+    pub left: Entity,
+}
+
+#[derive(Component, PartialEq, Clone, Default)]
+pub enum CheckpointKind {
+    #[default]
+    Normal,
+    Key(u8),
+    LapCount,
 }
 
 // --- OBJECT COMPONENTS ---
@@ -285,6 +313,7 @@ pub struct BattleFinishPoint {
 // --- CONVERT COMPONENTS FROM KMP STORAGE FORMAT ---
 //
 
+#[derive(Clone)]
 pub struct KmpError {
     #[allow(unused)]
     message: String,
@@ -378,6 +407,22 @@ impl FromKmp<Itpt> for ItemPathPoint {
                 || data.setting_2 == 6
                 || data.setting_2 == 7,
             path_start_override: false,
+        }
+    }
+}
+impl FromKmp<Ckpt> for CheckpointLeft {
+    fn from_kmp(data: &Ckpt, errors: &mut Vec<KmpError>, _: usize) -> Self {
+        Self {
+            right: Entity::PLACEHOLDER,
+            kind: match data.cp_type {
+                -1 => CheckpointKind::Normal,
+                0 => CheckpointKind::LapCount,
+                x @ 1..=127 => CheckpointKind::Key(x as u8),
+                _ => {
+                    errors.push(KmpError::new("Invalid CKPT setting found"));
+                    CheckpointKind::Normal
+                }
+            },
         }
     }
 }
