@@ -4,9 +4,6 @@ mod settings;
 mod table;
 mod viewport;
 
-pub use settings::*;
-pub use viewport::*;
-
 use self::{
     edit::ShowEditTab, outliner::ShowOutlinerTab, settings::ShowSettingsTab, table::ShowTableTab,
     viewport::ShowViewportTab,

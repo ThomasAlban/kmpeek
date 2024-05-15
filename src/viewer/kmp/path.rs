@@ -2,17 +2,18 @@
 
 use super::{
     components::FromKmp,
-    meshes_materials::{KmpMeshes, KmpMeshesMaterials, PathMaterials},
+    meshes_materials::KmpMeshesMaterials,
     sections::{KmpEditMode, KmpSections},
-    settings::OutlineSettings,
-    EnemyPathMarker, EnemyPathPoint, ItemPathMarker, ItemPathPoint, KmpError, KmpSelectablePoint, PathOverallStart,
+    CheckpointLeft, CheckpointRight, EnemyPathMarker, EnemyPathPoint, GetPathMaterialSection, HideRotation,
+    ItemPathMarker, ItemPathPoint, KmpError, KmpSelectablePoint, PathOverallStart,
 };
 use crate::{
+    ui::settings::AppSettings,
     util::kmp_file::{KmpFile, KmpGetPathSection, KmpGetSection, KmpPositionPoint},
     viewer::{
         edit::{
             transform_gizmo::GizmoTransformable,
-            tweak::{SnapTo, SnapToKcl, Tweakable},
+            tweak::{SnapTo, Tweakable},
         },
         normalize::Normalize,
     },
@@ -31,7 +32,17 @@ use std::{collections::HashSet, sync::Arc};
 pub struct KmpPathNodeLink {
     pub prev_node: Entity,
     pub next_node: Entity,
+    pub kind: PathType,
 }
+
+#[derive(PartialEq, Clone, Copy)]
+pub enum PathType {
+    Enemy,
+    Item,
+    CheckpointLeft,
+    CheckpointRight,
+}
+
 // represents the line that links the 2 entities
 #[derive(Component)]
 pub struct KmpPathNodeLinkLine;
@@ -40,7 +51,7 @@ pub struct KmpPathNodeLinkLine;
 pub struct KmpPathNodeError;
 
 // component attached to kmp entities which are linked to other kmp entities
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Debug, Default)]
 pub struct KmpPathNode {
     pub prev_nodes: HashSet<Entity>,
     pub next_nodes: HashSet<Entity>,
@@ -142,7 +153,7 @@ impl KmpPathNode {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct EntityGroup {
     pub entities: Vec<Entity>,
     pub next_groups: Vec<u8>,
@@ -153,34 +164,25 @@ pub struct KmpDataGroup<T> {
     pub next_groups: Vec<u8>,
 }
 
-pub struct PathPointSpawner<'a, U, Marker> {
-    meshes: &'a KmpMeshes,
-    materials: &'a PathMaterials,
+pub struct PathPointSpawner<U, Marker> {
     position: Vec3,
     rotation: Quat,
     kmp_component: U,
-    outline: &'a OutlineSettings,
     visible: bool,
     marker: Marker,
     prev_nodes: HashSet<Entity>,
+    e: Option<Entity>,
 }
-impl<'a, U: Component + Clone, Marker: Component + Default> PathPointSpawner<'a, U, Marker> {
-    pub fn new(
-        meshes: &'a KmpMeshes,
-        materials: &'a PathMaterials,
-        outline: &'a OutlineSettings,
-        kmp_component: U,
-    ) -> Self {
+impl<U: Component + Clone + GetPathMaterialSection, Marker: Component + Default> PathPointSpawner<U, Marker> {
+    pub fn new(kmp_component: U) -> Self {
         Self {
-            meshes,
-            materials,
             position: Vec3::default(),
             rotation: Quat::default(),
             kmp_component,
-            outline,
             visible: true,
             marker: Marker::default(),
             prev_nodes: HashSet::new(),
+            e: None,
         }
     }
     pub fn pos(mut self, pos: Vec3) -> Self {
@@ -199,23 +201,29 @@ impl<'a, U: Component + Clone, Marker: Component + Default> PathPointSpawner<'a,
         self.prev_nodes = prev_nodes;
         self
     }
-    fn get_bundle(
-        &self,
-    ) -> (
-        MaterialMeshBundle<StandardMaterial>,
-        KmpPathNode,
-        Marker,
-        U,
-        KmpSelectablePoint,
-        Tweakable,
-        GizmoTransformable,
-        Normalize,
-        OutlineBundle,
-    ) {
-        (
+
+    pub fn spawn_command(mut self, commands: &mut Commands) -> Entity {
+        let e = self.e.unwrap_or_else(|| commands.spawn_empty().id());
+        self.e = Some(e);
+        commands.add(|world: &mut World| {
+            self.spawn(world);
+        });
+        e
+    }
+    pub fn spawn(self, world: &mut World) -> Entity {
+        let meshes_materials = world.resource::<KmpMeshesMaterials>();
+        let mesh = meshes_materials.meshes.sphere.clone();
+        let material = U::get_materials(&meshes_materials.materials).point.clone();
+        let outline = world.get_resource::<AppSettings>().unwrap().kmp_model.outline.clone();
+
+        let mut entity = match self.e {
+            Some(e) => world.entity_mut(e),
+            None => world.spawn_empty(),
+        };
+        entity.insert((
             PbrBundle {
-                mesh: self.meshes.sphere.clone(),
-                material: self.materials.point.clone(),
+                mesh,
+                material,
                 transform: Transform::from_translation(self.position).with_rotation(self.rotation),
                 visibility: if self.visible {
                     Visibility::Visible
@@ -232,109 +240,142 @@ impl<'a, U: Component + Clone, Marker: Component + Default> PathPointSpawner<'a,
             self.kmp_component.clone(),
             KmpSelectablePoint,
             Tweakable(SnapTo::Kcl),
+            HideRotation,
             GizmoTransformable,
             Normalize::new(200., 30., BVec3::TRUE),
             OutlineBundle {
                 outline: OutlineVolume {
                     visible: false,
-                    colour: self.outline.color,
-                    width: self.outline.width,
+                    colour: outline.color,
+                    width: outline.width,
                 },
                 ..default()
             },
-        )
+        ));
+        entity.id()
     }
-    pub fn spawn_command(&self, commands: &mut Commands) -> Entity {
-        commands.spawn(self.get_bundle()).id()
-    }
-    pub fn spawn_world(&self, world: &mut World) -> Entity {
-        world.spawn(self.get_bundle()).id()
-    }
-}
-
-/// converts points and paths in the kmp to a list of groups containing the data
-pub fn get_kmp_data_groups<T: KmpGetSection + KmpGetPathSection + Send + 'static + Clone>(
-    kmp: Arc<KmpFile>,
-) -> Vec<KmpDataGroup<T>> {
-    let pathgroup_entries = &T::get_path_section(kmp.as_ref()).entries;
-    let node_entries = &T::get_section(kmp.as_ref()).entries;
-
-    let mut kmp_data_groups: Vec<KmpDataGroup<T>> = Vec::with_capacity(pathgroup_entries.len());
-
-    for group in pathgroup_entries.iter() {
-        let mut next_groups = Vec::new();
-        for next_group in group.next_group {
-            if next_group != 0xff {
-                next_groups.push(next_group);
-            }
-        }
-        let mut nodes = Vec::with_capacity(group.group_length.into());
-        for i in group.start..(group.start + group.group_length) {
-            let node = &node_entries[i as usize];
-            nodes.push(node.clone());
-        }
-        kmp_data_groups.push(KmpDataGroup { nodes, next_groups });
-    }
-    kmp_data_groups
 }
 
 pub fn spawn_enemy_item_path_section<
     T: KmpGetSection + KmpGetPathSection + KmpPositionPoint + Send + 'static + Clone,
-    U: Component + FromKmp<T> + Clone,
+    U: Component + FromKmp<T> + Clone + Debug + GetPathMaterialSection,
     Marker: Component + Default,
 >(
     commands: &mut Commands,
     kmp: Arc<KmpFile>,
     kmp_errors: &mut Vec<KmpError>,
-    meshes: KmpMeshes,
-    materials: PathMaterials,
-    outline: OutlineSettings,
 ) {
-    spawn_path_section::<T, U>(commands, kmp, kmp_errors, move |node, kmp_component, world| {
-        let position: Vec3 = node.get_position().into();
-        PathPointSpawner::<_, Marker>::new(&meshes, &materials, &outline, kmp_component)
-            .pos(position)
-            .visible(false)
-            .spawn_world(world)
+    let kmp_groups = get_kmp_data_and_component_groups::<T, U>(kmp, kmp_errors);
+
+    commands.add(move |world: &mut World| {
+        let mut entity_groups: Vec<EntityGroup> = Vec::with_capacity(kmp_groups.len());
+        for (i, (data_group, component_group)) in kmp_groups.iter().enumerate() {
+            let mut entity_group = EntityGroup {
+                entities: Vec::with_capacity(data_group.nodes.len()),
+                next_groups: data_group.next_groups.clone(),
+            };
+            for (j, node) in data_group.nodes.iter().enumerate() {
+                let kmp_component = component_group[j].clone();
+                let spawned_entity = PathPointSpawner::<_, Marker>::new(kmp_component)
+                    .pos(node.get_position().into())
+                    .visible(false)
+                    .spawn(world);
+                if i == 0 && j == 0 {
+                    world.entity_mut(spawned_entity).insert(PathOverallStart);
+                }
+                entity_group.entities.push(spawned_entity);
+            }
+            entity_groups.push(entity_group);
+        }
+        link_entity_groups(world, entity_groups);
     });
+}
+
+/// converts points and paths in the kmp to a list of groups containing the data, and components that have been converted from that data
+pub fn get_kmp_data_and_component_groups<
+    // this is the original kmp data from the file
+    T: KmpGetSection + KmpGetPathSection + Send + 'static + Clone,
+    // this is the kmp component which corresponds to the kmp data
+    U: Component + FromKmp<T> + Clone + Debug,
+>(
+    kmp: Arc<KmpFile>,
+    kmp_errors: &mut Vec<KmpError>,
+) -> Vec<(KmpDataGroup<T>, Vec<U>)> {
+    let pathgroup_entries = &T::get_path_section(kmp.as_ref()).entries;
+    let node_entries = &T::get_section(kmp.as_ref()).entries;
+
+    let mut result: Vec<(KmpDataGroup<T>, Vec<U>)> = Vec::with_capacity(pathgroup_entries.len());
+
+    let mut acc = 0;
+    for group in pathgroup_entries.iter() {
+        let mut next_groups = Vec::new();
+        let mut kmp_component_group = Vec::new();
+        let mut nodes = Vec::with_capacity(group.group_length.into());
+
+        for next_group in group.next_group {
+            if next_group != 0xff {
+                next_groups.push(next_group);
+            }
+        }
+
+        for i in group.start..(group.start + group.group_length) {
+            let node = &node_entries[i as usize];
+            nodes.push(node.clone());
+            let kmp_component = U::from_kmp(node, kmp_errors, acc);
+            kmp_component_group.push(kmp_component);
+            acc += 1;
+        }
+        result.push((KmpDataGroup { nodes, next_groups }, kmp_component_group));
+    }
+    result
+}
+// go through a list of entity groups and link them together
+pub fn link_entity_groups(world: &mut World, entity_groups: Vec<EntityGroup>) {
+    // link the entities together
+    for group in entity_groups.iter() {
+        let mut prev_entity: Option<Entity> = None;
+        // in each group, link the previous node to the current node
+        for entity in group.entities.iter() {
+            if let Some(prev_entity) = prev_entity {
+                KmpPathNode::link_nodes(prev_entity, *entity, world);
+            }
+            prev_entity = Some(*entity);
+        }
+        // get the last entity of the current group
+        let Some(entity) = prev_entity else { continue };
+        // for each next group linked to the current group
+        for next_group_index in group.next_groups.iter() {
+            // get the first entity in the next group
+            let next_entity = entity_groups[*next_group_index as usize].entities[0];
+            // link the last entity in the current group with the first entity in the next group
+            KmpPathNode::link_nodes(entity, next_entity, world);
+        }
+    }
 }
 
 pub fn spawn_path_section<
     // this is the original kmp data from the file
     T: KmpGetSection + KmpGetPathSection + Send + 'static + Clone,
     // this is the kmp component which corresponds to the kmp data
-    U: Component + FromKmp<T> + Clone,
+    U: Component + FromKmp<T> + Clone + Debug,
 >(
     commands: &mut Commands,
     kmp: Arc<KmpFile>,
     kmp_errors: &mut Vec<KmpError>,
     spawn: impl Fn(&T, U, &mut World) -> Entity + Send + 'static,
 ) {
-    let kmp_data_groups = get_kmp_data_groups::<T>(kmp);
-
-    let mut kmp_component_groups = Vec::new();
-    let mut acc = 0;
-
-    for group in kmp_data_groups.iter() {
-        let mut kmp_component_group = Vec::new();
-        for node in group.nodes.iter() {
-            let kmp_component = U::from_kmp(node, kmp_errors, acc);
-            kmp_component_group.push(kmp_component);
-            acc += 1;
-        }
-        kmp_component_groups.push(kmp_component_group);
-    }
+    let kmp_groups = get_kmp_data_and_component_groups::<T, U>(kmp, kmp_errors);
 
     commands.add(move |world: &mut World| {
         // spawn all the entities, saving the entity IDs into 'entity_groups'
-        let mut entity_groups: Vec<EntityGroup> = Vec::with_capacity(kmp_data_groups.len());
-        for (i, group) in kmp_data_groups.iter().enumerate() {
+        let mut entity_groups: Vec<EntityGroup> = Vec::with_capacity(kmp_groups.len());
+        for (i, (data_group, component_group)) in kmp_groups.iter().enumerate() {
             let mut entity_group = EntityGroup {
-                entities: Vec::with_capacity(group.nodes.len()),
-                next_groups: group.next_groups.clone(),
+                entities: Vec::with_capacity(data_group.nodes.len()),
+                next_groups: data_group.next_groups.clone(),
             };
-            for (j, node) in group.nodes.iter().enumerate() {
-                let kmp_component = kmp_component_groups[i][j].clone();
+            for (j, node) in data_group.nodes.iter().enumerate() {
+                let kmp_component = component_group[j].clone();
                 // we don't know how each entity is going to be spawned in this function
                 // this is good because we can use it both for checkpoints and enemy/item paths
                 let spawned_entity = spawn(node, kmp_component, world);
@@ -346,36 +387,17 @@ pub fn spawn_path_section<
             }
             entity_groups.push(entity_group);
         }
-        // link the entities together
-        for group in entity_groups.iter() {
-            let mut prev_entity: Option<Entity> = None;
-            // in each group, link the previous node to the current node
-            for entity in group.entities.iter() {
-                if let Some(prev_entity) = prev_entity {
-                    KmpPathNode::link_nodes(prev_entity, *entity, world);
-                }
-                prev_entity = Some(*entity);
-            }
-            // get the last entity of the current group
-            let Some(entity) = prev_entity else { continue };
-            // for each next group linked to the current group
-            for next_group_index in group.next_groups.iter() {
-                // get the first entity in the next group
-                let next_entity = entity_groups[*next_group_index as usize].entities[0];
-                // link the last entity in the current group with the first entity in the next group
-                KmpPathNode::link_nodes(entity, next_entity, world);
-            }
-        }
+        link_entity_groups(world, entity_groups);
     });
 }
 
-fn spawn_node_link<T: Component + Default>(
+fn spawn_node_link(
     world: &mut World,
     prev_node: Entity,
     next_node: Entity,
+    kind: PathType,
     cylinder_mesh: Handle<Mesh>,
     frustrum_mesh: Handle<Mesh>,
-
     line_material: Handle<StandardMaterial>,
     arrow_material: Handle<StandardMaterial>,
     visible: bool,
@@ -401,9 +423,11 @@ fn spawn_node_link<T: Component + Default>(
                 },
                 ..default()
             },
-            KmpPathNodeLink { prev_node, next_node },
-            // KmpSection,
-            T::default(),
+            KmpPathNodeLink {
+                prev_node,
+                next_node,
+                kind,
+            },
         ))
         // spawn the line and arrow as children of this parent component, which will inherit its transform & visibility
         .with_children(|parent| {
@@ -430,23 +454,32 @@ fn spawn_node_link<T: Component + Default>(
         });
 }
 
-#[derive(PartialEq, Clone, Copy)]
-enum PathType {
-    Enemy,
-    Item,
-}
-
 pub fn update_node_links(
     q_kmp_node_link: Query<(Entity, &KmpPathNodeLink, &Children, &ViewVisibility)>,
-    q_kmp_node: Query<(Entity, Has<EnemyPathMarker>, Has<ItemPathMarker>, &KmpPathNode)>,
+    q_kmp_node: Query<(
+        Entity,
+        Has<EnemyPathMarker>,
+        Has<ItemPathMarker>,
+        Has<CheckpointLeft>,
+        Has<CheckpointRight>,
+        &KmpPathNode,
+    )>,
     mut q_transform: Query<&mut Transform>,
     q_line: Query<&KmpPathNodeLinkLine>,
     mut commands: Commands,
     kmp_edit_mode: Res<KmpEditMode>,
 ) {
     let mut nodes_to_be_linked: HashMap<(Entity, Entity), PathType> = HashMap::new();
-    for (cur_node, is_enemy, _, node_data) in q_kmp_node.iter() {
-        let path_type = if is_enemy { PathType::Enemy } else { PathType::Item };
+    for (cur_node, is_enemy, is_item, is_cp_left, _, node_data) in q_kmp_node.iter() {
+        let path_type = if is_enemy {
+            PathType::Enemy
+        } else if is_item {
+            PathType::Item
+        } else if is_cp_left {
+            PathType::CheckpointLeft
+        } else {
+            PathType::CheckpointRight
+        };
         for prev_node in node_data.prev_nodes.iter() {
             nodes_to_be_linked.insert((*prev_node, cur_node), path_type);
         }
@@ -494,12 +527,9 @@ pub fn update_node_links(
         *parent_transform = new_parent_transform;
 
         // find the child of the kmp node link that has KmpNodeLinkLine, and set its transform
-        for child in children {
-            if q_line.get(*child).is_ok() {
-                let mut line_transform = q_transform.get_mut(*child).unwrap();
-                *line_transform = new_line_transform;
-                break;
-            }
+        if let Some(child) = children.iter().find(|x| q_line.get(**x).is_ok()) {
+            let mut line_transform = q_transform.get_mut(*child).unwrap();
+            *line_transform = new_line_transform;
         }
     }
     // spawn any links in that need to be spawned
@@ -509,29 +539,28 @@ pub fn update_node_links(
         let kmp_edit_mode = kmp_edit_mode.0;
         commands.add(move |world: &mut World| {
             let meshes_materials = world.resource::<KmpMeshesMaterials>();
-            if path_type == PathType::Enemy {
-                spawn_node_link::<EnemyPathMarker>(
-                    world,
-                    prev_node,
-                    next_node,
-                    meshes_materials.meshes.cylinder.clone(),
-                    meshes_materials.meshes.frustrum.clone(),
-                    meshes_materials.materials.enemy_paths.line.clone(),
-                    meshes_materials.materials.enemy_paths.arrow.clone(),
-                    kmp_edit_mode == KmpSections::EnemyPaths,
-                );
-            } else if path_type == PathType::Item {
-                spawn_node_link::<ItemPathMarker>(
-                    world,
-                    prev_node,
-                    next_node,
-                    meshes_materials.meshes.cylinder.clone(),
-                    meshes_materials.meshes.frustrum.clone(),
-                    meshes_materials.materials.item_paths.line.clone(),
-                    meshes_materials.materials.item_paths.arrow.clone(),
-                    kmp_edit_mode == KmpSections::ItemPaths,
-                );
+            macro_rules! spawn_node_link {
+                ($mat:ident, $edit_mode:ident, $path_type:ident) => {
+                    spawn_node_link(
+                        world,
+                        prev_node,
+                        next_node,
+                        $path_type,
+                        meshes_materials.meshes.cylinder.clone(),
+                        meshes_materials.meshes.frustrum.clone(),
+                        meshes_materials.materials.$mat.line.clone(),
+                        meshes_materials.materials.$mat.arrow.clone(),
+                        kmp_edit_mode == KmpSections::$edit_mode,
+                    )
+                };
             }
+            match path_type {
+                PathType::Enemy => spawn_node_link!(enemy_paths, EnemyPaths, path_type),
+                PathType::Item => spawn_node_link!(item_paths, ItemPaths, path_type),
+                PathType::CheckpointLeft | PathType::CheckpointRight => {
+                    spawn_node_link!(checkpoints, Checkpoints, path_type)
+                }
+            };
         });
     }
 }

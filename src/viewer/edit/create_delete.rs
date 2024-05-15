@@ -9,10 +9,10 @@ use crate::{
         kcl_model::KCLModelSection,
         kmp::{
             components::{
-                AreaPoint, BattleFinishPoint, CannonPoint, EnemyPathPoint, ItemPathPoint, KmpCamera,
-                KmpSelectablePoint, Object, RespawnPoint, Spawnable, StartPoint,
+                AreaPoint, BattleFinishPoint, CannonPoint, CheckpointLeft, CheckpointRight, EnemyPathPoint,
+                ItemPathPoint, KmpCamera, KmpSelectablePoint, Object, RespawnPoint, SpawnNewPath, SpawnNewPoint,
+                SpawnNewWithId, StartPoint,
             },
-            meshes_materials::KmpMeshesMaterials,
             path::{KmpPathNode, RecalculatePaths},
             sections::{KmpEditMode, KmpSections},
         },
@@ -42,7 +42,6 @@ fn create_point(
     mut raycast: Raycast,
     q_kcl: Query<(), With<KCLModelSection>>,
     kmp_edit_mode: Res<KmpEditMode>,
-    kmp_meshes_materials: Res<KmpMeshesMaterials>,
     mut commands: Commands,
     q_selected_item_points: Query<Entity, (With<ItemPathPoint>, With<Selected>)>,
     q_selected_enemy_points: Query<Entity, (With<EnemyPathPoint>, With<Selected>)>,
@@ -74,54 +73,31 @@ fn create_point(
         return;
     };
 
-    for (e, i) in mouse_ray.iter() {
-        dbg!(e, i);
-        dbg!(q_kcl.contains(*e));
-    }
-
     let Some(kcl_intersection) = mouse_ray.iter().find(|e| q_kcl.contains(e.0)) else {
         return;
     };
-    println!("4");
 
     let mouse_3d_pos = kcl_intersection.1.position();
-    println!("creating");
 
     use KmpSections::*;
     let created_entity = match kmp_edit_mode.0 {
-        StartPoints => StartPoint::spawn(&mut commands, &kmp_meshes_materials, mouse_3d_pos),
+        StartPoints => StartPoint::spawn(&mut commands, mouse_3d_pos),
         EnemyPaths => {
             let prev_nodes: HashSet<_> = q_selected_enemy_points.iter().collect();
-            EnemyPathPoint::spawn(&mut commands, &kmp_meshes_materials, mouse_3d_pos, prev_nodes)
+            EnemyPathPoint::spawn(&mut commands, mouse_3d_pos, prev_nodes)
         }
         ItemPaths => {
             let prev_nodes: HashSet<_> = q_selected_item_points.iter().collect();
-            ItemPathPoint::spawn(&mut commands, &kmp_meshes_materials, mouse_3d_pos, prev_nodes)
+            ItemPathPoint::spawn(&mut commands, mouse_3d_pos, prev_nodes)
         }
-        RespawnPoints => RespawnPoint::spawn(
-            &mut commands,
-            &kmp_meshes_materials,
-            mouse_3d_pos,
-            q_kmp_pts.1.iter().count(),
-        ),
-        Objects => Object::spawn(&mut commands, &kmp_meshes_materials, mouse_3d_pos),
-        Areas => AreaPoint::spawn(&mut commands, &kmp_meshes_materials, mouse_3d_pos),
-        Cameras => KmpCamera::spawn(&mut commands, &kmp_meshes_materials, mouse_3d_pos),
-        CannonPoints => CannonPoint::spawn(
-            &mut commands,
-            &kmp_meshes_materials,
-            mouse_3d_pos,
-            q_kmp_pts.2.iter().count(),
-        ),
-        BattleFinishPoints => BattleFinishPoint::spawn(
-            &mut commands,
-            &kmp_meshes_materials,
-            mouse_3d_pos,
-            q_kmp_pts.3.iter().count(),
-        ),
+        RespawnPoints => RespawnPoint::spawn(&mut commands, mouse_3d_pos, q_kmp_pts.1.iter().count()),
+        Objects => Object::spawn(&mut commands, mouse_3d_pos),
+        Areas => AreaPoint::spawn(&mut commands, mouse_3d_pos),
+        Cameras => KmpCamera::spawn(&mut commands, mouse_3d_pos),
+        CannonPoints => CannonPoint::spawn(&mut commands, mouse_3d_pos, q_kmp_pts.2.iter().count()),
+        BattleFinishPoints => BattleFinishPoint::spawn(&mut commands, mouse_3d_pos, q_kmp_pts.3.iter().count()),
         _ => Entity::PLACEHOLDER,
     };
-    println!("created");
     commands.entity(created_entity).insert(Selected);
     // we send this event which is recieved by the Select system, so it knows to add the Selected component
     // we can't add it now, because then in the select system it will just be deselected again
@@ -133,22 +109,38 @@ fn create_point(
 
 fn delete_point(
     keys: Res<ButtonInput<KeyCode>>,
-    mut q_selected: Query<Entity, With<Selected>>,
+    mut q_selected: Query<(Entity, Option<&CheckpointLeft>, Option<&CheckpointRight>), With<Selected>>,
     mut q_kmp_path_node: Query<&mut KmpPathNode>,
     mut commands: Commands,
     viewport_info: Res<ViewportInfo>,
 ) {
-    if !viewport_info.mouse_in_viewport {
-        return;
-    };
-    if !keys.just_pressed(KeyCode::Backspace) && !keys.just_pressed(KeyCode::Delete) {
+    if !viewport_info.mouse_in_viewport
+        || (!keys.just_pressed(KeyCode::Backspace) && !keys.just_pressed(KeyCode::Delete))
+    {
         return;
     }
-    for entity in q_selected.iter_mut() {
+    // keep track of which entities we have despawned so we don't despawn any twice
+    let mut despawned_entities = HashSet::new();
+    for (entity, cp_left, cp_right) in q_selected.iter_mut() {
         // unlink ourselves if we are a kmp path node so we don't have any stale references before we delete
         if let Ok(kmp_path_node) = q_kmp_path_node.get(entity) {
             kmp_path_node.clone().delete(entity, &mut q_kmp_path_node);
         }
-        commands.entity(entity).despawn_recursive();
+        // if we are a checkpoint, get the other checkpoint entity
+        if let Some(other_cp) = cp_left.map(|x| x.right).or_else(|| cp_right.map(|x| x.left)) {
+            // unlink that checkpoint first
+            if let Ok(kmp_path_node) = q_kmp_path_node.get(other_cp) {
+                kmp_path_node.clone().delete(other_cp, &mut q_kmp_path_node);
+            }
+            // then delete it
+            if !despawned_entities.contains(&other_cp) {
+                commands.entity(other_cp).despawn_recursive();
+                despawned_entities.insert(other_cp);
+            }
+        }
+        if !despawned_entities.contains(&entity) {
+            commands.entity(entity).despawn_recursive();
+            despawned_entities.insert(entity);
+        }
     }
 }

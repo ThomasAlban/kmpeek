@@ -29,7 +29,7 @@ pub struct ShowTableTab<'w, 's> {
     q_enemy_path_point: Query<'w, 's, &'static mut EnemyPathPoint>,
 }
 impl UiSubSection for ShowTableTab<'_, '_> {
-    fn show(&mut self, ui: &mut Ui) {
+    fn show(&mut self, _ui: &mut Ui) {
         // match self.kmp_edit_mode.0 {
         //     KmpModelSections::StartPoints => StartPointTable::show(
         //         ui,
@@ -145,7 +145,7 @@ impl StartPointTable {
                     row.col(|ui| {
                         drag_vec3(ui, &mut transform_cp.translation, 10.);
                     });
-                    row.col(|ui| {
+                    row.col(|_ui| {
                         // rotation_edit(ui, &mut transform_cp, 1.);
                     });
                     row.col(|ui| {

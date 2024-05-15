@@ -1,8 +1,7 @@
 use super::{
-    meshes_materials::KmpMeshesMaterials,
+    meshes_materials::{KmpMaterials, PathMaterials, PointMaterials},
     path::{KmpPathNode, PathPointSpawner},
-    point::{add_respawn_point_preview, PointSpawner},
-    settings::OutlineSettings,
+    point::PointSpawner,
     Ckpt, Cnpt, Jgpt, Mspt,
 };
 use crate::util::kmp_file::{Area, Came, Enpt, Gobj, Itpt, Ktpt, Poti, PotiPoint, Stgi};
@@ -11,12 +10,7 @@ use std::collections::HashSet;
 use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 
 #[derive(Component)]
-pub struct TransformOptions {
-    /// whether or not the object's rotation should be editable
-    pub use_rotation: bool,
-    /// whether or not the object's scale should be editable
-    pub use_scale: bool,
-}
+pub struct HideRotation;
 
 #[derive(Component, Default)]
 pub struct KmpSelectablePoint;
@@ -67,7 +61,7 @@ impl Default for StartPoint {
 // --- ENEMY PATH COMPONENTS ---
 #[derive(Component, Default)]
 pub struct EnemyPathMarker;
-#[derive(Component, Clone, Copy, PartialEq, Default)]
+#[derive(Component, Clone, Copy, PartialEq, Default, Debug)]
 pub struct EnemyPathPoint {
     pub leniency: f32,
     pub setting_1: EnemyPathSetting1,
@@ -75,7 +69,7 @@ pub struct EnemyPathPoint {
     pub setting_3: u8,
     pub path_start_override: bool,
 }
-#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy)]
+#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy, Debug)]
 pub enum EnemyPathSetting1 {
     #[default]
     None,
@@ -87,7 +81,7 @@ pub enum EnemyPathSetting1 {
     #[strum(serialize = "End Wheelie")]
     EndWheelie,
 }
-#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy)]
+#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy, Debug)]
 pub enum EnemyPathSetting2 {
     #[default]
     None,
@@ -102,7 +96,7 @@ pub enum EnemyPathSetting2 {
 // --- ITEM PATH COMPONENTS ---
 #[derive(Component, Default)]
 pub struct ItemPathMarker;
-#[derive(Component, PartialEq, Clone, Default)]
+#[derive(Component, PartialEq, Clone, Default, Debug)]
 pub struct ItemPathPoint {
     pub bullet_control: f32,
     pub bullet_height: ItemPathBulletHeight,
@@ -111,7 +105,7 @@ pub struct ItemPathPoint {
     pub path_start_override: bool,
 }
 
-#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy)]
+#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy, Debug)]
 pub enum ItemPathBulletHeight {
     #[default]
     Auto,
@@ -125,18 +119,30 @@ pub enum ItemPathBulletHeight {
 
 // --- CHECKPOINT COMPONENTS ---
 // for checkpoints, the left checkpoint entity stores all the info
-#[derive(Component, Clone, PartialEq)]
+#[derive(Component, Clone, PartialEq, Debug)]
 pub struct CheckpointLeft {
     pub right: Entity,
     pub kind: CheckpointKind,
     // will contain link to respawn entity
 }
+impl Default for CheckpointLeft {
+    fn default() -> Self {
+        Self {
+            right: Entity::PLACEHOLDER,
+            kind: CheckpointKind::default(),
+        }
+    }
+}
 #[derive(Component, Clone, PartialEq)]
 pub struct CheckpointRight {
     pub left: Entity,
 }
+#[derive(Component)]
+pub struct CheckpointLine {
+    pub left: Entity,
+}
 
-#[derive(Component, PartialEq, Clone, Default)]
+#[derive(Component, PartialEq, Clone, Default, Debug)]
 pub enum CheckpointKind {
     #[default]
     Normal,
@@ -567,123 +573,99 @@ impl FromKmp<Mspt> for BattleFinishPoint {
 // --- IMPLEMENT HOW TO SPAWN EACH COMPONENT AS DEFAULT ---
 //
 
-pub trait Spawnable {
-    fn spawn(commands: &mut Commands, meshes_materials: &KmpMeshesMaterials, pos: Vec3) -> Entity;
+pub trait SpawnNewPoint {
+    fn spawn(commands: &mut Commands, pos: Vec3) -> Entity;
 }
-macro_rules! impl_spawnable_point {
-    ($ty:ty, $s:ident) => {
-        impl Spawnable for $ty {
-            fn spawn(commands: &mut Commands, meshes_materials: &KmpMeshesMaterials, pos: Vec3) -> Entity {
-                PointSpawner::new(
-                    &meshes_materials.meshes,
-                    &meshes_materials.materials.$s,
-                    &OutlineSettings::default(),
-                    Self::default(),
-                )
+pub trait SpawnNewWithId {
+    fn spawn(commands: &mut Commands, pos: Vec3, id: usize) -> Entity;
+}
+pub trait SpawnNewPath {
+    fn spawn(commands: &mut Commands, pos: Vec3, prev_nodes: HashSet<Entity>) -> Entity;
+}
+macro_rules! impl_spawn_new {
+    ($ty:ty) => {
+        impl SpawnNewPoint for $ty {
+            fn spawn(commands: &mut Commands, pos: Vec3) -> Entity {
+                PointSpawner::new(Self::default())
+                    .pos(pos)
+                    .spawn_command(commands)
+            }
+        }
+    };
+    ($ty:ty, $marker:ty) => {
+        impl SpawnNewPath for $ty {
+            fn spawn(commands: &mut Commands, pos: Vec3, prev_nodes: HashSet<Entity>) -> Entity {
+                let entity = PathPointSpawner::<_, $marker>::new(Self::default())
+                    .pos(pos)
+                    .spawn_command(commands);
+                commands.add(move |world: &mut World| {
+                    for prev_entity in prev_nodes.iter() {
+                        KmpPathNode::link_nodes(*prev_entity, entity, world);
+                    }
+                });
+                entity
+            }
+        }
+    };
+}
+macro_rules! impl_spawn_new_with_id {
+    ($ty:ty) => {
+        impl SpawnNewWithId for $ty {
+            fn spawn(commands: &mut Commands, pos: Vec3, id: usize) -> Entity {
+                #[allow(clippy::needless_update)]
+                PointSpawner::new(Self {
+                    id: id as u16,
+                    ..default()
+                })
                 .pos(pos)
                 .spawn_command(commands)
             }
         }
     };
 }
-impl_spawnable_point!(StartPoint, start_points);
-impl_spawnable_point!(Object, objects);
-impl_spawnable_point!(AreaPoint, areas);
-impl_spawnable_point!(KmpCamera, cameras);
-impl RespawnPoint {
-    pub fn spawn(commands: &mut Commands, meshes_materials: &KmpMeshesMaterials, pos: Vec3, id: usize) -> Entity {
-        let entity = PointSpawner::new(
-            &meshes_materials.meshes,
-            &meshes_materials.materials.respawn_points,
-            &OutlineSettings::default(),
-            Self {
-                id: id as u16,
-                ..default()
-            },
-        )
-        .pos(pos)
-        .spawn_command(commands);
-        add_respawn_point_preview(
-            entity,
-            commands,
-            &meshes_materials.meshes,
-            &meshes_materials.materials.respawn_points,
-        );
-        entity
-    }
-}
-impl CannonPoint {
-    pub fn spawn(commands: &mut Commands, meshes_materials: &KmpMeshesMaterials, pos: Vec3, id: usize) -> Entity {
-        PointSpawner::new(
-            &meshes_materials.meshes,
-            &meshes_materials.materials.cannon_points,
-            &OutlineSettings::default(),
-            Self {
-                id: id as u16,
-                ..default()
-            },
-        )
-        .pos(pos)
-        .spawn_command(commands)
-    }
-}
-impl BattleFinishPoint {
-    pub fn spawn(commands: &mut Commands, meshes_materials: &KmpMeshesMaterials, pos: Vec3, id: usize) -> Entity {
-        PointSpawner::new(
-            &meshes_materials.meshes,
-            &meshes_materials.materials.battle_finish_points,
-            &OutlineSettings::default(),
-            Self { id: id as u16 },
-        )
-        .pos(pos)
-        .spawn_command(commands)
-    }
-}
+impl_spawn_new!(StartPoint);
+impl_spawn_new!(Object);
+impl_spawn_new!(AreaPoint);
+impl_spawn_new!(KmpCamera);
+impl_spawn_new!(ItemPathPoint, ItemPathMarker);
+impl_spawn_new!(EnemyPathPoint, EnemyPathMarker);
+impl_spawn_new_with_id!(RespawnPoint);
+impl_spawn_new_with_id!(CannonPoint);
+impl_spawn_new_with_id!(BattleFinishPoint);
 
-impl ItemPathPoint {
-    pub fn spawn(
-        commands: &mut Commands,
-        meshes_materials: &KmpMeshesMaterials,
-        pos: Vec3,
-        prev_nodes: HashSet<Entity>,
-    ) -> Entity {
-        let entity = PathPointSpawner::<_, ItemPathMarker>::new(
-            &meshes_materials.meshes,
-            &meshes_materials.materials.item_paths,
-            &OutlineSettings::default(),
-            Self::default(),
-        )
-        .pos(pos)
-        .spawn_command(commands);
-        commands.add(move |world: &mut World| {
-            for prev_entity in prev_nodes.iter() {
-                KmpPathNode::link_nodes(*prev_entity, entity, world);
+//
+// --- IMPLEMENT HOW TO GET THE RELEVANT MATERIALS SECTION FOR THE COMPONENTS ---
+//
+
+pub trait GetPointMaterialSection {
+    fn get_materials(materials: &KmpMaterials) -> &PointMaterials;
+}
+macro_rules! impl_point_material_section {
+    ($ty:ty, $s:ident) => {
+        impl GetPointMaterialSection for $ty {
+            fn get_materials(materials: &KmpMaterials) -> &PointMaterials {
+                &materials.$s
             }
-        });
-        entity
+        }
+    };
+}
+impl_point_material_section!(StartPoint, start_points);
+impl_point_material_section!(RespawnPoint, respawn_points);
+impl_point_material_section!(Object, objects);
+impl_point_material_section!(AreaPoint, areas);
+impl_point_material_section!(KmpCamera, cameras);
+impl_point_material_section!(CannonPoint, cannon_points);
+impl_point_material_section!(BattleFinishPoint, battle_finish_points);
+pub trait GetPathMaterialSection {
+    fn get_materials(materials: &KmpMaterials) -> &PathMaterials;
+}
+impl GetPathMaterialSection for EnemyPathPoint {
+    fn get_materials(materials: &KmpMaterials) -> &PathMaterials {
+        &materials.enemy_paths
     }
 }
-
-impl EnemyPathPoint {
-    pub fn spawn(
-        commands: &mut Commands,
-        meshes_materials: &KmpMeshesMaterials,
-        pos: Vec3,
-        prev_nodes: HashSet<Entity>,
-    ) -> Entity {
-        let entity = PathPointSpawner::<_, EnemyPathMarker>::new(
-            &meshes_materials.meshes,
-            &meshes_materials.materials.enemy_paths,
-            &OutlineSettings::default(),
-            Self::default(),
-        )
-        .pos(pos)
-        .spawn_command(commands);
-        commands.add(move |world: &mut World| {
-            for prev_entity in prev_nodes.iter() {
-                KmpPathNode::link_nodes(*prev_entity, entity, world);
-            }
-        });
-        entity
+impl GetPathMaterialSection for ItemPathPoint {
+    fn get_materials(materials: &KmpMaterials) -> &PathMaterials {
+        &materials.item_paths
     }
 }

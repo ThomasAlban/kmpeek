@@ -33,7 +33,7 @@ impl Plugin for TweakPlugin {
 }
 
 #[derive(Resource, Clone, Debug)]
-struct TweakInteraction {
+pub struct TweakInteraction {
     tweak_type: SnapTo,
     /// The mouse position when we started the interaction.
     initial_mouse_pos: Vec2,
@@ -46,7 +46,7 @@ struct TweakInteraction {
     initial_interaction_point: Vec3,
 }
 
-fn tweak_interaction(
+pub fn tweak_interaction(
     mut tweak_interaction: Local<Option<TweakInteraction>>,
     mut q_selected: Query<(Entity, &mut Transform, &Tweakable), With<Selected>>,
     edit_mode: Res<EditMode>,

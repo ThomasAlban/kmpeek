@@ -9,8 +9,8 @@ use crate::{
         edit::select::Selected,
         kmp::{
             components::{
-                AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, EnemyPathPoint, ItemPathPoint, KmpCamera, Object,
-                RespawnPoint, StartPoint, TrackInfo,
+                AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, EnemyPathPoint, HideRotation, ItemPathPoint,
+                KmpCamera, Object, RespawnPoint, StartPoint, TrackInfo,
             },
             path::RecalculatePaths,
             sections::{KmpEditMode, KmpSections},
@@ -25,7 +25,7 @@ pub struct ShowEditTab<'w, 's> {
     kmp_edit_mode: Res<'w, KmpEditMode>,
     track_info: Option<ResMut<'w, TrackInfo>>,
 
-    q_transform: Query<'w, 's, &'static mut Transform, With<Selected>>,
+    q_transform: Query<'w, 's, (&'static mut Transform, Has<HideRotation>), With<Selected>>,
     q_start_point: Query<'w, 's, &'static mut StartPoint, With<Selected>>,
     q_enemy_point: Query<'w, 's, &'static mut EnemyPathPoint, With<Selected>>,
     q_item_point: Query<'w, 's, &'static mut ItemPathPoint, With<Selected>>,
@@ -71,30 +71,76 @@ impl UiSubSection for ShowEditTab<'_, '_> {
             }
         }
 
-        edit_component("Transform", self.q_transform.iter_mut(), ui, |ui, transforms| {
-            edit_row("Translation X", true, ui, |ui| {
-                drag_value_multi_edit(DragSpeed::Fast, ui, map!(transforms, translation.x));
-            });
-            edit_row("Y", true, ui, |ui| {
-                drag_value_multi_edit(DragSpeed::Fast, ui, map!(transforms, translation.y));
-            });
-            edit_row("Z", true, ui, |ui| {
-                drag_value_multi_edit(DragSpeed::Fast, ui, map!(transforms, translation.z));
-            });
-            edit_spacing(ui);
-            rotation_multi_edit(ui, transforms, |ui, rots| {
-                let x = edit_row("Rotation X", true, ui, |ui| {
-                    drag_value_multi_edit(DragSpeed::Slow, ui, map!(rots, x))
+        if !self.q_transform.is_empty() {
+            let mut tr: Vec<_> = self.q_transform.iter().map(|x| (*x.0, x.1)).collect();
+            let title = if tr.len() > 1 {
+                format!("Transform ({})", tr.len())
+            } else {
+                "Transform".to_owned()
+            };
+            framed_collapsing_header(title, ui, |ui| {
+                edit_row("Translation X", true, ui, |ui| {
+                    drag_value_multi_edit(DragSpeed::Fast, ui, tr.iter_mut().map(|x| &mut x.0.translation.x));
                 });
-                let y = edit_row("Y", true, ui, |ui| {
-                    drag_value_multi_edit(DragSpeed::Slow, ui, map!(rots, y))
+                edit_row("Y", true, ui, |ui| {
+                    drag_value_multi_edit(DragSpeed::Fast, ui, tr.iter_mut().map(|x| &mut x.0.translation.y));
                 });
-                let z = edit_row("Z", true, ui, |ui| {
-                    drag_value_multi_edit(DragSpeed::Slow, ui, map!(rots, z))
+                edit_row("Z", true, ui, |ui| {
+                    drag_value_multi_edit(DragSpeed::Fast, ui, tr.iter_mut().map(|x| &mut x.0.translation.z));
                 });
-                (x, y, z)
+                if !tr.iter().all(|x| x.1) {
+                    edit_spacing(ui);
+                    rotation_multi_edit(ui, tr.iter_mut().map(|x| &mut x.0), |ui, rots| {
+                        let x = edit_row("Rotation X", true, ui, |ui| {
+                            drag_value_multi_edit(DragSpeed::Slow, ui, map!(rots, x))
+                        });
+                        let y = edit_row("Y", true, ui, |ui| {
+                            drag_value_multi_edit(DragSpeed::Slow, ui, map!(rots, y))
+                        });
+                        let z = edit_row("Z", true, ui, |ui| {
+                            drag_value_multi_edit(DragSpeed::Slow, ui, map!(rots, z))
+                        });
+                        (x, y, z)
+                    });
+                }
             });
-        });
+            for (mut item, other) in self.q_transform.iter_mut().zip(tr.iter()) {
+                if *item.0 != other.0 {
+                    *item.0 = other.0;
+                    if item.1 {
+                        item.0.rotation = Quat::default();
+                    }
+                }
+            }
+            if !tr.is_empty() {
+                edit_spacing(ui);
+            }
+        }
+
+        // edit_component("Transform", self.q_transform.iter_mut(), ui, |ui, transforms| {
+        //     edit_row("Translation X", true, ui, |ui| {
+        //         drag_value_multi_edit(DragSpeed::Fast, ui, map!(transforms, translation.x));
+        //     });
+        //     edit_row("Y", true, ui, |ui| {
+        //         drag_value_multi_edit(DragSpeed::Fast, ui, map!(transforms, translation.y));
+        //     });
+        //     edit_row("Z", true, ui, |ui| {
+        //         drag_value_multi_edit(DragSpeed::Fast, ui, map!(transforms, translation.z));
+        //     });
+        //     edit_spacing(ui);
+        //     rotation_multi_edit(ui, transforms, |ui, rots| {
+        //         let x = edit_row("Rotation X", true, ui, |ui| {
+        //             drag_value_multi_edit(DragSpeed::Slow, ui, map!(rots, x))
+        //         });
+        //         let y = edit_row("Y", true, ui, |ui| {
+        //             drag_value_multi_edit(DragSpeed::Slow, ui, map!(rots, y))
+        //         });
+        //         let z = edit_row("Z", true, ui, |ui| {
+        //             drag_value_multi_edit(DragSpeed::Slow, ui, map!(rots, z))
+        //         });
+        //         (x, y, z)
+        //     });
+        // });
 
         edit_component("Start Point", self.q_start_point.iter_mut(), ui, |ui, start_points| {
             edit_row("Player Index", true, ui, |ui| {

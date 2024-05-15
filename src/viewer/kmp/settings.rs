@@ -56,6 +56,9 @@ impl Default for KmpModelColors {
             },
             checkpoints: CheckpointColour {
                 point: Color::rgb(1., 0., 0.),
+                join_line: Color::rgb(0., 1., 0.),
+                line: Color::rgb(0., 1., 0.),
+                arrow: Color::rgb(0., 0.6, 0.),
             },
             objects: PointColor {
                 point: Color::rgb(0.8, 0., 0.8),
@@ -120,6 +123,9 @@ pub struct PointColor {
 #[derive(Serialize, Deserialize, Reflect)]
 pub struct CheckpointColour {
     pub point: Color,
+    pub join_line: Color,
+    pub line: Color,
+    pub arrow: Color,
     // more to come
 }
 

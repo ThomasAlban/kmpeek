@@ -1,10 +1,7 @@
 use super::{CameraMode, UpdateCameraSet};
-use crate::{
-    ui::{
-        settings::AppSettings,
-        viewport::{SetupViewportSet, ViewportImage, ViewportInfo},
-    },
-    viewer,
+use crate::ui::{
+    settings::AppSettings,
+    viewport::{SetupViewportSet, ViewportImage, ViewportInfo},
 };
 use bevy::{
     input::mouse::{MouseMotion, MouseWheel},

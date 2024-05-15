@@ -9,7 +9,6 @@ use crate::viewer::camera::Gizmo2dCam;
 use crate::viewer::kmp::components::KmpSelectablePoint;
 use crate::viewer::kmp::sections::KmpEditMode;
 use bevy::prelude::*;
-use bevy_egui::EguiContexts;
 use bevy_mod_outline::*;
 use bevy_mod_raycast::prelude::*;
 use transform_gizmo_bevy::GizmoTarget;

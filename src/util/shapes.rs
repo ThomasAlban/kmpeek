@@ -209,7 +209,6 @@ impl From<Cylinder> for Mesh {
         assert!(cylinder.height > 0.0, "Must have positive height");
 
         let num_vertices = (cylinder.radial_segments + 1) * (cylinder.height_segments + 3) + 2;
-        // top&bottom + body
         let num_indices = cylinder.radial_segments * 3 * 2 + cylinder.radial_segments * cylinder.height_segments * 6;
 
         let mut mesh = MeshData::new(num_vertices as usize, num_indices as usize);

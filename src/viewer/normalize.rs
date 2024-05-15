@@ -119,6 +119,7 @@ fn update_normalize(
         if !normalize.axes.z {
             transform_cp.scale.z = scale_before.z;
         }
+        transform_cp.rotation = transform_cp.rotation.normalize();
 
         gt.set_if_neq(transform_cp.into());
 

@@ -68,12 +68,17 @@ impl PointMaterials {
 #[derive(Clone)]
 pub struct CheckpointMaterials {
     pub point: Handle<StandardMaterial>,
-    // more to come
+    pub join_line: Handle<StandardMaterial>, // more to come
+    pub line: Handle<StandardMaterial>,
+    pub arrow: Handle<StandardMaterial>,
 }
 impl CheckpointMaterials {
     pub fn from_colors(materials: &mut Assets<StandardMaterial>, colors: &CheckpointColour) -> Self {
         Self {
             point: unlit_material(materials, colors.point),
+            join_line: unlit_material(materials, colors.join_line),
+            line: unlit_material(materials, colors.line),
+            arrow: unlit_material(materials, colors.arrow),
         }
     }
 }
