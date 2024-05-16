@@ -47,7 +47,7 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
                 );
                 ui.checkbox(&mut self.settings.kmp_model.normalize, "Normalize points");
                 ui.checkbox(
-                    &mut self.settings.open_course_kcl_in_directory,
+                    &mut self.settings.open_course_kcl_in_dir,
                     "Auto open course.kcl",
                 ).on_hover_text("If enabled, when opening a KMP file, if there is a 'course.kcl' file in the same directory, it will also be opened");
 

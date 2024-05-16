@@ -15,7 +15,7 @@ pub struct AppSettings {
     pub camera: CameraSettings,
     pub kcl_model: KclModelSettings,
     pub kmp_model: KmpModelSettings,
-    pub open_course_kcl_in_directory: bool,
+    pub open_course_kcl_in_dir: bool,
     pub increment: u32,
 }
 impl Default for AppSettings {
@@ -24,7 +24,7 @@ impl Default for AppSettings {
             camera: CameraSettings::default(),
             kcl_model: KclModelSettings::default(),
             kmp_model: KmpModelSettings::default(),
-            open_course_kcl_in_directory: true,
+            open_course_kcl_in_dir: true,
             increment: 1,
         }
     }
@@ -35,6 +35,8 @@ pub struct SetupAppSettingsSet;
 
 pub fn setup_app_settings(mut commands: Commands, mut pkv: ResMut<PkvStore>) {
     // get the app settings if it exists, if not, set it to default
+    // THIS LINE SHOULD BE REMOVED TO MAKE THIS ACTUALLY WORK
+    pkv.set("settings", &AppSettings::default()).unwrap();
     let settings = match pkv.get::<AppSettings>("settings") {
         Ok(settings) => settings,
         Err(_) => {

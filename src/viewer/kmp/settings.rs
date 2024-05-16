@@ -55,10 +55,11 @@ impl Default for KmpModelColors {
                 arrow: Color::rgb(0., 0.6, 0.),
             },
             checkpoints: CheckpointColour {
-                point: Color::rgb(1., 0., 0.),
-                join_line: Color::rgb(0., 1., 0.),
-                line: Color::rgb(0., 1., 0.),
-                arrow: Color::rgb(0., 0.6, 0.),
+                normal: Color::rgb(0., 0.55, 0.85),
+                key: Color::rgb(1., 0., 0.7),
+                lap_count: Color::rgb(1., 0.45, 0.8),
+                line: Color::rgb(0.2, 0.75, 0.9),
+                arrow: Color::rgb(0.45, 0.8, 0.9),
             },
             objects: PointColor {
                 point: Color::rgb(0.8, 0., 0.8),
@@ -122,11 +123,11 @@ pub struct PointColor {
 
 #[derive(Serialize, Deserialize, Reflect)]
 pub struct CheckpointColour {
-    pub point: Color,
-    pub join_line: Color,
+    pub normal: Color,
+    pub key: Color,
+    pub lap_count: Color,
     pub line: Color,
     pub arrow: Color,
-    // more to come
 }
 
 #[derive(Serialize, Deserialize, Reflect, Clone)]

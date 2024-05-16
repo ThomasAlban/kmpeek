@@ -79,7 +79,7 @@ pub fn check_cmd_args(
                     kmp_file_path.0 = Some(path.into());
                     ev_kmp_file_selected.send(KmpFileSelected(path.into()));
                     // if there is a course.kcl in the same directory and the setting to open it is set, open the kcl as well
-                    if settings.open_course_kcl_in_directory {
+                    if settings.open_course_kcl_in_dir {
                         let mut course_kcl_path = path.to_owned();
                         course_kcl_path.set_file_name("course.kcl");
                         if course_kcl_path.exists() {

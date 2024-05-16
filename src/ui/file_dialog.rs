@@ -41,7 +41,7 @@ impl UiSection for ShowFileDialog<'_, '_> {
                                 if file_ext == "kmp" {
                                     self.kmp_file_path.0 = Some(file.into());
                                     self.ev_kmp_file_selected.send(KmpFileSelected(file.into()));
-                                    if self.settings.open_course_kcl_in_directory {
+                                    if self.settings.open_course_kcl_in_dir {
                                         let mut course_kcl_path = file.to_owned();
                                         course_kcl_path.set_file_name("course.kcl");
                                         if course_kcl_path.exists() {

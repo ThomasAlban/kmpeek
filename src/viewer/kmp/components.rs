@@ -122,6 +122,8 @@ pub enum ItemPathBulletHeight {
 #[derive(Component, Clone, PartialEq, Debug)]
 pub struct CheckpointLeft {
     pub right: Entity,
+    pub line: Entity,
+    pub plane: Entity,
     pub kind: CheckpointKind,
     // will contain link to respawn entity
 }
@@ -129,6 +131,8 @@ impl Default for CheckpointLeft {
     fn default() -> Self {
         Self {
             right: Entity::PLACEHOLDER,
+            line: Entity::PLACEHOLDER,
+            plane: Entity::PLACEHOLDER,
             kind: CheckpointKind::default(),
         }
     }
@@ -136,10 +140,27 @@ impl Default for CheckpointLeft {
 #[derive(Component, Clone, PartialEq)]
 pub struct CheckpointRight {
     pub left: Entity,
+    pub line: Entity,
+    pub plane: Entity,
+}
+impl Default for CheckpointRight {
+    fn default() -> Self {
+        Self {
+            left: Entity::PLACEHOLDER,
+            line: Entity::PLACEHOLDER,
+            plane: Entity::PLACEHOLDER,
+        }
+    }
 }
 #[derive(Component)]
 pub struct CheckpointLine {
     pub left: Entity,
+    pub right: Entity,
+}
+#[derive(Component)]
+pub struct CheckpointPlane {
+    pub left: Entity,
+    pub right: Entity,
 }
 
 #[derive(Component, PartialEq, Clone, Default, Debug)]
@@ -420,6 +441,8 @@ impl FromKmp<Ckpt> for CheckpointLeft {
     fn from_kmp(data: &Ckpt, errors: &mut Vec<KmpError>, _: usize) -> Self {
         Self {
             right: Entity::PLACEHOLDER,
+            line: Entity::PLACEHOLDER,
+            plane: Entity::PLACEHOLDER,
             kind: match data.cp_type {
                 -1 => CheckpointKind::Normal,
                 0 => CheckpointKind::LapCount,

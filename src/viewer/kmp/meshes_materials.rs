@@ -3,7 +3,7 @@ use crate::{
     ui::settings::AppSettings,
     util::shapes::{Cone, Cylinder},
 };
-use bevy::prelude::*;
+use bevy::{prelude::*, render::render_resource::Face};
 
 #[derive(Resource)]
 pub struct KmpMeshesMaterials {
@@ -17,6 +17,7 @@ pub struct KmpMeshes {
     pub cylinder: Handle<Mesh>,
     pub frustrum: Handle<Mesh>,
     pub cone: Handle<Mesh>,
+    pub plane: Handle<Mesh>,
 }
 pub struct KmpMaterials {
     pub start_points: PointMaterials,
@@ -67,16 +68,33 @@ impl PointMaterials {
 
 #[derive(Clone)]
 pub struct CheckpointMaterials {
-    pub point: Handle<StandardMaterial>,
-    pub join_line: Handle<StandardMaterial>, // more to come
+    pub normal: Handle<StandardMaterial>,
+    pub normal_plane: Handle<StandardMaterial>,
+    pub key: Handle<StandardMaterial>,
+    pub key_plane: Handle<StandardMaterial>,
+    pub lap_count: Handle<StandardMaterial>,
+    pub lap_count_plane: Handle<StandardMaterial>,
     pub line: Handle<StandardMaterial>,
     pub arrow: Handle<StandardMaterial>,
 }
 impl CheckpointMaterials {
     pub fn from_colors(materials: &mut Assets<StandardMaterial>, colors: &CheckpointColour) -> Self {
+        let plane_color = |materials: &mut Assets<StandardMaterial>, color: Color| {
+            materials.add(StandardMaterial {
+                base_color: color.with_a(0.2),
+                alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                cull_mode: None,
+                ..default()
+            })
+        };
         Self {
-            point: unlit_material(materials, colors.point),
-            join_line: unlit_material(materials, colors.join_line),
+            normal: unlit_material(materials, colors.normal),
+            normal_plane: plane_color(materials, colors.normal),
+            key: unlit_material(materials, colors.key),
+            key_plane: plane_color(materials, colors.key),
+            lap_count: unlit_material(materials, colors.lap_count),
+            lap_count_plane: plane_color(materials, colors.lap_count),
             line: unlit_material(materials, colors.line),
             arrow: unlit_material(materials, colors.arrow),
         }
@@ -123,6 +141,7 @@ pub fn setup_kmp_meshes_materials(
             radius: 100.,
             segments: 32,
         })),
+        plane: meshes.add(Plane3d::default().mesh()),
     };
 
     let colors = &settings.kmp_model.color;

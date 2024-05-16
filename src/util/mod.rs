@@ -62,6 +62,28 @@ pub fn screen_to_ui_viewport(screen_pos: Vec2, window: &Window, viewport_rect: R
 //         vec3(self.x as f32, self.y as f32, self.z as f32)
 //     }
 // }
+//
+
+pub trait VisibilityToBool {
+    fn to_bool(self) -> bool;
+}
+impl VisibilityToBool for Visibility {
+    fn to_bool(self) -> bool {
+        self == Visibility::Visible
+    }
+}
+pub trait BoolToVisibility {
+    fn to_visibility(self) -> Visibility;
+}
+impl BoolToVisibility for bool {
+    fn to_visibility(self) -> Visibility {
+        if self {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        }
+    }
+}
 
 pub trait ToBevyVec2 {
     fn to_bevy_vec2(self) -> Vec2;

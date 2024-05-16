@@ -180,3 +180,11 @@ fn update_visible(
         }
     }
 }
+
+/// Utility function for calculating the transform a cylinder should have in order to join 2 points
+fn calc_line_transform(l_tr: Vec3, r_tr: Vec3) -> Transform {
+    let mut line_transform = Transform::from_translation(l_tr.lerp(r_tr, 0.5)).looking_at(r_tr, Vec3::Y);
+    line_transform.rotate_local_x(f32::to_radians(-90.));
+    line_transform.scale.y = l_tr.distance(r_tr);
+    line_transform
+}
