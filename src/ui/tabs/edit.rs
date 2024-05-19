@@ -15,7 +15,7 @@ use crate::{
         kmp::{
             components::{
                 AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, CheckpointLeft, CheckpointRight, EnemyPathPoint,
-                HideRotation, ItemPathPoint, KmpCamera, Object, RespawnPoint, StartPoint, TrackInfo,
+                ItemPathPoint, KmpCamera, Object, RespawnPoint, StartPoint, TrackInfo, TransformEditOptions,
             },
             path::RecalculatePaths,
             sections::{KmpEditMode, KmpSections},
@@ -36,7 +36,7 @@ pub struct ShowEditTab<'w, 's> {
     kmp_edit_mode: Res<'w, KmpEditMode>,
     track_info: Option<ResMut<'w, TrackInfo>>,
 
-    q_transform: Query<'w, 's, (&'static mut Transform, Has<HideRotation>), With<Selected>>,
+    q_transform: Query<'w, 's, (&'static mut Transform, Option<&'static TransformEditOptions>), With<Selected>>,
 
     q_start_point: Query<'w, 's, &'static mut StartPoint, With<Selected>>,
     q_enemy_point: Query<'w, 's, &'static mut EnemyPathPoint, With<Selected>>,
@@ -86,20 +86,19 @@ impl UiSubSection for ShowEditTab<'_, '_> {
         }
 
         if !self.q_transform.is_empty() {
-            let mut tr: Vec<_> = self.q_transform.iter().map(|x| (*x.0, x.1)).collect();
-            let title = if tr.len() > 1 {
-                format!("Transform ({})", tr.len())
-            } else {
-                "Transform".to_owned()
-            };
+            let mut tr: Vec<_> = self.q_transform.iter().map(|x| (*x.0, x.1.cloned())).collect();
+            let all_hide_rotation = tr.iter().all(|x| x.1.is_some_and(|x| x.hide_rotation));
+            let all_hide_y_tr = tr.iter().all(|x| x.1.is_some_and(|x| x.hide_y_translation));
+            let title = edit_component_title("Transform", tr.len());
             framed_collapsing_header(title, ui, |ui| {
-                vec3_drag_value_edit_row(
-                    ui,
-                    "Translation",
-                    DragSpeed::Fast,
-                    tr.iter_mut().map(|x| &mut x.0.translation),
-                );
-                if !tr.iter().all(|x| x.1) {
+                let mut trans: Vec<_> = tr.iter_mut().map(|x| &mut x.0.translation).collect();
+                drag_value_edit_row(ui, "Translation X", DragSpeed::Fast, trans.iter_mut().map(|x| &mut x.x));
+                if !all_hide_y_tr {
+                    drag_value_edit_row(ui, "Y", DragSpeed::Fast, trans.iter_mut().map(|x| &mut x.y));
+                }
+                drag_value_edit_row(ui, "Z", DragSpeed::Fast, trans.iter_mut().map(|x| &mut x.z));
+
+                if !all_hide_rotation {
                     edit_spacing(ui);
                     rotation_multi_edit(ui, tr.iter_mut().map(|x| &mut x.0), |ui, rots| {
                         let [x, y, z] = vec3_drag_value_edit_row(ui, "Rotation", DragSpeed::Slow, rots);
@@ -110,7 +109,7 @@ impl UiSubSection for ShowEditTab<'_, '_> {
             for (mut item, other) in self.q_transform.iter_mut().zip(tr.iter()) {
                 if *item.0 != other.0 {
                     *item.0 = other.0;
-                    if item.1 {
+                    if item.1.is_some_and(|x| x.hide_rotation) {
                         item.0.rotation = Quat::default();
                     }
                 }
@@ -283,6 +282,15 @@ impl UiSubSection for ShowEditTab<'_, '_> {
     }
 }
 
+fn edit_component_title(name: impl Into<String>, num: usize) -> String {
+    let name = name.into();
+    if num > 1 {
+        format!("{} ({})", name, num)
+    } else {
+        name
+    }
+}
+
 fn edit_component<'a, T: 'a + PartialEq + Clone, R>(
     ui: &mut Ui,
     title: &'static str,
@@ -292,11 +300,7 @@ fn edit_component<'a, T: 'a + PartialEq + Clone, R>(
     let mut len = 0;
     edit_many_mut(items, |items| {
         len = items.len();
-        let title = if items.len() > 1 {
-            format!("{} ({})", title, items.len())
-        } else {
-            title.into()
-        };
+        let title = edit_component_title(title, len);
         framed_collapsing_header(title, ui, |ui| add_body(ui, items));
     });
     if len > 0 {

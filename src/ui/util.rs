@@ -247,7 +247,8 @@ pub fn image_selectable_value<Value: PartialEq>(
     res.inner
 }
 
-pub fn drag_vec3(ui: &mut Ui, value: &mut Vec3, speed: f32) -> (Response, Response, Response) {
+pub fn drag_vec3(ui: &mut Ui, value: &mut Vec3, speed: impl Into<f64>) -> (Response, Response, Response) {
+    let speed = speed.into();
     ui.columns(3, |ui| {
         let x = ui[0]
             .centered_and_justified(|ui| ui.add(egui::DragValue::new(&mut value.x).speed(speed).fixed_decimals(1)))
@@ -262,7 +263,7 @@ pub fn drag_vec3(ui: &mut Ui, value: &mut Vec3, speed: f32) -> (Response, Respon
     })
 }
 
-fn quat_to_euler(transform: &Transform) -> Vec3 {
+pub fn quat_to_euler(transform: &Transform) -> Vec3 {
     let euler = transform.rotation.to_euler(EulerRot::XYZ);
 
     let mut rot = vec3(
@@ -286,7 +287,7 @@ fn quat_to_euler(transform: &Transform) -> Vec3 {
     clamp_0_360(&mut rot.z);
     rot
 }
-fn euler_to_quat(rot: Vec3, res: (Response, Response, Response), transform: &mut Transform) {
+pub fn euler_to_quat(rot: Vec3, res: (Response, Response, Response), transform: &mut Transform) {
     let changed = res.0.changed() || res.1.changed() || res.2.changed();
 
     let mut update_rotation = |res: Response, axis: Vec3| {

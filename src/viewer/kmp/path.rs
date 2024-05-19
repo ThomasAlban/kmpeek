@@ -4,8 +4,8 @@ use super::{
     components::FromKmp,
     meshes_materials::KmpMeshesMaterials,
     sections::{KmpEditMode, KmpSections},
-    CheckpointLeft, CheckpointRight, EnemyPathPoint, GetPathMaterialSection, HideRotation, ItemPathPoint, KmpError,
-    KmpSelectablePoint, PathOverallStart,
+    CheckpointLeft, CheckpointRight, EnemyPathPoint, GetPathMaterialSection, ItemPathPoint, KmpError,
+    KmpSelectablePoint, PathOverallStart, TransformEditOptions,
 };
 use crate::{
     ui::settings::AppSettings,
@@ -240,7 +240,10 @@ impl<T: Component + Clone + GetPathMaterialSection> PathPointSpawner<T> {
             self.kmp_component.clone(),
             KmpSelectablePoint,
             Tweakable(SnapTo::Kcl),
-            HideRotation,
+            TransformEditOptions {
+                hide_rotation: true,
+                hide_y_translation: false,
+            },
             GizmoTransformable,
             Normalize::new(200., 30., BVec3::TRUE),
             OutlineBundle {

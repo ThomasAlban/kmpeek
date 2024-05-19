@@ -2,7 +2,7 @@ use crate::{
     ui::viewport::ViewportInfo,
     util::{get_ray_from_cam, ui_viewport_to_ndc, world_to_ui_viewport},
     viewer::{
-        camera::Gizmo2dCam,
+        camera::{Gizmo2dCam, TopDownCam},
         edit::select::Selected,
         kmp::components::{AreaPoint, AreaShape},
     },
@@ -97,7 +97,7 @@ fn draw_area_bounds(mut gizmos: Gizmos, q_areas: Query<(&mut Transform, &mut Are
 // these are drawn using the 2d gizmo camera which renders above the main camera
 fn draw_area_handles(
     mut q_areas: Query<(Entity, &mut Transform, &mut AreaPoint), With<Selected>>,
-    q_cam: Query<(&Camera, &GlobalTransform), (Without<Selected>, Without<Gizmo2dCam>)>,
+    q_cam: Query<(&Camera, &GlobalTransform, Has<TopDownCam>), (Without<Selected>, Without<Gizmo2dCam>)>,
     q_gizmo_cam: Query<(&Camera, &GlobalTransform), With<Gizmo2dCam>>,
     viewport_info: Res<ViewportInfo>,
     q_window: Query<&Window>,
@@ -123,6 +123,8 @@ fn draw_area_handles(
 
     // get the active camera
     let cam = q_cam.iter().find(|cam| cam.0.is_active).unwrap();
+    let is_topdown = cam.2;
+    let cam = (cam.0, cam.1);
 
     let window = q_window.single();
 
@@ -169,6 +171,10 @@ fn draw_area_handles(
 
         if let Some(mouse_pos) = window.cursor_position() {
             for i in 0..5 {
+                if is_topdown && i == 2 {
+                    // skip top handle when viewing from topdown
+                    continue;
+                }
                 let Some(vp_pos) = handles_vp_pos[i] else {
                     continue;
                 };
@@ -265,6 +271,10 @@ fn draw_area_handles(
         painter.color = Color::RED;
         let gizmo_cam = q_gizmo_cam.single();
         for i in 0..5 {
+            if is_topdown && i == 2 {
+                // skip top handle when viewing from topdown
+                continue;
+            }
             if let Some(ndc_pos) = handles_ndc_pos[i] {
                 // convert the position from ndc to 2d camera coords
                 let pos = gizmo_cam.0.ndc_to_world(gizmo_cam.1, ndc_pos);

@@ -9,8 +9,11 @@ use bevy::{math::vec3, prelude::*};
 use std::collections::HashSet;
 use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 
-#[derive(Component)]
-pub struct HideRotation;
+#[derive(Component, Default, Clone, Copy)]
+pub struct TransformEditOptions {
+    pub hide_rotation: bool,
+    pub hide_y_translation: bool,
+}
 
 #[derive(Component, Default)]
 pub struct KmpSelectablePoint;

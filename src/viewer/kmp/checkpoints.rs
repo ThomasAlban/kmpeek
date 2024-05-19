@@ -2,8 +2,8 @@ use super::{
     calc_line_transform,
     meshes_materials::KmpMeshesMaterials,
     path::{get_kmp_data_and_component_groups, link_entity_groups, EntityGroup, KmpPathNode},
-    CheckpointKind, CheckpointLeft, CheckpointLine, CheckpointPlane, CheckpointRight, Ckpt, HideRotation, KmpError,
-    KmpFile, KmpSelectablePoint, PathOverallStart,
+    CheckpointKind, CheckpointLeft, CheckpointLine, CheckpointPlane, CheckpointRight, Ckpt, KmpError, KmpFile,
+    KmpSelectablePoint, PathOverallStart, TransformEditOptions,
 };
 use crate::{
     ui::settings::AppSettings,
@@ -181,6 +181,28 @@ impl CheckpointSpawner {
         let line = world.spawn_empty().id();
         let plane = world.spawn_empty().id();
 
+        let cp_bundle = || {
+            (
+                KmpSelectablePoint,
+                Tweakable(SnapTo::CheckpointPlane),
+                TransformEditOptions {
+                    hide_rotation: true,
+                    hide_y_translation: true,
+                },
+                GizmoTransformable,
+                Normalize::new(200., 30., BVec3::TRUE),
+                OutlineBundle {
+                    outline: OutlineVolume {
+                        visible: false,
+                        colour: outline.color,
+                        width: outline.width,
+                    },
+                    ..default()
+                },
+                KmpPathNode::default(),
+            )
+        };
+
         world.entity_mut(left).insert((
             PbrBundle {
                 mesh: mesh.clone(),
@@ -199,20 +221,7 @@ impl CheckpointSpawner {
                 plane,
                 ..self.kmp_component.clone()
             },
-            KmpSelectablePoint,
-            Tweakable(SnapTo::CheckpointPlane),
-            HideRotation,
-            GizmoTransformable,
-            Normalize::new(200., 30., BVec3::TRUE),
-            OutlineBundle {
-                outline: OutlineVolume {
-                    visible: false,
-                    colour: outline.color,
-                    width: outline.width,
-                },
-                ..default()
-            },
-            KmpPathNode::default(),
+            cp_bundle(),
         ));
 
         world.entity_mut(right).insert((
@@ -228,20 +237,7 @@ impl CheckpointSpawner {
                 ..default()
             },
             CheckpointRight { left, line, plane },
-            KmpSelectablePoint,
-            Tweakable(SnapTo::CheckpointPlane),
-            HideRotation,
-            GizmoTransformable,
-            Normalize::new(200., 30., BVec3::TRUE),
-            OutlineBundle {
-                outline: OutlineVolume {
-                    visible: false,
-                    colour: outline.color,
-                    width: outline.width,
-                },
-                ..default()
-            },
-            KmpPathNode::default(),
+            cp_bundle(),
         ));
 
         self.spawn_line(world, line);
