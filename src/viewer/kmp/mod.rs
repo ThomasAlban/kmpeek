@@ -82,11 +82,11 @@ pub fn spawn_model(
 
     // --- ENEMY PATHS ---
 
-    spawn_enemy_item_path_section::<Enpt, EnemyPathPoint, EnemyPathMarker>(&mut commands, kmp.clone(), &mut kmp_errors);
+    spawn_enemy_item_path_section::<Enpt, EnemyPathPoint>(&mut commands, kmp.clone(), &mut kmp_errors);
 
     // --- ITEM PATHS ---
 
-    spawn_enemy_item_path_section::<Itpt, ItemPathPoint, ItemPathMarker>(&mut commands, kmp.clone(), &mut kmp_errors);
+    spawn_enemy_item_path_section::<Itpt, ItemPathPoint>(&mut commands, kmp.clone(), &mut kmp_errors);
 
     // --- CHECKPOINTS ---
     //
@@ -127,8 +127,8 @@ fn update_visible(
     mut q: ParamSet<(
         ParamSet<(
             Query<&mut Visibility, With<StartPoint>>,
-            Query<&mut Visibility, With<EnemyPathMarker>>,
-            Query<&mut Visibility, With<ItemPathMarker>>,
+            Query<&mut Visibility, With<EnemyPathPoint>>,
+            Query<&mut Visibility, With<ItemPathPoint>>,
             Query<&mut Visibility, With<CheckpointLeft>>,
             Query<&mut Visibility, With<Object>>,
             Query<&mut Visibility, With<AreaPoint>>,

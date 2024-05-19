@@ -59,8 +59,6 @@ impl Default for StartPoint {
 }
 
 // --- ENEMY PATH COMPONENTS ---
-#[derive(Component, Default)]
-pub struct EnemyPathMarker;
 #[derive(Component, Clone, Copy, PartialEq, Default, Debug)]
 pub struct EnemyPathPoint {
     pub leniency: f32,
@@ -94,8 +92,6 @@ pub enum EnemyPathSetting2 {
 }
 
 // --- ITEM PATH COMPONENTS ---
-#[derive(Component, Default)]
-pub struct ItemPathMarker;
 #[derive(Component, PartialEq, Clone, Default, Debug)]
 pub struct ItemPathPoint {
     pub bullet_control: f32,
@@ -125,6 +121,7 @@ pub struct CheckpointLeft {
     pub line: Entity,
     pub plane: Entity,
     pub kind: CheckpointKind,
+    pub path_start_override: bool,
     // will contain link to respawn entity
 }
 impl Default for CheckpointLeft {
@@ -134,6 +131,7 @@ impl Default for CheckpointLeft {
             line: Entity::PLACEHOLDER,
             plane: Entity::PLACEHOLDER,
             kind: CheckpointKind::default(),
+            path_start_override: false,
         }
     }
 }
@@ -163,11 +161,12 @@ pub struct CheckpointPlane {
     pub right: Entity,
 }
 
-#[derive(Component, PartialEq, Clone, Default, Debug)]
+#[derive(Component, PartialEq, Clone, Default, Debug, Display, EnumString, IntoStaticStr, EnumIter)]
 pub enum CheckpointKind {
     #[default]
     Normal,
-    Key(u8),
+    Key,
+    #[strum(serialize = "Lap Count")]
     LapCount,
 }
 
@@ -446,12 +445,13 @@ impl FromKmp<Ckpt> for CheckpointLeft {
             kind: match data.cp_type {
                 -1 => CheckpointKind::Normal,
                 0 => CheckpointKind::LapCount,
-                x @ 1..=127 => CheckpointKind::Key(x as u8),
+                1..=127 => CheckpointKind::Key,
                 _ => {
                     errors.push(KmpError::new("Invalid CKPT setting found"));
                     CheckpointKind::Normal
                 }
             },
+            path_start_override: false,
         }
     }
 }
@@ -615,10 +615,12 @@ macro_rules! impl_spawn_new {
             }
         }
     };
+}
+macro_rules! impl_spawn_new_path {
     ($ty:ty, $marker:ty) => {
         impl SpawnNewPath for $ty {
             fn spawn(commands: &mut Commands, pos: Vec3, prev_nodes: HashSet<Entity>) -> Entity {
-                let entity = PathPointSpawner::<_, $marker>::new(Self::default())
+                let entity = PathPointSpawner::<_>::new(Self::default())
                     .pos(pos)
                     .spawn_command(commands);
                 commands.add(move |world: &mut World| {
@@ -650,8 +652,8 @@ impl_spawn_new!(StartPoint);
 impl_spawn_new!(Object);
 impl_spawn_new!(AreaPoint);
 impl_spawn_new!(KmpCamera);
-impl_spawn_new!(ItemPathPoint, ItemPathMarker);
-impl_spawn_new!(EnemyPathPoint, EnemyPathMarker);
+impl_spawn_new_path!(ItemPathPoint, ItemPathMarker);
+impl_spawn_new_path!(EnemyPathPoint, EnemyPathMarker);
 impl_spawn_new_with_id!(RespawnPoint);
 impl_spawn_new_with_id!(CannonPoint);
 impl_spawn_new_with_id!(BattleFinishPoint);

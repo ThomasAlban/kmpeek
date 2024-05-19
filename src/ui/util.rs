@@ -1,14 +1,13 @@
 #![allow(dead_code)]
-use bevy::{
-    math::{vec3, EulerRot, Quat, Vec3},
-    transform::components::Transform,
-};
+use bevy::math::{vec3, EulerRot, Quat};
+use bevy::{math::Vec3, transform::components::Transform};
+use bevy_egui::egui::{self, Response, Ui, WidgetText};
 use bevy_egui::egui::{
-    self, include_image, Align, Align2, Area, CollapsingResponse, Color32, Context, Image, ImageButton, ImageSource,
-    Order, Response, Sense, Ui, Vec2, WidgetText,
+    Align, Align2, Area, CollapsingResponse, Color32, Context, Image, ImageButton, ImageSource, Order, Sense, Vec2,
 };
 use std::{fmt::Display, hash::Hash};
 
+#[derive(Clone, Copy)]
 pub enum DragSpeed {
     Slow,
     Medium,
@@ -63,8 +62,8 @@ pub mod multi_edit {
         'a,
         T: 'a + Clone + PartialEq + Numeric + Sub<Output = T> + AddAssign<T> + SubAssign<T>,
     >(
-        speed: DragSpeed,
         ui: &mut Ui,
+        speed: DragSpeed,
         items: impl IntoIterator<Item = &'a mut T>,
     ) -> Response {
         let mut items: Vec<_> = items.into_iter().collect();
@@ -114,7 +113,6 @@ pub mod multi_edit {
 
     pub fn combobox_enum_multi_edit<'a, T>(
         ui: &mut Ui,
-        id: impl std::hash::Hash,
         width: Option<f32>,
         items: impl IntoIterator<Item = &'a mut T>,
     ) -> Response
@@ -157,7 +155,7 @@ pub mod multi_edit {
             ui.available_width()
         };
 
-        let combobox = egui::ComboBox::from_id_source(id)
+        let combobox = egui::ComboBox::from_id_source(ui.next_auto_id())
             .selected_text(selected_text)
             .width(width);
 
@@ -205,11 +203,11 @@ pub mod multi_edit {
     }
 }
 
-pub fn combobox_enum<T>(ui: &mut Ui, value: &mut T, id: impl std::hash::Hash, width: Option<f32>) -> Response
+pub fn combobox_enum<T>(ui: &mut Ui, value: &mut T, width: Option<f32>) -> Response
 where
     T: strum::IntoEnumIterator + Display + PartialEq + Clone,
 {
-    let mut combobox = egui::ComboBox::from_id_source(id).selected_text(value.to_string());
+    let mut combobox = egui::ComboBox::from_id_source(ui.next_auto_id()).selected_text(value.to_string());
     combobox = if let Some(width) = width {
         combobox.width(width)
     } else {
@@ -412,12 +410,55 @@ pub fn view_icon_btn(ui: &mut Ui, checked: &mut bool) -> Response {
 
 pub struct Icons;
 
+macro_rules! impl_img {
+    ($name:ident) => {
+        impl Icons {
+            pub fn $name<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
+                //let $path: literal = concat!("../../assets/icons/", stringify!($name), ".svg");
+                svg_image(
+                    egui::ImageSource::Bytes {
+                        uri: ::std::borrow::Cow::Borrowed(concat!(
+                            "bytes://../../assets/icons/",
+                            stringify!($name),
+                            ".svg"
+                        )),
+                        bytes: egui::load::Bytes::Static(include_bytes!(concat!(
+                            "../../assets/icons/",
+                            stringify!($name),
+                            ".svg"
+                        ))),
+                    },
+                    ctx,
+                    size.into(),
+                )
+            }
+        }
+    };
+}
+impl_img!(cube);
+impl_img!(cube_group);
+impl_img!(orient_global);
+impl_img!(orient_local);
+impl_img!(path);
+impl_img!(path_group);
+impl_img!(pivot_first_selected);
+impl_img!(pivot_individual);
+impl_img!(pivot_median);
+impl_img!(rotate);
+impl_img!(scale);
+impl_img!(select_box);
+impl_img!(track_info);
+impl_img!(translate);
+impl_img!(tweak);
+impl_img!(view_off);
+impl_img!(view_on);
+
 impl Icons {
     pub const SECTION_COLORS: [Color32; 11] = [
         Color32::from_rgb(80, 80, 255),  // Start Points
         Color32::RED,                    // Enemy Paths
         Color32::GREEN,                  // Item Paths
-        Color32::GREEN,                  // Checkpoints (todo)
+        Color32::from_rgb(70, 190, 255), // Checkpoints (todo)
         Color32::YELLOW,                 // Respawn Points
         Color32::from_rgb(255, 0, 255),  // Objects
         Color32::from_rgb(255, 160, 0),  // Areas
@@ -426,67 +467,4 @@ impl Icons {
         Color32::from_rgb(50, 170, 170), // Battle Finish Points
         Color32::WHITE,                  // Track Info
     ];
-
-    pub fn view_on<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(include_image!("../../assets/icons/view_on.svg"), ctx, size.into())
-    }
-    pub fn view_off<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(include_image!("../../assets/icons/view_off.svg"), ctx, size.into())
-    }
-    pub fn path_group<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(include_image!("../../assets/icons/path_group.svg"), ctx, size.into())
-    }
-    pub fn path<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(include_image!("../../assets/icons/path.svg"), ctx, size.into())
-    }
-    pub fn cube_group<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(include_image!("../../assets/icons/cube_group.svg"), ctx, size.into())
-    }
-    pub fn cube<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(include_image!("../../assets/icons/cube.svg"), ctx, size.into())
-    }
-    pub fn track_info<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(include_image!("../../assets/icons/track_info.svg"), ctx, size.into())
-    }
-
-    pub fn pivot_median<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(include_image!("../../assets/icons/pivot_median.svg"), ctx, size.into())
-    }
-    pub fn pivot_first_selected<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(
-            include_image!("../../assets/icons/pivot_first_selected.svg"),
-            ctx,
-            size.into(),
-        )
-    }
-    pub fn pivot_individual<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(
-            include_image!("../../assets/icons/pivot_individual.svg"),
-            ctx,
-            size.into(),
-        )
-    }
-
-    pub fn orient_global<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(include_image!("../../assets/icons/orient_global.svg"), ctx, size.into())
-    }
-    pub fn orient_local<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(include_image!("../../assets/icons/orient_local.svg"), ctx, size.into())
-    }
-
-    pub fn tweak<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(include_image!("../../assets/icons/tweak.svg"), ctx, size.into())
-    }
-    pub fn select_box<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(include_image!("../../assets/icons/select_box.svg"), ctx, size.into())
-    }
-    pub fn translate<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(include_image!("../../assets/icons/translate.svg"), ctx, size.into())
-    }
-    pub fn rotate<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(include_image!("../../assets/icons/rotate.svg"), ctx, size.into())
-    }
-    pub fn scale<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-        svg_image(include_image!("../../assets/icons/scale.svg"), ctx, size.into())
-    }
 }

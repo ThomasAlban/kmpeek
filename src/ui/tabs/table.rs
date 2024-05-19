@@ -197,12 +197,10 @@ impl EnemyPathTable {
                             ui.add(DragValue::new(&mut enemy_path_point_cp.leniency).speed(0.05));
                         });
                         row.col(|ui| {
-                            let id = format!("enpt_setting_1:{:?}", entity);
-                            combobox_enum(ui, &mut enemy_path_point_cp.setting_1, id, None);
+                            combobox_enum(ui, &mut enemy_path_point_cp.setting_1, None);
                         });
                         row.col(|ui| {
-                            let id = format!("enpt_setting_2:{:?}", entity);
-                            combobox_enum(ui, &mut enemy_path_point_cp.setting_2, id, None);
+                            combobox_enum(ui, &mut enemy_path_point_cp.setting_2, None);
                         });
                         row.col(|ui| {
                             ui.add(DragValue::new(&mut enemy_path_point_cp.setting_3).speed(0.05));

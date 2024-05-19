@@ -4,8 +4,8 @@ use super::{
     components::FromKmp,
     meshes_materials::KmpMeshesMaterials,
     sections::{KmpEditMode, KmpSections},
-    CheckpointLeft, CheckpointRight, EnemyPathMarker, EnemyPathPoint, GetPathMaterialSection, HideRotation,
-    ItemPathMarker, ItemPathPoint, KmpError, KmpSelectablePoint, PathOverallStart,
+    CheckpointLeft, CheckpointRight, EnemyPathPoint, GetPathMaterialSection, HideRotation, ItemPathPoint, KmpError,
+    KmpSelectablePoint, PathOverallStart,
 };
 use crate::{
     ui::settings::AppSettings,
@@ -19,7 +19,10 @@ use crate::{
     },
 };
 use bevy::{
-    ecs::query::{QueryData, QueryFilter, WorldQuery},
+    ecs::{
+        entity::EntityHashSet,
+        query::{QueryData, QueryFilter, WorldQuery},
+    },
     prelude::*,
     utils::HashMap,
 };
@@ -164,23 +167,21 @@ pub struct KmpDataGroup<T> {
     pub next_groups: Vec<u8>,
 }
 
-pub struct PathPointSpawner<U, Marker> {
+pub struct PathPointSpawner<T> {
     position: Vec3,
     rotation: Quat,
-    kmp_component: U,
+    kmp_component: T,
     visible: bool,
-    marker: Marker,
     prev_nodes: HashSet<Entity>,
     e: Option<Entity>,
 }
-impl<U: Component + Clone + GetPathMaterialSection, Marker: Component + Default> PathPointSpawner<U, Marker> {
-    pub fn new(kmp_component: U) -> Self {
+impl<T: Component + Clone + GetPathMaterialSection> PathPointSpawner<T> {
+    pub fn new(kmp_component: T) -> Self {
         Self {
             position: Vec3::default(),
             rotation: Quat::default(),
             kmp_component,
             visible: true,
-            marker: Marker::default(),
             prev_nodes: HashSet::new(),
             e: None,
         }
@@ -213,7 +214,7 @@ impl<U: Component + Clone + GetPathMaterialSection, Marker: Component + Default>
     pub fn spawn(self, world: &mut World) -> Entity {
         let meshes_materials = world.resource::<KmpMeshesMaterials>();
         let mesh = meshes_materials.meshes.sphere.clone();
-        let material = U::get_materials(&meshes_materials.materials).point.clone();
+        let material = T::get_materials(&meshes_materials.materials).point.clone();
         let outline = world.get_resource::<AppSettings>().unwrap().kmp_model.outline.clone();
 
         let mut entity = match self.e {
@@ -236,7 +237,6 @@ impl<U: Component + Clone + GetPathMaterialSection, Marker: Component + Default>
                 prev_nodes: self.prev_nodes.clone(),
                 next_nodes: HashSet::new(),
             },
-            Marker::default(),
             self.kmp_component.clone(),
             KmpSelectablePoint,
             Tweakable(SnapTo::Kcl),
@@ -259,7 +259,6 @@ impl<U: Component + Clone + GetPathMaterialSection, Marker: Component + Default>
 pub fn spawn_enemy_item_path_section<
     T: KmpGetSection + KmpGetPathSection + KmpPositionPoint + Send + 'static + Clone,
     U: Component + FromKmp<T> + Clone + Debug + GetPathMaterialSection,
-    Marker: Component + Default,
 >(
     commands: &mut Commands,
     kmp: Arc<KmpFile>,
@@ -276,7 +275,7 @@ pub fn spawn_enemy_item_path_section<
             };
             for (j, node) in data_group.nodes.iter().enumerate() {
                 let kmp_component = component_group[j].clone();
-                let spawned_entity = PathPointSpawner::<_, Marker>::new(kmp_component)
+                let spawned_entity = PathPointSpawner::<_>::new(kmp_component)
                     .pos(node.get_position().into())
                     .visible(false)
                     .spawn(world);
@@ -458,8 +457,8 @@ pub fn update_node_links(
     q_kmp_node_link: Query<(Entity, &KmpPathNodeLink, &Children, &ViewVisibility)>,
     q_kmp_node: Query<(
         Entity,
-        Has<EnemyPathMarker>,
-        Has<ItemPathMarker>,
+        Has<EnemyPathPoint>,
+        Has<ItemPathPoint>,
         Has<CheckpointLeft>,
         Has<CheckpointRight>,
         &KmpPathNode,
@@ -568,44 +567,33 @@ pub fn update_node_links(
 #[derive(Event, Default)]
 pub struct RecalculatePaths;
 
-pub fn traverse_paths<'a>(
+pub fn traverse_paths(
     mut p: ParamSet<(
-        Query<Entity, (With<PathOverallStart>, With<EnemyPathMarker>)>,
-        Query<Entity, (With<PathOverallStart>, With<ItemPathMarker>)>,
+        Query<Entity, (With<PathOverallStart>, With<EnemyPathPoint>)>,
+        Query<Entity, (With<PathOverallStart>, With<ItemPathPoint>)>,
+        Query<Entity, (With<PathOverallStart>, With<CheckpointLeft>)>,
     )>,
-    q_kmp_node: Query<(&'a KmpPathNode, Option<&'a EnemyPathPoint>, Option<&'a ItemPathPoint>)>,
+    q_kmp_node: TraverserKmpNodeQuery,
     q_is_overall_start: Query<(), With<PathOverallStart>>,
     mut commands: Commands,
 ) {
-    let Ok(enemy_start) = p.p0().get_single() else {
-        return;
-    };
-    let Ok(item_start) = p.p1().get_single() else {
-        return;
-    };
+    commands.remove_resource::<EnemyPathGroups>();
+    commands.remove_resource::<ItemPathGroups>();
+    commands.remove_resource::<CheckPathGroups>();
 
     let mut traverser = Traverser::new(q_kmp_node, q_is_overall_start);
-
-    let enemy_groups = traverser.traverse(enemy_start);
-    let item_groups = traverser.traverse(item_start);
-
-    let enemy_groups: Vec<_> = enemy_groups
-        .iter()
-        .map(|e| PathGroup {
-            paths: e.clone(),
-            visible: true,
-        })
-        .collect();
-    let item_groups: Vec<_> = item_groups
-        .iter()
-        .map(|e| PathGroup {
-            paths: e.clone(),
-            visible: true,
-        })
-        .collect();
-
-    commands.insert_resource(EnemyPathGroups(enemy_groups));
-    commands.insert_resource(ItemPathGroups(item_groups));
+    if let Ok(enemy_start) = p.p0().get_single() {
+        let enemy_groups = traverser.traverse(enemy_start);
+        commands.insert_resource(EnemyPathGroups(enemy_groups));
+    };
+    if let Ok(item_start) = p.p1().get_single() {
+        let item_groups = traverser.traverse(item_start);
+        commands.insert_resource(ItemPathGroups(item_groups));
+    };
+    if let Ok(cp_start) = p.p2().get_single() {
+        let cp_groups = traverser.traverse(cp_start);
+        commands.insert_resource(CheckPathGroups(cp_groups));
+    };
 }
 
 #[derive(Clone)]
@@ -618,52 +606,75 @@ pub struct PathGroup {
 pub struct EnemyPathGroups(pub Vec<PathGroup>);
 #[derive(Resource, Clone)]
 pub struct ItemPathGroups(pub Vec<PathGroup>);
+#[derive(Resource, Clone)]
+pub struct CheckPathGroups(pub Vec<PathGroup>);
 
-struct Traverser<'a, 'w, 's> {
-    q_kmp_node: Query<'w, 's, (&'a KmpPathNode, Option<&'a EnemyPathPoint>, Option<&'a ItemPathPoint>)>,
+type TraverserKmpNodeQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static KmpPathNode,
+        Option<&'static EnemyPathPoint>,
+        Option<&'static ItemPathPoint>,
+        Option<&'static CheckpointLeft>,
+    ),
+>;
+
+struct Traverser<'w, 's> {
+    q_kmp_node: TraverserKmpNodeQuery<'w, 's>,
     q_is_overall_start: Query<'w, 's, (), With<PathOverallStart>>,
     groups_accum: Vec<Vec<Entity>>,
-    visited: HashSet<Entity>,
+    visited: EntityHashSet,
 }
-impl<'a, 'w, 's> Traverser<'a, 'w, 's> {
+impl<'w, 's> Traverser<'w, 's> {
     pub fn new(
-        q_kmp_node: Query<'w, 's, (&'a KmpPathNode, Option<&'a EnemyPathPoint>, Option<&'a ItemPathPoint>)>,
+        q_kmp_node: TraverserKmpNodeQuery<'w, 's>,
         q_is_overall_start: Query<'w, 's, (), With<PathOverallStart>>,
     ) -> Self {
         Self {
             q_kmp_node,
             q_is_overall_start,
             groups_accum: Vec::new(),
-            visited: HashSet::new(),
+            visited: EntityHashSet::default(),
         }
     }
-    pub fn traverse(&mut self, start_node: Entity) -> Vec<Vec<Entity>> {
+    pub fn traverse(&mut self, start_node: Entity) -> Vec<PathGroup> {
         self.traverse_internal(start_node, 0);
         let groups = self.groups_accum.clone();
         self.reset();
         groups
+            .iter()
+            .map(|e| PathGroup {
+                paths: e.clone(),
+                visible: true,
+            })
+            .collect()
     }
     fn reset(&mut self) {
         self.groups_accum = Vec::new();
-        self.visited = HashSet::new();
+        self.visited = EntityHashSet::default();
     }
     fn traverse_internal(&mut self, cur_node: Entity, mut cur_index: usize) {
-        let (kmp_node, enemy_point, item_point) = self.q_kmp_node.get(cur_node).unwrap();
+        let (kmp_node, enemy_point, item_point, checkpoint) = self.q_kmp_node.get(cur_node).unwrap();
 
         let at_start = self.q_is_overall_start.get(cur_node).is_ok();
         let initial_start = at_start && self.groups_accum.is_empty();
+        // if we have already visited this node, return, otherwise, visit it
         if !self.visited.insert(cur_node) {
             return;
         }
 
         let we_should_start_new_group = initial_start
+            // if there are multiple nodes before us
             || kmp_node.prev_nodes.len() > 1
+            // if any prev nodes have multiple next nodes
             || kmp_node
                 .prev_nodes
                 .iter()
                 .any(|e| self.q_kmp_node.get(*e).unwrap().0.next_nodes.len() > 1)
             || enemy_point.map(|x| x.path_start_override).unwrap_or(false)
-            || item_point.map(|x| x.path_start_override).unwrap_or(false);
+            || item_point.map(|x| x.path_start_override).unwrap_or(false)
+            || checkpoint.map(|x| x.path_start_override).unwrap_or(false);
 
         if we_should_start_new_group {
             self.groups_accum.push(vec![cur_node]);

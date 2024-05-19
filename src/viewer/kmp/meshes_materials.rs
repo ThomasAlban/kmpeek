@@ -3,7 +3,7 @@ use crate::{
     ui::settings::AppSettings,
     util::shapes::{Cone, Cylinder},
 };
-use bevy::{prelude::*, render::render_resource::Face};
+use bevy::prelude::*;
 
 #[derive(Resource)]
 pub struct KmpMeshesMaterials {

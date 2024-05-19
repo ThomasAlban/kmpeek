@@ -8,10 +8,10 @@ use crate::{
         edit::select::Selected,
         kmp::{
             components::{
-                AreaPoint, BattleFinishPoint, CannonPoint, CheckpointLeft, EnemyPathMarker, ItemPathMarker, KmpCamera,
+                AreaPoint, BattleFinishPoint, CannonPoint, CheckpointLeft, EnemyPathPoint, ItemPathPoint, KmpCamera,
                 Object, RespawnPoint, StartPoint,
             },
-            path::{EnemyPathGroups, ItemPathGroups, PathGroup},
+            path::{CheckPathGroups, EnemyPathGroups, ItemPathGroups, PathGroup},
             sections::{KmpEditMode, KmpSections},
         },
     },
@@ -32,8 +32,8 @@ pub struct ShowOutlinerTab<'w, 's> {
     commands: Commands<'w, 's>,
 
     start_points: Query<'w, 's, Entity, With<StartPoint>>,
-    enemy_paths: Query<'w, 's, Entity, With<EnemyPathMarker>>,
-    item_paths: Query<'w, 's, Entity, With<ItemPathMarker>>,
+    enemy_paths: Query<'w, 's, Entity, With<EnemyPathPoint>>,
+    item_paths: Query<'w, 's, Entity, With<ItemPathPoint>>,
     checkpoints: Query<'w, 's, Entity, With<CheckpointLeft>>,
     respawn_points: Query<'w, 's, Entity, With<RespawnPoint>>,
     objects: Query<'w, 's, Entity, With<Object>>,
@@ -44,6 +44,7 @@ pub struct ShowOutlinerTab<'w, 's> {
 
     enemy_groups: Option<ResMut<'w, EnemyPathGroups>>,
     item_groups: Option<ResMut<'w, ItemPathGroups>>,
+    check_groups: Option<ResMut<'w, CheckPathGroups>>,
 
     q_visibility: Query<'w, 's, &'static mut Visibility>,
     q_selected: Query<'w, 's, Entity, With<Selected>>,
@@ -54,25 +55,17 @@ pub struct ShowOutlinerTab<'w, 's> {
 impl UiSubSection for ShowOutlinerTab<'_, '_> {
     fn show(&mut self, ui: &mut Ui) {
         *self.link_visibilities = true;
+        let enemy_pathgroups = &self.enemy_groups.as_ref().map(|e| e.0.clone());
+        let item_pathgroups = &self.item_groups.as_ref().map(|e| e.0.clone());
+        let check_pathgroups = &self.check_groups.as_ref().map(|e| e.0.clone());
 
         use KmpSections::*;
 
         self.show_track_info_header(ui);
-
         self.show_point_outliner(ui, StartPoints, to_vec!(self.start_points));
-        self.show_path_outliner(
-            ui,
-            EnemyPaths,
-            to_vec!(self.enemy_paths),
-            &self.enemy_groups.as_ref().map(|e| e.0.clone()),
-        );
-        self.show_path_outliner(
-            ui,
-            ItemPaths,
-            to_vec!(self.item_paths),
-            &self.item_groups.as_ref().map(|e| e.0.clone()),
-        );
-        self.show_path_outliner(ui, Checkpoints, to_vec!(self.checkpoints), &None);
+        self.show_path_outliner(ui, EnemyPaths, to_vec!(self.enemy_paths), enemy_pathgroups);
+        self.show_path_outliner(ui, ItemPaths, to_vec!(self.item_paths), item_pathgroups);
+        self.show_path_outliner(ui, Checkpoints, to_vec!(self.checkpoints), check_pathgroups);
         self.show_point_outliner(ui, RespawnPoints, to_vec!(self.respawn_points));
         self.show_point_outliner(ui, Objects, to_vec!(self.objects));
         self.show_point_outliner(ui, Areas, to_vec!(self.areas));
@@ -93,7 +86,7 @@ impl ShowOutlinerTab<'_, '_> {
         entities: impl IntoIterator<Item = Entity>,
         group_info: &Option<Vec<PathGroup>>,
     ) {
-        CollapsingState::load_with_default_open(ui.ctx(), format!("{selected}_outliner").into(), false)
+        CollapsingState::load_with_default_open(ui.ctx(), ui.next_auto_id(), false)
             .show_header(ui, |ui| {
                 self.show_header(ui, selected, entities, true);
             })
