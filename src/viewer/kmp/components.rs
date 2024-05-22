@@ -1,4 +1,5 @@
 use super::{
+    checkpoints::CheckpointSpawner,
     meshes_materials::{KmpMaterials, PathMaterials, PointMaterials},
     path::{KmpPathNode, PathPointSpawner},
     point::PointSpawner,
@@ -90,7 +91,7 @@ pub enum EnemyPathSetting2 {
     EndDrift,
     #[strum(serialize = "Forbid Drift (?)")]
     ForbidDrift,
-    #[strum(serialize = "ForceDrift")]
+    #[strum(serialize = "Force Drift")]
     ForceDrift,
 }
 
@@ -660,6 +661,22 @@ impl_spawn_new_path!(EnemyPathPoint, EnemyPathMarker);
 impl_spawn_new_with_id!(RespawnPoint);
 impl_spawn_new_with_id!(CannonPoint);
 impl_spawn_new_with_id!(BattleFinishPoint);
+
+impl CheckpointLeft {
+    pub fn spawn(commands: &mut Commands, pos: Vec3, prev_left_nodes: HashSet<Entity>) -> (Entity, Entity) {
+        let (left, right) = CheckpointSpawner::new(Self::default())
+            .single_3d_pos(pos)
+            .spawn_command(commands);
+        commands.add(move |world: &mut World| {
+            for prev_left in prev_left_nodes {
+                KmpPathNode::link_nodes(prev_left, left, world);
+                let prev_right = world.entity(prev_left).get::<CheckpointLeft>().unwrap().right;
+                KmpPathNode::link_nodes(prev_right, right, world);
+            }
+        });
+        (left, right)
+    }
+}
 
 //
 // --- IMPLEMENT HOW TO GET THE RELEVANT MATERIALS SECTION FOR THE COMPONENTS ---

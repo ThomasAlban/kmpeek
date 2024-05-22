@@ -8,6 +8,7 @@ use crate::{
         camera::Gizmo2dCam,
         kcl_model::KCLModelSection,
         kmp::{
+            checkpoints::get_selected_cp_lefts,
             components::{
                 AreaPoint, BattleFinishPoint, CannonPoint, CheckpointLeft, CheckpointRight, EnemyPathPoint,
                 ItemPathPoint, KmpCamera, KmpSelectablePoint, Object, RespawnPoint, SpawnNewPath, SpawnNewPoint,
@@ -18,7 +19,7 @@ use crate::{
         },
     },
 };
-use bevy::prelude::*;
+use bevy::{ecs::entity::EntityHashMap, prelude::*};
 use bevy_mod_raycast::prelude::*;
 
 pub struct CreateDeletePlugin;
@@ -45,6 +46,8 @@ fn create_point(
     mut commands: Commands,
     q_selected_item_points: Query<Entity, (With<ItemPathPoint>, With<Selected>)>,
     q_selected_enemy_points: Query<Entity, (With<EnemyPathPoint>, With<Selected>)>,
+    mut q_cp_left: Query<(&'static mut CheckpointLeft, Entity, Has<Selected>)>,
+    mut q_cp_right: Query<&'static mut CheckpointRight, With<Selected>>,
     mut ev_recalc_paths: EventWriter<RecalculatePaths>,
     mut ev_just_created_point: EventWriter<JustCreatedPoint>,
 
@@ -89,6 +92,11 @@ fn create_point(
         ItemPaths => {
             let prev_nodes: HashSet<_> = q_selected_item_points.iter().collect();
             ItemPathPoint::spawn(&mut commands, mouse_3d_pos, prev_nodes)
+        }
+        Checkpoints => {
+            let prev_nodes = get_selected_cp_lefts(&mut q_cp_left, &mut q_cp_right).map(|x| x.0);
+            CheckpointLeft::spawn(&mut commands, mouse_3d_pos, prev_nodes.collect());
+            Entity::PLACEHOLDER
         }
         RespawnPoints => RespawnPoint::spawn(&mut commands, mouse_3d_pos, q_kmp_pts.1.iter().count()),
         Objects => Object::spawn(&mut commands, mouse_3d_pos),

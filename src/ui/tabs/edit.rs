@@ -13,6 +13,7 @@ use crate::{
     viewer::{
         edit::select::Selected,
         kmp::{
+            checkpoints::get_selected_cp_lefts,
             components::{
                 AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, CheckpointLeft, CheckpointRight, EnemyPathPoint,
                 ItemPathPoint, KmpCamera, Object, RespawnPoint, StartPoint, TrackInfo, TransformEditOptions,
@@ -22,13 +23,7 @@ use crate::{
         },
     },
 };
-use bevy::{
-    ecs::{
-        entity::{EntityHashMap, EntityHashSet},
-        system::SystemParam,
-    },
-    prelude::*,
-};
+use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::egui::{self, emath::Numeric, Checkbox, DragValue, Layout, Response, Ui, WidgetText};
 
 #[derive(SystemParam)]
@@ -146,15 +141,7 @@ impl UiSubSection for ShowEditTab<'_, '_> {
             }
         });
 
-        let cp_left_of_right: EntityHashSet = self.q_cp_right.iter().map(|x| x.left).collect();
-        let mut cps: EntityHashMap<Mut<CheckpointLeft>> = EntityHashMap::default();
-        for (cp_l, e, selected) in self.q_cp_left.iter_mut() {
-            if selected || cp_left_of_right.contains(&e) {
-                cps.insert(e, cp_l);
-            }
-        }
-        let cp_iter = cps.into_iter().map(|x| x.1);
-
+        let cp_iter = get_selected_cp_lefts(&mut self.q_cp_left, &mut self.q_cp_right).map(|x| x.1);
         edit_component(ui, "Checkpoint", cp_iter, |ui, items| {
             combobox_edit_row(ui, "Type", map!(items, kind));
             let changed = checkbox_edit_row(ui, "Always Path Start", map!(items, path_start_override)).changed();

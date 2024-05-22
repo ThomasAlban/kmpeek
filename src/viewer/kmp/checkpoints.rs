@@ -10,13 +10,21 @@ use crate::{
     util::BoolToVisibility,
     viewer::{
         edit::{
+            select::Selected,
             transform_gizmo::GizmoTransformable,
             tweak::{SnapTo, Tweakable},
         },
         normalize::Normalize,
     },
 };
-use bevy::{math::vec3, prelude::*};
+use bevy::{
+    ecs::{
+        entity::{EntityHashMap, EntityHashSet},
+        system::QueryLens,
+    },
+    math::vec3,
+    prelude::*,
+};
 use bevy_mod_outline::{OutlineBundle, OutlineVolume};
 use std::sync::Arc;
 
@@ -77,6 +85,12 @@ impl CheckpointSpawner {
             left_e: None,
             right_e: None,
         }
+    }
+    pub fn single_3d_pos(mut self, pos: Vec3) -> Self {
+        self.left_pos = pos.xz();
+        self.right_pos = pos.xz();
+        self.height = pos.y;
+        self
     }
     pub fn pos(mut self, left: Vec2, right: Vec2) -> Self {
         self.left_pos = left;
@@ -151,7 +165,7 @@ impl CheckpointSpawner {
         ));
     }
 
-    pub fn _spawn_command(mut self, commands: &mut Commands) -> (Entity, Entity) {
+    pub fn spawn_command(mut self, commands: &mut Commands) -> (Entity, Entity) {
         let left = self.left_e.unwrap_or_else(|| commands.spawn_empty().id());
         let right = self.right_e.unwrap_or_else(|| commands.spawn_empty().id());
         self.left_e = Some(left);
@@ -379,4 +393,18 @@ fn update_checkpoint_planes(
         let new_plane_trans = calc_cp_plane_transform(l_trans.translation.xz(), r_trans.translation.xz(), cp_height.0);
         *plane_trans = new_plane_trans;
     }
+}
+
+pub fn get_selected_cp_lefts<'a>(
+    q_cp_left: &'a mut Query<(&mut CheckpointLeft, Entity, Has<Selected>)>,
+    q_cp_right: &'a mut Query<&mut CheckpointRight, With<Selected>>,
+) -> impl Iterator<Item = (Entity, Mut<'a, CheckpointLeft>)> {
+    let cp_left_of_right: EntityHashSet = q_cp_right.iter().map(|x| x.left).collect();
+    let mut cps: EntityHashMap<Mut<CheckpointLeft>> = EntityHashMap::default();
+    for (cp_l, e, selected) in q_cp_left.iter_mut() {
+        if selected || cp_left_of_right.contains(&e) {
+            cps.insert(e, cp_l);
+        }
+    }
+    cps.into_iter()
 }
