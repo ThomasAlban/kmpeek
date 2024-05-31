@@ -6,10 +6,13 @@ An in-progress 3D KMP editor for Mario Kart Wii. The goal is for it to be the ul
 
 ## Alpha Release
 
-These are the things I still need to do before an alpha release:
+These are the things I still need to do before an alpha release. Some of these are pretty quick and easy but others more difficult!
+
 - [ ] Finish checkpoint editor
-- [ ] Finish Table viewer
+- [ ] Finish Table viewer (+ export/import CSV)
 - [ ] Route editor
+- [ ] Camera preview
+- [ ] Names for objects
 - [ ] Edit tools (such as drawing lines of points)
 - [ ] Undo/Redo
 - [ ] Saving back to KMP format
@@ -17,6 +20,15 @@ These are the things I still need to do before an alpha release:
 
 If you want to help test KMPeek when these things are done (before the main first release), talk to me on discord! @thomasalban
 
+## Future Wishlist
+
+These are things that I want to get to in subsequent updates, once an initial version is released.
+
+- Copy/paste
+- Custom settings for each object
+- Object KCL viewer
+- Ability to open/edit SZS files directly
+- Course model/object model viewer???
 
 ## Contributing
 
