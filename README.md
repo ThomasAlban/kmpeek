@@ -11,12 +11,11 @@ These are the things I still need to do before an alpha release. Some of these a
 - [ ] Finish checkpoint editor
 - [ ] Finish Table viewer (+ export/import CSV)
 - [ ] Route editor
-- [ ] Camera preview
-- [ ] Names for objects
+- [ ] Saving back to KMP format
+- [ ] Custom object settings
 - [ ] Edit tools (such as drawing lines of points)
 - [ ] Undo/Redo
-- [ ] Saving back to KMP format
-- [ ] Auto updater
+- [ ] Auto updater (or at least a message if there is an update available)
 
 If you want to help test KMPeek when these things are done (before the main first release), talk to me on discord! @thomasalban
 
@@ -24,8 +23,8 @@ If you want to help test KMPeek when these things are done (before the main firs
 
 These are things that I want to get to in subsequent updates, once an initial version is released.
 
+- Camera Preview
 - Copy/paste
-- Custom settings for each object
 - Object KCL viewer
 - Ability to open/edit SZS files directly
 - Course model/object model viewer???
