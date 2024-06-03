@@ -24,6 +24,7 @@ If you want to help test KMPeek when these things are done (before the main firs
 These are things that I want to get to in subsequent updates, once an initial version is released.
 
 - Camera Preview
+- Eline control handling - converting it to a setting on enemy points
 - Copy/paste
 - Object KCL viewer
 - Ability to open/edit SZS files directly
