@@ -8,7 +8,7 @@ An in-progress 3D KMP editor for Mario Kart Wii. The goal is for it to be the ul
 
 These are the things I still need to do before an alpha release. Some of these are pretty quick and easy but others more difficult!
 
-- [ ] Finish checkpoint editor
+- [x] Finish checkpoint editor
 - [ ] Finish Table viewer (+ export/import CSV)
 - [ ] Route editor
 - [ ] Saving back to KMP format
