@@ -124,6 +124,7 @@ pub struct CheckpointLeft {
     pub right: Entity,
     pub line: Entity,
     pub plane: Entity,
+    pub arrow: Entity,
     pub kind: CheckpointKind,
     pub path_start_override: bool,
     // will contain link to respawn entity
@@ -134,6 +135,7 @@ impl Default for CheckpointLeft {
             right: Entity::PLACEHOLDER,
             line: Entity::PLACEHOLDER,
             plane: Entity::PLACEHOLDER,
+            arrow: Entity::PLACEHOLDER,
             kind: CheckpointKind::default(),
             path_start_override: false,
         }
@@ -158,6 +160,7 @@ impl Default for CheckpointRight {
 pub struct CheckpointLine {
     pub left: Entity,
     pub right: Entity,
+    pub arrow: Entity,
 }
 #[derive(Component)]
 pub struct CheckpointPlane {
@@ -443,9 +446,6 @@ impl FromKmp<Itpt> for ItemPathPoint {
 impl FromKmp<Ckpt> for CheckpointLeft {
     fn from_kmp(data: &Ckpt, errors: &mut Vec<KmpError>, _: usize) -> Self {
         Self {
-            right: Entity::PLACEHOLDER,
-            line: Entity::PLACEHOLDER,
-            plane: Entity::PLACEHOLDER,
             kind: match data.cp_type {
                 -1 => CheckpointKind::Normal,
                 0 => CheckpointKind::LapCount,
@@ -455,7 +455,7 @@ impl FromKmp<Ckpt> for CheckpointLeft {
                     CheckpointKind::Normal
                 }
             },
-            path_start_override: false,
+            ..default()
         }
     }
 }

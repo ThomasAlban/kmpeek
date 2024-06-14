@@ -235,8 +235,11 @@ impl<'a, 'w, 's> RaycastFromCam<'a, 'w, 's> {
         self.settings.filter = filter;
         self
     }
+    pub fn ray(&self) -> Option<Ray3d> {
+        get_ray_from_cam(self.cam, self.ndc)
+    }
     pub fn cast(self) -> Vec<(Entity, IntersectionData)> {
-        let Some(ray) = get_ray_from_cam(self.cam, self.ndc) else {
+        let Some(ray) = self.ray() else {
             return Vec::new();
         };
         self.raycast.cast_ray(ray, &self.settings).to_vec()

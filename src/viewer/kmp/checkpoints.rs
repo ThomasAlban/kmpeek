@@ -1,5 +1,5 @@
 use super::{
-    calc_line_transform,
+    calc_cp_arrow_transform, calc_line_transform,
     meshes_materials::KmpMeshesMaterials,
     path::{get_kmp_data_and_component_groups, link_entity_groups, EntityGroup, KmpPathNode},
     CheckpointKind, CheckpointLeft, CheckpointLine, CheckpointPlane, CheckpointRight, Ckpt, KmpError, KmpFile,
@@ -14,16 +14,14 @@ use crate::{
             transform_gizmo::GizmoTransformable,
             tweak::{SnapTo, Tweakable},
         },
-        normalize::Normalize,
+        normalize::{Normalize, NormalizeInheritParent},
     },
 };
 use bevy::{
-    ecs::{
-        entity::{EntityHashMap, EntityHashSet},
-        system::QueryLens,
-    },
+    ecs::entity::{EntityHashMap, EntityHashSet},
     math::vec3,
     prelude::*,
+    transform::TransformSystem,
 };
 use bevy_mod_outline::{OutlineBundle, OutlineVolume};
 use std::sync::Arc;
@@ -31,16 +29,20 @@ use std::sync::Arc;
 pub struct CheckpointPlugin;
 impl Plugin for CheckpointPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<CheckpointHeight>().add_systems(
-            Update,
-            (
-                set_checkpoint_right_visibility,
-                set_checkpoint_node_height,
-                update_checkpoint_lines,
-                update_checkpoint_planes,
-                update_checkpoint_colors,
-            ),
-        );
+        app.init_resource::<CheckpointHeight>()
+            .add_systems(
+                Update,
+                (
+                    set_checkpoint_right_visibility,
+                    update_checkpoint_lines,
+                    update_checkpoint_planes,
+                    update_checkpoint_colors,
+                ),
+            )
+            .add_systems(
+                PostUpdate,
+                set_checkpoint_node_height.after(TransformSystem::TransformPropagate),
+            );
     }
 }
 
@@ -112,7 +114,47 @@ impl CheckpointSpawner {
         Transform::from_xyz(self.right_pos.x, self.height, self.right_pos.y)
     }
 
-    fn spawn_line(&self, world: &mut World, entity: Entity) {
+    fn spawn_arrow(&self, world: &mut World, entity: Entity) {
+        let l_tr = self.left_transform().translation;
+        let r_tr = self.right_transform().translation;
+        let parent_transform = calc_cp_arrow_transform(l_tr, r_tr);
+
+        // basically got these values from trial and error
+        let child_transform = Transform::from_translation(vec3(0., 75., 0.)).with_scale(vec3(0.4, 1., 1.));
+
+        let meshes_materials = world.resource::<KmpMeshesMaterials>();
+        let mesh = meshes_materials.meshes.cone.clone();
+        let material = match self.kmp_component.kind {
+            CheckpointKind::Normal => meshes_materials.materials.checkpoints.normal.clone(),
+            CheckpointKind::Key => meshes_materials.materials.checkpoints.key.clone(),
+            CheckpointKind::LapCount => meshes_materials.materials.checkpoints.lap_count.clone(),
+        };
+
+        world
+            .get_entity_mut(entity)
+            .unwrap()
+            .insert((
+                SpatialBundle {
+                    visibility: self.visible.to_visibility(),
+                    transform: parent_transform,
+                    ..default()
+                },
+                Normalize::new(200., 30., BVec3::TRUE),
+            ))
+            .with_children(|parent| {
+                parent.spawn((
+                    PbrBundle {
+                        mesh,
+                        material,
+                        transform: child_transform,
+                        ..default()
+                    },
+                    NormalizeInheritParent,
+                ));
+            });
+    }
+
+    fn spawn_line(&self, world: &mut World, entity: Entity, arrow_entity: Entity) {
         let l_tr = self.left_transform().translation;
         let r_tr = self.right_transform().translation;
         let line_transform = calc_line_transform(l_tr, r_tr);
@@ -136,6 +178,7 @@ impl CheckpointSpawner {
             CheckpointLine {
                 left: self.left_e.unwrap(),
                 right: self.right_e.unwrap(),
+                arrow: arrow_entity,
             },
         ));
     }
@@ -193,6 +236,7 @@ impl CheckpointSpawner {
         self.right_e = Some(right);
 
         let line = world.spawn_empty().id();
+        let arrow = world.spawn_empty().id();
         let plane = world.spawn_empty().id();
 
         let cp_bundle = || {
@@ -233,6 +277,7 @@ impl CheckpointSpawner {
                 right,
                 line,
                 plane,
+                arrow,
                 ..self.kmp_component.clone()
             },
             cp_bundle(),
@@ -254,7 +299,8 @@ impl CheckpointSpawner {
             cp_bundle(),
         ));
 
-        self.spawn_line(world, line);
+        self.spawn_line(world, line, arrow);
+        self.spawn_arrow(world, arrow);
         self.spawn_plane(world, plane);
 
         (left, right)
@@ -328,6 +374,7 @@ fn set_checkpoint_node_height(
 fn update_checkpoint_colors(
     q_cp_left: Query<(Ref<CheckpointLeft>, Entity)>,
     mut q_std_mat: Query<&mut Handle<StandardMaterial>>,
+    q_children: Query<&Children>,
     meshes_materials: Res<KmpMeshesMaterials>,
 ) {
     for (cp, cp_left_e) in q_cp_left.iter() {
@@ -347,9 +394,12 @@ fn update_checkpoint_colors(
             CheckpointKind::LapCount => cp_mats.lap_count_plane.clone(),
         };
 
+        let arrow = q_children.get(cp.arrow).unwrap().first().unwrap();
+
         *q_std_mat.get_mut(cp_left_e).unwrap() = point_material.clone();
         *q_std_mat.get_mut(cp.right).unwrap() = point_material.clone();
-        *q_std_mat.get_mut(cp.line).unwrap() = point_material;
+        *q_std_mat.get_mut(cp.line).unwrap() = point_material.clone();
+        *q_std_mat.get_mut(*arrow).unwrap() = point_material.clone();
         *q_std_mat.get_mut(cp.plane).unwrap() = plane_material;
     }
 }
@@ -357,21 +407,29 @@ fn update_checkpoint_colors(
 fn update_checkpoint_lines(
     mut commands: Commands,
     mut q_cp_line: Query<(&CheckpointLine, &mut Transform, Entity, &mut Visibility)>,
-    q_cp_node: Query<(Ref<Transform>, &Visibility), Without<CheckpointLine>>,
+    mut q_cp_part: Query<(&mut Transform, &mut Visibility), Without<CheckpointLine>>,
 ) {
     for (line, mut line_trans, line_e, mut line_vis) in q_cp_line.iter_mut() {
-        let Ok([(l_trans, l_vis), (r_trans, _)]) = q_cp_node.get_many([line.left, line.right]) else {
-            // despawn the line if either of the nodes doesn't exist
-            commands.entity(line_e).despawn();
+        let Ok([(l_trans, l_vis), (r_trans, _), (mut a_trans, mut a_vis)]) =
+            q_cp_part.get_many_mut([line.left, line.right, line.arrow])
+        else {
+            // despawn the line and the arrow if either of the nodes doesn't exist
+            if let Some(line) = commands.get_entity(line_e) {
+                line.despawn_recursive();
+            }
+            if let Some(arrow) = commands.get_entity(line.arrow) {
+                arrow.despawn_recursive();
+            }
             continue;
         };
         // set the visibility
         line_vis.set_if_neq(*l_vis);
+        a_vis.set_if_neq(*l_vis);
         if !l_trans.is_changed() && !r_trans.is_changed() {
             continue;
         }
-        let new_line_trans = calc_line_transform(l_trans.translation, r_trans.translation);
-        *line_trans = new_line_trans;
+        *line_trans = calc_line_transform(l_trans.translation, r_trans.translation);
+        *a_trans = calc_cp_arrow_transform(l_trans.translation, r_trans.translation);
     }
 }
 // the same as above but for checkpoint planes instead of lines
@@ -407,4 +465,19 @@ pub fn get_selected_cp_lefts<'a>(
         }
     }
     cps.into_iter()
+}
+
+/// Utility for getting both checkpoint nodes when we only have the Entity ID of one of them, and don't know whether the one we have is a left or a right
+pub fn get_both_cp_nodes(world: &mut World, e: Entity) -> (Entity, Entity) {
+    let left = if world.entity(e).contains::<CheckpointLeft>() {
+        e
+    } else {
+        world.entity(e).get::<CheckpointRight>().unwrap().left
+    };
+    let right = if world.entity(e).contains::<CheckpointRight>() {
+        e
+    } else {
+        world.entity(e).get::<CheckpointLeft>().unwrap().right
+    };
+    (left, right)
 }

@@ -3,12 +3,12 @@ use std::collections::HashSet;
 use super::select::{SelectSet, Selected};
 use crate::{
     ui::viewport::ViewportInfo,
-    util::{ui_viewport_to_ndc, RaycastFromCam},
+    util::{get_ray_from_cam, ui_viewport_to_ndc, RaycastFromCam},
     viewer::{
         camera::Gizmo2dCam,
         kcl_model::KCLModelSection,
         kmp::{
-            checkpoints::get_selected_cp_lefts,
+            checkpoints::{get_selected_cp_lefts, CheckpointHeight},
             components::{
                 AreaPoint, BattleFinishPoint, CannonPoint, CheckpointLeft, CheckpointRight, EnemyPathPoint,
                 ItemPathPoint, KmpCamera, KmpSelectablePoint, Object, RespawnPoint, SpawnNewPath, SpawnNewPoint,
@@ -19,7 +19,7 @@ use crate::{
         },
     },
 };
-use bevy::{ecs::entity::EntityHashMap, prelude::*};
+use bevy::prelude::*;
 use bevy_mod_raycast::prelude::*;
 
 pub struct CreateDeletePlugin;
@@ -46,10 +46,13 @@ fn create_point(
     mut commands: Commands,
     q_selected_item_points: Query<Entity, (With<ItemPathPoint>, With<Selected>)>,
     q_selected_enemy_points: Query<Entity, (With<EnemyPathPoint>, With<Selected>)>,
-    mut q_cp_left: Query<(&'static mut CheckpointLeft, Entity, Has<Selected>)>,
-    mut q_cp_right: Query<&'static mut CheckpointRight, With<Selected>>,
+    mut q_cps: (
+        Query<(&mut CheckpointLeft, Entity, Has<Selected>)>,
+        Query<&mut CheckpointRight, With<Selected>>,
+    ),
     mut ev_recalc_paths: EventWriter<RecalculatePaths>,
     mut ev_just_created_point: EventWriter<JustCreatedPoint>,
+    cp_height: Res<CheckpointHeight>,
 
     q_kmp_pts: (
         Query<(), With<KmpSelectablePoint>>,
@@ -58,6 +61,9 @@ fn create_point(
         Query<(), With<BattleFinishPoint>>,
     ),
 ) {
+    if kmp_edit_mode.0 == KmpSections::TrackInfo {
+        return;
+    }
     // only run the function if the alt key is held and the mouse has just been clicked
     if !keys.pressed(KeyCode::AltLeft) || !mouse_buttons.just_pressed(MouseButton::Left) {
         return;
@@ -70,19 +76,32 @@ fn create_point(
     let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
 
     let ndc_mouse_pos = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
-    let mouse_ray = RaycastFromCam::new(cam, ndc_mouse_pos, &mut raycast).cast();
+    let intersections = RaycastFromCam::new(cam, ndc_mouse_pos, &mut raycast).cast();
 
-    if mouse_ray.iter().any(|e| q_kmp_pts.0.contains(e.0)) {
+    // if we are clicking on a kmp point then return and don't create another point
+    if intersections.iter().any(|e| q_kmp_pts.0.contains(e.0)) {
         return;
     };
-
-    let Some(kcl_intersection) = mouse_ray.iter().find(|e| q_kcl.contains(e.0)) else {
-        return;
-    };
-
-    let mouse_3d_pos = kcl_intersection.1.position();
 
     use KmpSections::*;
+    let mouse_3d_pos = match kmp_edit_mode.0 {
+        Checkpoints => {
+            let Some(ray) = get_ray_from_cam(cam, ndc_mouse_pos) else {
+                return;
+            };
+            let Some(dist) = ray.intersect_plane(Vec3::Y * cp_height.0, Plane3d::default()) else {
+                return;
+            };
+            ray.get_point(dist)
+        }
+        _ => {
+            let Some(kcl_intersection) = intersections.iter().find(|e| q_kcl.contains(e.0)) else {
+                return;
+            };
+            kcl_intersection.1.position()
+        }
+    };
+
     let created_entity = match kmp_edit_mode.0 {
         StartPoints => StartPoint::spawn(&mut commands, mouse_3d_pos),
         EnemyPaths => {
@@ -94,9 +113,10 @@ fn create_point(
             ItemPathPoint::spawn(&mut commands, mouse_3d_pos, prev_nodes)
         }
         Checkpoints => {
-            let prev_nodes = get_selected_cp_lefts(&mut q_cp_left, &mut q_cp_right).map(|x| x.0);
-            CheckpointLeft::spawn(&mut commands, mouse_3d_pos, prev_nodes.collect());
-            Entity::PLACEHOLDER
+            let prev_nodes = get_selected_cp_lefts(&mut q_cps.0, &mut q_cps.1).map(|x| x.0);
+            let (_, right) = CheckpointLeft::spawn(&mut commands, mouse_3d_pos, prev_nodes.collect());
+            // return the right entity, so that that's the one that is selected and interacted with
+            right
         }
         RespawnPoints => RespawnPoint::spawn(&mut commands, mouse_3d_pos, q_kmp_pts.1.iter().count()),
         Objects => Object::spawn(&mut commands, mouse_3d_pos),
@@ -104,9 +124,8 @@ fn create_point(
         Cameras => KmpCamera::spawn(&mut commands, mouse_3d_pos),
         CannonPoints => CannonPoint::spawn(&mut commands, mouse_3d_pos, q_kmp_pts.2.iter().count()),
         BattleFinishPoints => BattleFinishPoint::spawn(&mut commands, mouse_3d_pos, q_kmp_pts.3.iter().count()),
-        _ => Entity::PLACEHOLDER,
+        TrackInfo => unreachable!(),
     };
-    commands.entity(created_entity).insert(Selected);
     // we send this event which is recieved by the Select system, so it knows to add the Selected component
     // we can't add it now, because then in the select system it will just be deselected again
     // the select system has to run after this so that we know which previous points we have to link to this one

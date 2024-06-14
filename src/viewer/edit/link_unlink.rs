@@ -5,7 +5,8 @@ use crate::{
     viewer::{
         camera::Gizmo2dCam,
         kmp::{
-            components::{EnemyPathPoint, KmpSelectablePoint},
+            checkpoints::get_both_cp_nodes,
+            components::{CheckpointLeft, CheckpointRight, EnemyPathPoint, ItemPathPoint, KmpSelectablePoint},
             path::KmpPathNode,
         },
     },
@@ -25,12 +26,16 @@ pub fn link_points(
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_selected: Query<Entity, With<Selected>>,
-    q_enemy_point: Query<Entity, With<EnemyPathPoint>>,
     q_transform: Query<&Transform, With<KmpSelectablePoint>>,
     q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
     q_window: Query<&Window>,
     mut raycast: Raycast,
     viewport_info: Res<ViewportInfo>,
+
+    q_enemy_paths: Query<(), With<EnemyPathPoint>>,
+    q_item_paths: Query<(), With<ItemPathPoint>>,
+    q_cp_left: Query<(), With<CheckpointLeft>>,
+    q_cp_right: Query<(), With<CheckpointRight>>,
 ) {
     if !mouse_buttons.just_pressed(MouseButton::Left) {
         return;
@@ -50,17 +55,37 @@ pub fn link_points(
         .filter(&|e| q_transform.contains(e))
         .cast();
 
-    let Some((alt_clicked_point, _)) = ray.first() else {
+    let Some((alt_clicked_pt, _)) = ray.first() else {
         return;
     };
+    let alt_clicked_pt = *alt_clicked_pt;
 
-    if q_enemy_point.contains(*alt_clicked_point) {
-        //let node = q_kmp_path_node.get(*alt_clicked_point).unwrap();
-        // we have just alt clicked an enemy point, link any selected enemy points to this
-        for selected in q_selected.iter().filter(|e| q_enemy_point.contains(*e)) {
-            let alt_clicked_point = *alt_clicked_point;
+    if q_enemy_paths.contains(alt_clicked_pt) {
+        for selected in q_selected.iter().filter(|e| q_enemy_paths.contains(*e)) {
             commands.add(move |world: &mut World| {
-                KmpPathNode::link_nodes(selected, alt_clicked_point, world);
+                KmpPathNode::link_nodes(selected, alt_clicked_pt, world);
+            });
+        }
+    }
+    if q_item_paths.contains(alt_clicked_pt) {
+        for selected in q_selected.iter().filter(|e| q_item_paths.contains(*e)) {
+            commands.add(move |world: &mut World| {
+                KmpPathNode::link_nodes(selected, alt_clicked_pt, world);
+            });
+        }
+    }
+
+    if q_cp_left.contains(alt_clicked_pt) || q_cp_right.contains(alt_clicked_pt) {
+        for selected in q_selected
+            .iter()
+            .filter(|e| q_cp_left.contains(*e) || q_cp_right.contains(*e))
+        {
+            commands.add(move |world: &mut World| {
+                let (prev_left, prev_right) = get_both_cp_nodes(world, selected);
+                let (next_left, next_right) = get_both_cp_nodes(world, alt_clicked_pt);
+
+                KmpPathNode::link_nodes(prev_left, next_left, world);
+                KmpPathNode::link_nodes(prev_right, next_right, world);
             });
         }
     }
@@ -72,24 +97,35 @@ pub fn unlink_points(
     q_kmp_path_node: Query<&KmpPathNode>,
     q_selected: Query<Entity, With<Selected>>,
 ) {
+    // unlink points with the U key
     if !keys.just_pressed(KeyCode::KeyU) {
         return;
     }
+
+    let unlink_command = |world: &mut World, prev: Entity, next: Entity| {
+        // if it is a checkpoint
+        if world.entity(prev).contains::<CheckpointLeft>() || world.entity(next).contains::<CheckpointRight>() {
+            let (prev_left, prev_right) = get_both_cp_nodes(world, prev);
+            let (next_left, next_right) = get_both_cp_nodes(world, next);
+            KmpPathNode::unlink_nodes(prev_left, next_left, world);
+            KmpPathNode::unlink_nodes(prev_right, next_right, world);
+        } else {
+            KmpPathNode::unlink_nodes(prev, next, world);
+        }
+    };
 
     for selected in q_selected.iter() {
         let Ok(node) = q_kmp_path_node.get(selected) else {
             continue;
         };
-        for prev_node_entity in node.prev_nodes.iter() {
-            let prev_node_entity = *prev_node_entity;
+        for prev_node_entity in node.prev_nodes.iter().copied() {
             commands.add(move |world: &mut World| {
-                KmpPathNode::unlink_nodes(prev_node_entity, selected, world);
+                unlink_command(world, prev_node_entity, selected);
             });
         }
-        for next_node_entity in node.next_nodes.iter() {
-            let next_node_entity = *next_node_entity;
+        for next_node_entity in node.next_nodes.iter().copied() {
             commands.add(move |world: &mut World| {
-                KmpPathNode::unlink_nodes(selected, next_node_entity, world);
+                unlink_command(world, selected, next_node_entity);
             });
         }
     }

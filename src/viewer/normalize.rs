@@ -39,36 +39,53 @@ fn update_normalize(
     mut p: ParamSet<(
         Query<(&GlobalTransform, &Camera), Without<Gizmo2dCam>>,
         Query<(&mut GlobalTransform, &Normalize, &ViewVisibility, Option<&Children>)>,
-        Query<(&mut GlobalTransform, &Transform), With<NormalizeInheritParent>>,
+        Query<(&mut GlobalTransform, &Transform, &ViewVisibility), With<NormalizeInheritParent>>,
     )>,
     settings: Res<AppSettings>,
     q_window: Query<&Window>,
 ) {
-    if !settings.kmp_model.normalize {
-        for (mut gt, normalize, visibility, _) in p.p1().iter_mut() {
-            if *visibility == ViewVisibility::HIDDEN {
-                continue;
-            }
-            let mut transform_cp = gt.compute_transform();
+    // if !settings.kmp_model.normalize {
+    //     let set_scale =
+    //         |mut gt: Mut<GlobalTransform>, default_scale: Option<Vec3>, visibility: &ViewVisibility, axes: BVec3| {
+    //             if *visibility == ViewVisibility::HIDDEN {
+    //                 return;
+    //             }
+    //             let mut transform_cp = gt.compute_transform();
+    //             let scale_before = transform_cp.scale;
+    //             let scale = default_scale.unwrap_or(Vec3::ONE);
+    //             transform_cp.scale = scale * settings.kmp_model.point_scale;
+    //             if !axes.x {
+    //                 transform_cp.scale.x = scale_before.x;
+    //             }
+    //             if !axes.y {
+    //                 transform_cp.scale.y = scale_before.y;
+    //             }
+    //             if !axes.z {
+    //                 transform_cp.scale.z = scale_before.z;
+    //             }
+    //             gt.set_if_neq(transform_cp.into());
+    //         };
+    //     // we have to make a separate vector because of rust being annoying with it's borrow checking rules
+    //     let mut children_to_deal_with = Vec::new();
 
-            let scale_before = transform_cp.scale;
-            transform_cp.scale = Vec3::ONE * settings.kmp_model.point_scale;
+    //     for (gt, normalize, visibility, children) in p.p1().iter_mut() {
+    //         if let Some(children) = children {
+    //             for child in children.iter() {
+    //                 children_to_deal_with.push(*child);
+    //             }
+    //         }
+    //         set_scale(gt, None, visibility, normalize.axes);
+    //     }
 
-            if !normalize.axes.x {
-                transform_cp.scale.x = scale_before.x;
-            }
-            if !normalize.axes.y {
-                transform_cp.scale.y = scale_before.y;
-            }
-            if !normalize.axes.z {
-                transform_cp.scale.z = scale_before.z;
-            }
-
-            gt.set_if_neq(transform_cp.into());
-        }
-
-        return;
-    }
+    //     let mut p2 = p.p2();
+    //     for child in children_to_deal_with {
+    //         let Ok((gt, _, visibility, normalize)) = p2.get_mut(child) else {
+    //             continue;
+    //         };
+    //         set_scale(gt, normalize.default_scale, visibility, BVec3::TRUE);
+    //     }
+    //     return;
+    // }
     let window = q_window.single();
 
     let (camera_position, camera) = {
@@ -133,7 +150,7 @@ fn update_normalize(
     let mut p2 = p.p2();
     for (gt, children) in children_to_deal_with.iter() {
         for child in children.iter() {
-            let Ok((mut child_gt, child_transform)) = p2.get_mut(*child) else {
+            let Ok((mut child_gt, child_transform, _)) = p2.get_mut(*child) else {
                 continue;
             };
             // multiply the global transform of the parent which the local transform of the child

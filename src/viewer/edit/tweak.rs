@@ -1,4 +1,5 @@
 use super::{
+    create_delete::JustCreatedPoint,
     select::{SelectSet, Selected},
     EditMode,
 };
@@ -57,6 +58,7 @@ pub fn tweak_interaction(
     mut raycast: Raycast,
     checkpoint_height: Res<CheckpointHeight>,
     q_kcl: Query<(), With<KCLModelSection>>,
+    mut ev_just_created_point: EventReader<JustCreatedPoint>,
 ) {
     if *edit_mode != EditMode::Tweak || !viewport_info.mouse_in_viewport || q_selected.is_empty() {
         return;
@@ -83,12 +85,21 @@ pub fn tweak_interaction(
         let ray = RaycastFromCam::new(cam, mouse_pos_ndc, &mut raycast)
             .filter(&|e| q_selected.contains(e))
             .cast();
-        let Some((mouse_over_entity, _)) = ray.first() else {
-            return;
-        };
-        // if we got this far it means we just clicked on a tweakable point
 
-        let (_, mouse_over_transform, _) = q_selected.get(*mouse_over_entity).unwrap();
+        let mouse_over_entity = match ray.first() {
+            Some(e) => e.0,
+            // if there is no intersection, then deal with the possibility that we just created a checkpoint,
+            // so want to interact with the right hand node of the newly created cp
+            None => {
+                let Some(e) = ev_just_created_point.read().next().map(|x| x.0) else {
+                    return;
+                };
+                e
+            }
+        };
+
+        // if we got this far it means we just clicked on a tweakable point
+        let (_, mouse_over_transform, _) = q_selected.get(mouse_over_entity).unwrap();
 
         // get the position of the entity we are going to start dragging
         let pos = mouse_over_transform.translation;

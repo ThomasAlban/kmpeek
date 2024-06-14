@@ -45,7 +45,7 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
                     egui::Slider::new(&mut self.settings.kmp_model.point_scale, 0.01..=2.)
                         .text("Point Scale"),
                 );
-                ui.checkbox(&mut self.settings.kmp_model.normalize, "Normalize points");
+                //ui.checkbox(&mut self.settings.kmp_model.normalize, "Normalize points");
                 ui.checkbox(
                     &mut self.settings.open_course_kcl_in_dir,
                     "Auto open course.kcl",

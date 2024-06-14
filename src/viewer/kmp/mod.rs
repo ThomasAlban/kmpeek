@@ -188,3 +188,10 @@ fn calc_line_transform(l_tr: Vec3, r_tr: Vec3) -> Transform {
     line_transform.scale.y = l_tr.distance(r_tr);
     line_transform
 }
+/// Utility function for calculating the transform a checkpoint arrow should have
+fn calc_cp_arrow_transform(l_tr: Vec3, r_tr: Vec3) -> Transform {
+    let mp = l_tr.lerp(r_tr, 0.5);
+    let mut trans = Transform::from_translation(mp).looking_at(r_tr, Vec3::Y);
+    trans.rotate_local_z(f32::to_radians(90.));
+    trans
+}

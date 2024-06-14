@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Resource, Serialize, Deserialize)]
 pub struct KmpModelSettings {
-    pub normalize: bool,
+    //pub normalize: bool,
     pub point_scale: f32,
     pub color: KmpModelColors,
     pub outline: OutlineSettings,
@@ -12,7 +12,7 @@ pub struct KmpModelSettings {
 impl Default for KmpModelSettings {
     fn default() -> Self {
         KmpModelSettings {
-            normalize: true,
+            //normalize: true,
             point_scale: 1.,
             color: KmpModelColors::default(),
             outline: OutlineSettings::default(),
