@@ -20,8 +20,9 @@ use crate::{
 };
 use bevy::{
     ecs::{
-        entity::EntityHashSet,
+        entity::EntityHashMap,
         query::{QueryData, QueryFilter, WorldQuery},
+        system::SystemParam,
     },
     prelude::*,
     utils::HashMap,
@@ -54,7 +55,7 @@ pub struct KmpPathNodeLinkLine;
 pub struct KmpPathNodeError;
 
 // component attached to kmp entities which are linked to other kmp entities
-#[derive(Component, Clone, Debug, Default)]
+#[derive(Component, Clone, Debug, Default, PartialEq)]
 pub struct KmpPathNode {
     pub prev_nodes: HashSet<Entity>,
     pub next_nodes: HashSet<Entity>,
@@ -567,42 +568,176 @@ pub fn update_node_links(
     }
 }
 
-#[derive(Event, Default)]
-pub struct RecalculatePaths;
-
-pub fn traverse_paths(
-    mut p: ParamSet<(
-        Query<Entity, (With<PathOverallStart>, With<EnemyPathPoint>)>,
-        Query<Entity, (With<PathOverallStart>, With<ItemPathPoint>)>,
-        Query<Entity, (With<PathOverallStart>, With<CheckpointLeft>)>,
-    )>,
-    q_kmp_node: TraverserKmpNodeQuery,
-    q_is_overall_start: Query<(), With<PathOverallStart>>,
-    mut commands: Commands,
-) {
-    commands.remove_resource::<EnemyPathGroups>();
-    commands.remove_resource::<ItemPathGroups>();
-    commands.remove_resource::<CheckPathGroups>();
-
-    let mut traverser = Traverser::new(q_kmp_node, q_is_overall_start);
-    if let Ok(enemy_start) = p.p0().get_single() {
-        let enemy_groups = traverser.traverse(enemy_start);
-        commands.insert_resource(EnemyPathGroups(enemy_groups));
-    };
-    if let Ok(item_start) = p.p1().get_single() {
-        let item_groups = traverser.traverse(item_start);
-        commands.insert_resource(ItemPathGroups(item_groups));
-    };
-    if let Ok(cp_start) = p.p2().get_single() {
-        let cp_groups = traverser.traverse(cp_start);
-        commands.insert_resource(CheckPathGroups(cp_groups));
-    };
+#[derive(Event)]
+pub struct RecalcPaths {
+    pub do_enemy: bool,
+    pub do_item: bool,
+    pub do_cp: bool,
+}
+impl RecalcPaths {
+    pub fn enemy() -> Self {
+        Self {
+            do_enemy: true,
+            do_item: false,
+            do_cp: false,
+        }
+    }
+    pub fn item() -> Self {
+        Self {
+            do_enemy: false,
+            do_item: true,
+            do_cp: false,
+        }
+    }
+    pub fn cp() -> Self {
+        Self {
+            do_enemy: false,
+            do_item: false,
+            do_cp: true,
+        }
+    }
+    pub fn all() -> Self {
+        Self {
+            do_enemy: true,
+            do_item: true,
+            do_cp: true,
+        }
+    }
 }
 
-#[derive(Clone)]
+pub fn traverse_paths(
+    mut ev_recalc_paths: EventReader<RecalcPaths>,
+    mut commands: Commands,
+    mut p: ParamSet<(
+        TraversePath<EnemyPathPoint>,
+        TraversePath<ItemPathPoint>,
+        TraversePath<CheckpointLeft>,
+    )>,
+) {
+    for ev in ev_recalc_paths.read() {
+        if ev.do_enemy {
+            commands.insert_resource(EnemyPathGroups(p.p0().traverse()));
+        }
+        if ev.do_item {
+            commands.insert_resource(ItemPathGroups(p.p1().traverse()));
+        }
+        if ev.do_cp {
+            commands.insert_resource(CheckPathGroups(p.p2().traverse()));
+        }
+    }
+}
+
+#[derive(SystemParam)]
+pub struct TraversePath<'w, 's, T: Component> {
+    q_start: Query<'w, 's, Entity, (With<PathOverallStart>, With<T>, With<KmpPathNode>)>,
+    q: Query<'w, 's, (Entity, &'static KmpPathNode), With<T>>,
+}
+impl<'w, 's, T: Component> TraversePath<'w, 's, T> {
+    fn traverse(self) -> Vec<PathGroup> {
+        let mut paths: Vec<PathGroup> = Vec::new();
+        let mut node_to_path_index: HashMap<Entity, usize> = HashMap::default();
+        let battle_mode = false;
+
+        let is_battle_dispatcher =
+            |node: &KmpPathNode| battle_mode && (node.next_nodes.len() + node.next_nodes.len() > 2);
+
+        let mut nodes_to_handle: EntityHashMap<&KmpPathNode> = self.q.iter().collect();
+        if nodes_to_handle.is_empty() {
+            return Vec::new();
+        }
+        let first = self
+            .q_start
+            .get_single()
+            .ok()
+            .and_then(|x| nodes_to_handle.remove(&x).map(|y| (x, y)));
+
+        let mut first_iter = true;
+        while !nodes_to_handle.is_empty() {
+            let (node_e, node) = match first.filter(|_| first_iter) {
+                Some(first) => first,
+                None => nodes_to_handle.iter().next().map(|x| (*x.0, *x.1)).unwrap(),
+            };
+            first_iter = false;
+
+            let mut path: Vec<Entity> = Vec::new();
+            let path_index = paths.len();
+
+            if is_battle_dispatcher(node) {
+                path.push(node_e);
+                paths.push(PathGroup { path, ..default() });
+                nodes_to_handle.remove(&node_e);
+                node_to_path_index.insert(node_e, path_index);
+                continue;
+            }
+
+            // traverse backwards until we find a node at the start
+            let (mut start_node_e, mut start_node) = (node_e, node);
+            // if we are not at the overall first node
+            if !first.map(|x| x.0 == node_e).unwrap_or(false) {
+                // while there is only one previous node, and it only has one next node, and it is not a battle dispatcher
+                while let Some((prev_node_e, prev_node)) = (start_node.prev_nodes.len() == 1)
+                    .then(|| self.q.get(*start_node.prev_nodes.iter().next().unwrap()).ok())
+                    .flatten()
+                {
+                    if prev_node.next_nodes.len() != 1 || is_battle_dispatcher(prev_node) {
+                        break;
+                    }
+                    if node_to_path_index.contains_key(&prev_node_e) {
+                        break;
+                    }
+                    (start_node_e, start_node) = (prev_node_e, prev_node);
+                    if start_node == node {
+                        break;
+                    }
+                }
+            }
+
+            path.push(start_node_e);
+            nodes_to_handle.remove(&start_node_e);
+            node_to_path_index.insert(start_node_e, path_index);
+
+            // traverse forwards through the path whose start we have now found
+            #[allow(unused_assignments)]
+            let (mut path_node_e, mut path_node) = (start_node_e, start_node);
+            while let Some((next_node_e, next_node)) = (path_node.next_nodes.len() == 1)
+                .then(|| self.q.get(*path_node.next_nodes.iter().next().unwrap()).ok())
+                .flatten()
+                .filter(|x| nodes_to_handle.contains_key(&x.0))
+            {
+                if next_node.prev_nodes.len() != 1 || is_battle_dispatcher(next_node) {
+                    break;
+                }
+                (path_node_e, path_node) = (next_node_e, next_node);
+
+                path.push(path_node_e);
+                nodes_to_handle.remove(&path_node_e);
+                node_to_path_index.insert(next_node_e, path_index);
+            }
+            paths.push(PathGroup { path, ..default() });
+        }
+
+        for i in 0..paths.len() {
+            let Some(last) = paths[i].path.last() else {
+                continue;
+            };
+            for next in self.q.get(*last).unwrap().1.next_nodes.iter() {
+                let Some(next_i) = node_to_path_index.get(next) else {
+                    continue;
+                };
+                paths[i].next_paths.push(*next_i);
+                paths[*next_i].prev_paths.push(i);
+            }
+        }
+
+        paths
+    }
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct PathGroup {
-    pub paths: Vec<Entity>,
-    pub visible: bool,
+    pub path: Vec<Entity>,
+    pub prev_paths: Vec<usize>,
+    pub next_paths: Vec<usize>,
 }
 
 #[derive(Resource, Clone)]
@@ -611,88 +746,3 @@ pub struct EnemyPathGroups(pub Vec<PathGroup>);
 pub struct ItemPathGroups(pub Vec<PathGroup>);
 #[derive(Resource, Clone)]
 pub struct CheckPathGroups(pub Vec<PathGroup>);
-
-type TraverserKmpNodeQuery<'w, 's> = Query<
-    'w,
-    's,
-    (
-        &'static KmpPathNode,
-        Option<&'static EnemyPathPoint>,
-        Option<&'static ItemPathPoint>,
-        Option<&'static CheckpointLeft>,
-    ),
->;
-
-struct Traverser<'w, 's> {
-    q_kmp_node: TraverserKmpNodeQuery<'w, 's>,
-    q_is_overall_start: Query<'w, 's, (), With<PathOverallStart>>,
-    groups_accum: Vec<Vec<Entity>>,
-    visited: EntityHashSet,
-}
-impl<'w, 's> Traverser<'w, 's> {
-    pub fn new(
-        q_kmp_node: TraverserKmpNodeQuery<'w, 's>,
-        q_is_overall_start: Query<'w, 's, (), With<PathOverallStart>>,
-    ) -> Self {
-        Self {
-            q_kmp_node,
-            q_is_overall_start,
-            groups_accum: Vec::new(),
-            visited: EntityHashSet::default(),
-        }
-    }
-    pub fn traverse(&mut self, start_node: Entity) -> Vec<PathGroup> {
-        self.traverse_internal(start_node, 0);
-        let groups = self.groups_accum.clone();
-        self.reset();
-        groups
-            .iter()
-            .map(|e| PathGroup {
-                paths: e.clone(),
-                visible: true,
-            })
-            .collect()
-    }
-    fn reset(&mut self) {
-        self.groups_accum = Vec::new();
-        self.visited = EntityHashSet::default();
-    }
-    fn traverse_internal(&mut self, cur_node: Entity, mut cur_index: usize) {
-        let (kmp_node, enemy_point, item_point, checkpoint) = self.q_kmp_node.get(cur_node).unwrap();
-
-        let at_start = self.q_is_overall_start.get(cur_node).is_ok();
-        let initial_start = at_start && self.groups_accum.is_empty();
-        // if we have already visited this node, return, otherwise, visit it
-        if !self.visited.insert(cur_node) {
-            return;
-        }
-
-        let we_should_start_new_group = initial_start
-            // if there are multiple nodes before us
-            || kmp_node.prev_nodes.len() > 1
-            // if any prev nodes have multiple next nodes
-            || kmp_node
-                .prev_nodes
-                .iter()
-                .any(|e| self.q_kmp_node.get(*e).unwrap().0.next_nodes.len() > 1)
-            || enemy_point.map(|x| x.path_start_override).unwrap_or(false)
-            || item_point.map(|x| x.path_start_override).unwrap_or(false)
-            || checkpoint.map(|x| x.path_start_override).unwrap_or(false);
-
-        if we_should_start_new_group {
-            self.groups_accum.push(vec![cur_node]);
-            cur_index = self.groups_accum.len() - 1;
-        } else {
-            self.groups_accum[cur_index].push(cur_node)
-        }
-
-        if kmp_node.next_nodes.is_empty() {
-            return;
-        }
-
-        for next_node in kmp_node.next_nodes.clone().iter() {
-            // recursion, woohoo
-            self.traverse_internal(*next_node, cur_index);
-        }
-    }
-}

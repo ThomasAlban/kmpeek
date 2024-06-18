@@ -20,7 +20,7 @@ pub struct SelectPlugin;
 impl Plugin for SelectPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SelectBox>()
-            .add_systems(Update, (select, select_box).in_set(SelectSet))
+            .add_systems(Update, (select, select_box, select_all).in_set(SelectSet))
             .add_systems(Update, update_outlines.after(SelectSet))
             .add_systems(
                 Update,
@@ -92,6 +92,27 @@ fn select(
     }
     for created_point in ev_just_created_point.read() {
         commands.entity(created_point.0).insert(Selected);
+    }
+}
+
+fn select_all(
+    mut commands: Commands,
+    q_selectable: Query<(Entity, &Visibility), With<KmpSelectablePoint>>,
+    keys: Res<ButtonInput<KeyCode>>,
+) {
+    if !((keys.pressed(KeyCode::SuperLeft)
+        || keys.pressed(KeyCode::SuperRight)
+        || keys.pressed(KeyCode::ControlLeft)
+        || keys.pressed(KeyCode::ControlRight))
+        && keys.just_pressed(KeyCode::KeyA))
+    {
+        return;
+    }
+
+    for (e, visibility) in q_selectable.iter() {
+        if *visibility == Visibility::Visible {
+            commands.entity(e).insert(Selected);
+        }
     }
 }
 

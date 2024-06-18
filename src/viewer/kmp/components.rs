@@ -69,7 +69,6 @@ pub struct EnemyPathPoint {
     pub setting_1: EnemyPathSetting1,
     pub setting_2: EnemyPathSetting2,
     pub setting_3: u8,
-    pub path_start_override: bool,
 }
 #[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy, Debug)]
 pub enum EnemyPathSetting1 {
@@ -102,7 +101,6 @@ pub struct ItemPathPoint {
     pub bullet_height: ItemPathBulletHeight,
     pub bullet_cant_drop: bool,
     pub low_shell_priority: bool,
-    pub path_start_override: bool,
 }
 
 #[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy, Debug)]
@@ -126,7 +124,6 @@ pub struct CheckpointLeft {
     pub plane: Entity,
     pub arrow: Entity,
     pub kind: CheckpointKind,
-    pub path_start_override: bool,
     // will contain link to respawn entity
 }
 impl Default for CheckpointLeft {
@@ -137,7 +134,6 @@ impl Default for CheckpointLeft {
             plane: Entity::PLACEHOLDER,
             arrow: Entity::PLACEHOLDER,
             kind: CheckpointKind::default(),
-            path_start_override: false,
         }
     }
 }
@@ -234,21 +230,36 @@ pub enum AreaKind {
     #[strum(serialize = "Env Effect")]
     EnvEffect(AreaEnvEffectObject),
     #[strum(serialize = "Fog Effect")]
-    FogEffect(AreaBfgEntry, AreaSetting2),
+    FogEffect {
+        bfg_entry: u16,
+        setting_2: u16,
+    },
     #[strum(serialize = "Moving Road")]
-    MovingRoad(AreaRouteId),
+    MovingRoad {
+        route_id: u16,
+    },
     #[strum(serialize = "Force Recalc")]
     ForceRecalc,
     #[strum(serialize = "Minimap Control")]
-    MinimapControl(AreaSetting1, AreaSetting2),
+    MinimapControl {
+        setting_1: u16,
+        setting_2: u16,
+    },
     #[strum(serialize = "Bloom Effect")]
-    BloomEffect(AreaBblmFile, AreaFadeTime),
+    BloomEffect {
+        bblm_file: u16,
+        fade_time: u16,
+    },
     #[strum(serialize = "Enable Boos")]
     EnableBoos,
     #[strum(serialize = "Object Group")]
-    ObjectGroup(AreaGroupId),
+    ObjectGroup {
+        group_id: u16,
+    },
     #[strum(serialize = "Object Unload")]
-    ObjectUnload(AreaGroupId),
+    ObjectUnload {
+        group_id: u16,
+    },
     #[strum(serialize = "Fall Boundary")]
     FallBoundary,
 }
@@ -265,20 +276,6 @@ pub enum AreaEnvEffectObject {
     EnvKareha,
     EnvKarehaUp,
 }
-#[derive(Default, Clone, PartialEq)]
-pub struct AreaBfgEntry(pub u16);
-#[derive(Default, Clone, PartialEq)]
-pub struct AreaSetting1(pub u16);
-#[derive(Default, Clone, PartialEq)]
-pub struct AreaSetting2(pub u16);
-#[derive(Default, Clone, PartialEq)]
-pub struct AreaRouteId(pub u8);
-#[derive(Default, Clone, PartialEq)]
-pub struct AreaBblmFile(pub u16);
-#[derive(Default, Clone, PartialEq)]
-pub struct AreaFadeTime(pub u16);
-#[derive(Default, Clone, PartialEq)]
-pub struct AreaGroupId(pub u16);
 
 // --- CAMERA COMPONENTS ---
 #[derive(Component, Default, Clone, PartialEq)]
@@ -416,7 +413,6 @@ impl FromKmp<Enpt> for EnemyPathPoint {
                 }
             },
             setting_3: data.setting_3,
-            path_start_override: false,
         }
     }
 }
@@ -439,7 +435,6 @@ impl FromKmp<Itpt> for ItemPathPoint {
                 || data.setting_2 == 3
                 || data.setting_2 == 6
                 || data.setting_2 == 7,
-            path_start_override: false,
         }
     }
 }
@@ -509,14 +504,29 @@ impl FromKmp<Area> for AreaPoint {
                         AreaEnvEffectObject::EnvKareha
                     }
                 }),
-                2 => AreaKind::FogEffect(AreaBfgEntry(data.setting_1), AreaSetting2(data.setting_2)),
-                3 => AreaKind::MovingRoad(AreaRouteId(data.enpt_id)),
+                2 => AreaKind::FogEffect {
+                    bfg_entry: data.setting_1,
+                    setting_2: data.setting_2,
+                },
+                3 => AreaKind::MovingRoad {
+                    route_id: data.enpt_id.into(),
+                },
                 4 => AreaKind::ForceRecalc,
-                5 => AreaKind::MinimapControl(AreaSetting1(data.setting_1), AreaSetting2(data.setting_2)),
-                6 => AreaKind::BloomEffect(AreaBblmFile(data.setting_1), AreaFadeTime(data.setting_2)),
+                5 => AreaKind::MinimapControl {
+                    setting_1: data.setting_1,
+                    setting_2: data.setting_2,
+                },
+                6 => AreaKind::BloomEffect {
+                    bblm_file: data.setting_1,
+                    fade_time: data.setting_2,
+                },
                 7 => AreaKind::EnableBoos,
-                8 => AreaKind::ObjectGroup(AreaGroupId(data.setting_1)),
-                9 => AreaKind::ObjectUnload(AreaGroupId(data.setting_1)),
+                8 => AreaKind::ObjectGroup {
+                    group_id: data.setting_1,
+                },
+                9 => AreaKind::ObjectUnload {
+                    group_id: data.setting_2,
+                },
                 10 => AreaKind::FallBoundary,
                 _ => {
                     errors.push(KmpError::new("Invalid AREA type found"));

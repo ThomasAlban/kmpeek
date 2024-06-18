@@ -35,7 +35,7 @@ pub mod multi_edit {
     /// Maps an iterator to a child of each element of that iterator
     macro_rules! map {
         ($iter:ident, $($fields:ident).*) => {
-            $iter.iter_mut().map(|x| &mut x$(.$fields)*)
+            $iter.iter_mut().map(|x| &mut x.1$(.$fields)*)
         };
     }
     pub(crate) use map;

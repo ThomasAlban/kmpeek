@@ -169,9 +169,9 @@ impl ShowOutlinerTab<'_, '_> {
         self.kmp_visibility.set_if_neq(visibilities);
     }
     fn show_path(&mut self, ui: &mut Ui, i: usize, pathgroup: &PathGroup, color: Color32) {
-        let mut all_visible = if !pathgroup.paths.is_empty() {
+        let mut all_visible = if !pathgroup.path.is_empty() {
             pathgroup
-                .paths
+                .path
                 .iter()
                 .all(|e| self.q_visibility.get(*e) == Ok(&Visibility::Visible))
         } else {
@@ -195,7 +195,7 @@ impl ShowOutlinerTab<'_, '_> {
                         self.commands.entity(e).remove::<Selected>();
                     }
                 }
-                for e in pathgroup.paths.iter() {
+                for e in pathgroup.path.iter() {
                     self.commands.entity(*e).insert(Selected);
                 }
             }
@@ -206,7 +206,7 @@ impl ShowOutlinerTab<'_, '_> {
                 .inner;
 
             if view_btn_response.changed() {
-                for e in pathgroup.paths.iter() {
+                for e in pathgroup.path.iter() {
                     let Ok(mut visibility) = self.q_visibility.get_mut(*e) else {
                         continue;
                     };

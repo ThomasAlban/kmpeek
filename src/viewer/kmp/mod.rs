@@ -10,7 +10,7 @@ use self::{
     checkpoints::{spawn_checkpoint_section, CheckpointHeight, CheckpointPlugin},
     components::*,
     meshes_materials::setup_kmp_meshes_materials,
-    path::{spawn_enemy_item_path_section, traverse_paths, update_node_links, KmpPathNodeLink, RecalculatePaths},
+    path::{spawn_enemy_item_path_section, traverse_paths, update_node_links, KmpPathNodeLink, RecalcPaths},
     point::{spawn_point_section, AddRespawnPointPreview},
     sections::KmpEditMode,
 };
@@ -28,7 +28,7 @@ pub struct KmpPlugin;
 impl Plugin for KmpPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(CheckpointPlugin)
-            .add_event::<RecalculatePaths>()
+            .add_event::<RecalcPaths>()
             .init_resource::<KmpEditMode>()
             .add_systems(Startup, setup_kmp_meshes_materials.after(SetupAppSettingsSet))
             .add_systems(
@@ -37,7 +37,7 @@ impl Plugin for KmpPlugin {
                     spawn_model.run_if(on_event::<KmpFileSelected>()),
                     update_node_links,
                     update_visible.run_if(resource_changed::<KmpVisibility>),
-                    traverse_paths.run_if(on_event::<RecalculatePaths>()),
+                    traverse_paths,
                 ),
             );
     }
@@ -46,7 +46,7 @@ pub fn spawn_model(
     mut commands: Commands,
     mut ev_kmp_file_selected: EventReader<KmpFileSelected>,
     q_kmp_section: Query<Entity, With<KmpSelectablePoint>>,
-    mut ev_recalculate_paths: EventWriter<RecalculatePaths>,
+    mut ev_recalc_paths: EventWriter<RecalcPaths>,
     checkpoint_height: Res<CheckpointHeight>,
 ) {
     // if there is no kmp file selected event return
@@ -119,7 +119,7 @@ pub fn spawn_model(
 
     // ---
 
-    ev_recalculate_paths.send_default();
+    ev_recalc_paths.send(RecalcPaths::all());
 }
 
 fn update_visible(

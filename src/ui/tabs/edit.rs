@@ -16,36 +16,40 @@ use crate::{
             checkpoints::get_selected_cp_lefts,
             components::{
                 AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, CheckpointLeft, CheckpointRight, EnemyPathPoint,
-                ItemPathPoint, KmpCamera, Object, RespawnPoint, StartPoint, TrackInfo, TransformEditOptions,
+                ItemPathPoint, KmpCamera, Object, PathOverallStart, RespawnPoint, StartPoint, TrackInfo,
+                TransformEditOptions,
             },
-            path::RecalculatePaths,
+            path::{PathType, RecalcPaths},
             sections::{KmpEditMode, KmpSections},
         },
     },
 };
 use bevy::{ecs::system::SystemParam, prelude::*};
-use bevy_egui::egui::{self, emath::Numeric, Checkbox, DragValue, Layout, Response, Ui, WidgetText};
+use bevy_egui::egui::{self, emath::Numeric, Align, Checkbox, DragValue, Layout, Response, Ui, WidgetText};
 
 #[derive(SystemParam)]
 pub struct ShowEditTab<'w, 's> {
+    commands: Commands<'w, 's>,
     kmp_edit_mode: Res<'w, KmpEditMode>,
     track_info: Option<ResMut<'w, TrackInfo>>,
 
-    q_transform: Query<'w, 's, (&'static mut Transform, Option<&'static TransformEditOptions>), With<Selected>>,
+    q_transform: Query<'w, 's, (Entity, &'static mut Transform), With<Selected>>,
+    q_transform_opts: Query<'w, 's, &'static TransformEditOptions>,
 
-    q_start_point: Query<'w, 's, &'static mut StartPoint, With<Selected>>,
-    q_enemy_point: Query<'w, 's, &'static mut EnemyPathPoint, With<Selected>>,
-    q_item_point: Query<'w, 's, &'static mut ItemPathPoint, With<Selected>>,
+    q_start_point: Query<'w, 's, (Entity, &'static mut StartPoint), With<Selected>>,
+    q_enemy_point: Query<'w, 's, (Entity, &'static mut EnemyPathPoint), With<Selected>>,
+    q_item_point: Query<'w, 's, (Entity, &'static mut ItemPathPoint), With<Selected>>,
     q_cp_left: Query<'w, 's, (&'static mut CheckpointLeft, Entity, Has<Selected>)>,
     q_cp_right: Query<'w, 's, &'static mut CheckpointRight, With<Selected>>,
-    q_respawn_point: Query<'w, 's, &'static mut RespawnPoint, With<Selected>>,
-    q_object: Query<'w, 's, &'static mut Object, With<Selected>>,
-    q_area: Query<'w, 's, &'static mut AreaPoint, With<Selected>>,
-    q_camera: Query<'w, 's, &'static mut KmpCamera, With<Selected>>,
-    q_cannon_point: Query<'w, 's, &'static mut CannonPoint, With<Selected>>,
-    q_battle_finish_point: Query<'w, 's, &'static mut BattleFinishPoint, With<Selected>>,
+    q_respawn_point: Query<'w, 's, (Entity, &'static mut RespawnPoint), With<Selected>>,
+    q_object: Query<'w, 's, (Entity, &'static mut Object), With<Selected>>,
+    q_area: Query<'w, 's, (Entity, &'static mut AreaPoint), With<Selected>>,
+    q_camera: Query<'w, 's, (Entity, &'static mut KmpCamera), With<Selected>>,
+    q_cannon_point: Query<'w, 's, (Entity, &'static mut CannonPoint), With<Selected>>,
+    q_battle_finish_point: Query<'w, 's, (Entity, &'static mut BattleFinishPoint), With<Selected>>,
 
-    ev_recalc_paths: EventWriter<'w, RecalculatePaths>,
+    q_path_start: PathStartQuery<'w, 's>,
+    ev_recalc_paths: EventWriter<'w, RecalcPaths>,
 }
 impl UiSubSection for ShowEditTab<'_, '_> {
     fn show(&mut self, ui: &mut Ui) {
@@ -80,37 +84,25 @@ impl UiSubSection for ShowEditTab<'_, '_> {
             }
         }
 
-        if !self.q_transform.is_empty() {
-            let mut tr: Vec<_> = self.q_transform.iter().map(|x| (*x.0, x.1.cloned())).collect();
-            let all_hide_rotation = tr.iter().all(|x| x.1.is_some_and(|x| x.hide_rotation));
-            let all_hide_y_tr = tr.iter().all(|x| x.1.is_some_and(|x| x.hide_y_translation));
-            let title = edit_component_title("Transform", tr.len());
-            framed_collapsing_header(title, ui, |ui| {
-                let mut trans: Vec<_> = tr.iter_mut().map(|x| &mut x.0.translation).collect();
-                drag_value_edit_row(ui, "Translation X", DragSpeed::Fast, trans.iter_mut().map(|x| &mut x.x));
-                if !all_hide_y_tr {
-                    drag_value_edit_row(ui, "Y", DragSpeed::Fast, trans.iter_mut().map(|x| &mut x.y));
-                }
-                drag_value_edit_row(ui, "Z", DragSpeed::Fast, trans.iter_mut().map(|x| &mut x.z));
+        edit_component(ui, "Transform", self.q_transform.iter_mut(), |ui, items| {
+            let transform_opts: Vec<_> = self.q_transform_opts.iter_many(items.iter().map(|x| x.0)).collect();
+            let all_hide_rot = transform_opts.iter().all(|x| x.hide_rotation);
+            let all_hide_y_tr = transform_opts.iter().all(|x| x.hide_y_translation);
 
-                if !all_hide_rotation {
-                    edit_spacing(ui);
-                    rotation_multi_edit(ui, tr.iter_mut().map(|x| &mut x.0), |ui, rots| {
-                        let [x, y, z] = vec3_drag_value_edit_row(ui, "Rotation", DragSpeed::Slow, rots);
-                        (x, y, z)
-                    });
-                }
-            });
-            for (mut item, other) in self.q_transform.iter_mut().zip(tr.iter()) {
-                if *item.0 != other.0 {
-                    *item.0 = other.0;
-                    if item.1.is_some_and(|x| x.hide_rotation) {
-                        item.0.rotation = Quat::default();
-                    }
-                }
+            drag_value_edit_row(ui, "Translation X", DragSpeed::Fast, map!(items, translation.x));
+            if !all_hide_y_tr {
+                drag_value_edit_row(ui, "Y", DragSpeed::Fast, map!(items, translation.y));
             }
-            edit_spacing(ui);
-        }
+            drag_value_edit_row(ui, "Z", DragSpeed::Fast, map!(items, translation.z));
+
+            if !all_hide_rot {
+                edit_spacing(ui);
+                rotation_multi_edit(ui, map!(items,), |ui, rots| {
+                    let [x, y, z] = vec3_drag_value_edit_row(ui, "Rotation", DragSpeed::Slow, rots);
+                    (x, y, z)
+                });
+            }
+        });
 
         edit_component(ui, "Start Point", self.q_start_point.iter_mut(), |ui, items| {
             drag_value_edit_row(ui, "Player Index", DragSpeed::Slow, map!(items, player_index));
@@ -122,10 +114,14 @@ impl UiSubSection for ShowEditTab<'_, '_> {
             combobox_edit_row(ui, "Setting 2", map!(items, setting_2));
             drag_value_edit_row(ui, "Setting 3", DragSpeed::Slow, map!(items, setting_3));
             edit_spacing(ui);
-            let changed = checkbox_edit_row(ui, "Always Path Start", map!(items, path_start_override)).changed();
-            if changed {
-                self.ev_recalc_paths.send_default();
-            }
+            path_start_btn(
+                ui,
+                &mut self.commands,
+                &mut self.q_path_start,
+                &mut self.ev_recalc_paths,
+                items,
+                PathType::Enemy,
+            );
         });
 
         edit_component(ui, "Item Point", self.q_item_point.iter_mut(), |ui, items| {
@@ -135,19 +131,27 @@ impl UiSubSection for ShowEditTab<'_, '_> {
             checkbox_edit_row(ui, "Bullet Can't Drop", map!(items, bullet_cant_drop));
             checkbox_edit_row(ui, "Low Shell Priority", map!(items, low_shell_priority));
             edit_spacing(ui);
-            let changed = checkbox_edit_row(ui, "Always Path Start", map!(items, path_start_override)).changed();
-            if changed {
-                self.ev_recalc_paths.send_default();
-            }
+            path_start_btn(
+                ui,
+                &mut self.commands,
+                &mut self.q_path_start,
+                &mut self.ev_recalc_paths,
+                items,
+                PathType::Item,
+            );
         });
 
-        let cp_iter = get_selected_cp_lefts(&mut self.q_cp_left, &mut self.q_cp_right).map(|x| x.1);
+        let cp_iter = get_selected_cp_lefts(&mut self.q_cp_left, &mut self.q_cp_right);
         edit_component(ui, "Checkpoint", cp_iter, |ui, items| {
             combobox_edit_row(ui, "Type", map!(items, kind));
-            let changed = checkbox_edit_row(ui, "Always Path Start", map!(items, path_start_override)).changed();
-            if changed {
-                self.ev_recalc_paths.send_default();
-            }
+            path_start_btn(
+                ui,
+                &mut self.commands,
+                &mut self.q_path_start,
+                &mut self.ev_recalc_paths,
+                items,
+                PathType::CheckpointLeft,
+            );
         });
 
         edit_component(ui, "Respawn Point", self.q_respawn_point.iter_mut(), |ui, items| {
@@ -161,8 +165,12 @@ impl UiSubSection for ShowEditTab<'_, '_> {
             drag_value_edit_row(ui, "ID", DragSpeed::Slow, map!(items, object_id));
             edit_spacing(ui);
             for i in 0..8 {
-                let label = format!("Setting {}", i + 1);
-                drag_value_edit_row(ui, label, DragSpeed::Slow, items.iter_mut().map(|x| &mut x.settings[i]));
+                drag_value_edit_row(
+                    ui,
+                    format!("Setting {}", i + 1),
+                    DragSpeed::Slow,
+                    items.iter_mut().map(|x| &mut x.1.settings[i]),
+                );
             }
         });
 
@@ -174,8 +182,8 @@ impl UiSubSection for ShowEditTab<'_, '_> {
             combobox_edit_row(ui, "Type", map!(items, kind));
 
             // for now, area type UI settings will only work when 1 point is selected
-            if items.len() == 1 {
-                match &mut items[0].kind {
+            if let Some(item) = items.iter_mut().next() {
+                match &mut item.1.kind {
                     AreaKind::Camera(cam_index) => {
                         edit_row(ui, "Camera Index", true, |ui| {
                             ui.add(DragValue::new(&mut cam_index.0).speed(DragSpeed::Slow));
@@ -186,39 +194,39 @@ impl UiSubSection for ShowEditTab<'_, '_> {
                             combobox_enum(ui, env_effect_obj, None);
                         });
                     }
-                    AreaKind::FogEffect(bfg_entry, setting_2) => {
+                    AreaKind::FogEffect { bfg_entry, setting_2 } => {
                         edit_row(ui, "BFG Entry", true, |ui| {
-                            ui.add(DragValue::new(&mut bfg_entry.0).speed(DragSpeed::Slow));
+                            ui.add(DragValue::new(bfg_entry).speed(DragSpeed::Slow));
                         });
                         edit_row(ui, "Setting 2", true, |ui| {
-                            ui.add(DragValue::new(&mut setting_2.0).speed(DragSpeed::Slow));
+                            ui.add(DragValue::new(setting_2).speed(DragSpeed::Slow));
                         });
                     }
                     // TODO - abstract route IDs away
-                    AreaKind::MovingRoad(area_route_id) => {
+                    AreaKind::MovingRoad { route_id } => {
                         edit_row(ui, "Route ID", true, |ui| {
-                            ui.add(DragValue::new(&mut area_route_id.0).speed(DragSpeed::Slow));
+                            ui.add(DragValue::new(route_id).speed(DragSpeed::Slow));
                         });
                     }
-                    AreaKind::MinimapControl(setting_1, setting_2) => {
+                    AreaKind::MinimapControl { setting_1, setting_2 } => {
                         edit_row(ui, "Setting 1", true, |ui| {
-                            ui.add(DragValue::new(&mut setting_1.0).speed(DragSpeed::Slow));
+                            ui.add(DragValue::new(setting_1).speed(DragSpeed::Slow));
                         });
                         edit_row(ui, "Setting 2", true, |ui| {
-                            ui.add(DragValue::new(&mut setting_2.0).speed(DragSpeed::Slow));
+                            ui.add(DragValue::new(setting_2).speed(DragSpeed::Slow));
                         });
                     }
-                    AreaKind::BloomEffect(bblm_file, fade_time) => {
+                    AreaKind::BloomEffect { bblm_file, fade_time } => {
                         edit_row(ui, "BBLM File", true, |ui| {
-                            ui.add(DragValue::new(&mut bblm_file.0).speed(DragSpeed::Slow));
+                            ui.add(DragValue::new(bblm_file).speed(DragSpeed::Slow));
                         });
                         edit_row(ui, "Fade Time", true, |ui| {
-                            ui.add(DragValue::new(&mut fade_time.0).speed(DragSpeed::Slow));
+                            ui.add(DragValue::new(fade_time).speed(DragSpeed::Slow));
                         });
                     }
-                    AreaKind::ObjectGroup(group_id) | AreaKind::ObjectUnload(group_id) => {
+                    AreaKind::ObjectGroup { group_id } | AreaKind::ObjectUnload { group_id } => {
                         edit_row(ui, "Group ID", true, |ui| {
-                            ui.add(DragValue::new(&mut group_id.0).speed(DragSpeed::Slow));
+                            ui.add(DragValue::new(group_id).speed(DragSpeed::Slow));
                         });
                     }
                     // other types of area don't have any settings
@@ -269,6 +277,42 @@ impl UiSubSection for ShowEditTab<'_, '_> {
     }
 }
 
+type PathStartQuery<'w, 's> =
+    Query<'w, 's, (Entity, Has<EnemyPathPoint>, Has<ItemPathPoint>, Has<CheckpointLeft>), With<PathOverallStart>>;
+
+fn path_start_btn<T>(
+    ui: &mut Ui,
+    commands: &mut Commands,
+    q_path_start: &mut PathStartQuery,
+    ev_recalc_paths: &mut EventWriter<RecalcPaths>,
+    items: &[(Entity, T)],
+    path_type: PathType,
+) {
+    ui.with_layout(Layout::top_down(Align::Center), |ui| {
+        ui.set_enabled(items.len() == 1);
+        if ui.button("Set As Path Start").clicked() && items.len() == 1 {
+            for e in q_path_start
+                .iter()
+                .filter(|x| match path_type {
+                    PathType::Enemy => x.1,
+                    PathType::Item => x.2,
+                    PathType::CheckpointLeft | PathType::CheckpointRight => x.3,
+                })
+                .map(|x| x.0)
+            {
+                commands.entity(e).remove::<PathOverallStart>();
+            }
+            commands.entity(items[0].0).insert(PathOverallStart);
+            let ev = match path_type {
+                PathType::Enemy => RecalcPaths::enemy(),
+                PathType::Item => RecalcPaths::item(),
+                PathType::CheckpointLeft | PathType::CheckpointRight => RecalcPaths::cp(),
+            };
+            ev_recalc_paths.send(ev);
+        }
+    });
+}
+
 fn edit_component_title(name: impl Into<String>, num: usize) -> String {
     let name = name.into();
     if num > 1 {
@@ -281,8 +325,8 @@ fn edit_component_title(name: impl Into<String>, num: usize) -> String {
 fn edit_component<'a, T: 'a + PartialEq + Clone, R>(
     ui: &mut Ui,
     title: &'static str,
-    items: impl IntoIterator<Item = Mut<'a, T>>,
-    add_body: impl FnOnce(&mut Ui, &mut [T]) -> R,
+    items: impl IntoIterator<Item = (Entity, Mut<'a, T>)>,
+    add_body: impl FnOnce(&mut Ui, &mut [(Entity, T)]) -> R,
 ) {
     let mut len = 0;
     edit_many_mut(items, |items| {
@@ -296,18 +340,18 @@ fn edit_component<'a, T: 'a + PartialEq + Clone, R>(
 }
 
 fn edit_many_mut<'a, T: 'a + PartialEq + Clone>(
-    items: impl IntoIterator<Item = Mut<'a, T>>,
-    contents: impl FnOnce(&mut [T]),
+    items: impl IntoIterator<Item = (Entity, Mut<'a, T>)>,
+    contents: impl FnOnce(&mut [(Entity, T)]),
 ) {
-    let mut items: Vec<Mut<T>> = items.into_iter().collect();
+    let mut items: Vec<(Entity, Mut<T>)> = items.into_iter().collect();
     if items.is_empty() {
         return;
     };
 
-    let mut cloned: Vec<T> = items.iter().map(|x| (*x).clone()).collect();
+    let mut cloned: Vec<(Entity, T)> = items.iter().map(|x| (x.0, (*x.1).clone())).collect();
     contents(&mut cloned);
     for (item, other) in items.iter_mut().zip(cloned.iter()) {
-        item.set_if_neq(other.clone());
+        item.1.set_if_neq(other.1.clone());
     }
 }
 

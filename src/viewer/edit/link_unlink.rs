@@ -7,7 +7,7 @@ use crate::{
         kmp::{
             checkpoints::get_both_cp_nodes,
             components::{CheckpointLeft, CheckpointRight, EnemyPathPoint, ItemPathPoint, KmpSelectablePoint},
-            path::KmpPathNode,
+            path::{KmpPathNode, RecalcPaths},
         },
     },
 };
@@ -29,6 +29,7 @@ pub fn link_points(
     q_transform: Query<&Transform, With<KmpSelectablePoint>>,
     q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
     q_window: Query<&Window>,
+    mut ev_recalc_paths: EventWriter<RecalcPaths>,
     mut raycast: Raycast,
     viewport_info: Res<ViewportInfo>,
 
@@ -66,6 +67,7 @@ pub fn link_points(
                 KmpPathNode::link_nodes(selected, alt_clicked_pt, world);
             });
         }
+        ev_recalc_paths.send(RecalcPaths::enemy());
     }
     if q_item_paths.contains(alt_clicked_pt) {
         for selected in q_selected.iter().filter(|e| q_item_paths.contains(*e)) {
@@ -73,6 +75,7 @@ pub fn link_points(
                 KmpPathNode::link_nodes(selected, alt_clicked_pt, world);
             });
         }
+        ev_recalc_paths.send(RecalcPaths::item());
     }
 
     if q_cp_left.contains(alt_clicked_pt) || q_cp_right.contains(alt_clicked_pt) {
@@ -88,6 +91,7 @@ pub fn link_points(
                 KmpPathNode::link_nodes(prev_right, next_right, world);
             });
         }
+        ev_recalc_paths.send(RecalcPaths::cp());
     }
 }
 
@@ -96,6 +100,7 @@ pub fn unlink_points(
     keys: Res<ButtonInput<KeyCode>>,
     q_kmp_path_node: Query<&KmpPathNode>,
     q_selected: Query<Entity, With<Selected>>,
+    mut ev_recalc_paths: EventWriter<RecalcPaths>,
 ) {
     // unlink points with the U key
     if !keys.just_pressed(KeyCode::KeyU) {
@@ -129,4 +134,5 @@ pub fn unlink_points(
             });
         }
     }
+    ev_recalc_paths.send(RecalcPaths::all());
 }
