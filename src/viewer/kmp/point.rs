@@ -1,4 +1,8 @@
-use super::{meshes_materials::KmpMeshesMaterials, FromKmp, GetPointMaterialSection, KmpError, KmpSelectablePoint};
+use super::{
+    meshes_materials::{KmpMeshes, PointMaterials},
+    ordering::{NextOrderID, OrderID},
+    FromKmp, KmpError, KmpSelectablePoint, RespawnPoint,
+};
 use crate::{
     ui::settings::AppSettings,
     util::kmp_file::{KmpFile, KmpGetSection, KmpPositionPoint, KmpRotationPoint},
@@ -16,7 +20,7 @@ use std::sync::Arc;
 
 pub fn spawn_point_section<
     T: KmpGetSection + KmpPositionPoint + KmpRotationPoint + Send + Sync + 'static + Clone,
-    U: Component + FromKmp<T> + Clone + GetPointMaterialSection,
+    U: Component + FromKmp<T> + Clone,
 >(
     commands: &mut Commands,
     kmp: Arc<KmpFile>,
@@ -34,10 +38,11 @@ pub fn spawn_point_section<
             euler_rot.y.to_radians(),
             euler_rot.z.to_radians(),
         );
-        let entity = PointSpawner::new(U::from_kmp(node, kmp_errors, i))
+        let entity = PointSpawner::new(U::from_kmp(node, kmp_errors))
             .pos(position)
             .rot(rotation)
             .visible(false)
+            .order_id(i as u32)
             .spawn_command(commands);
         entities.push(entity);
     }
@@ -49,15 +54,17 @@ pub struct PointSpawner<U> {
     rotation: Quat,
     kmp_component: U,
     visible: bool,
+    order_id: Option<u32>,
     e: Option<Entity>,
 }
-impl<U: Component + Clone + GetPointMaterialSection> PointSpawner<U> {
-    pub fn new(kmp_component: U) -> Self {
+impl<T: Component + Clone> PointSpawner<T> {
+    pub fn new(kmp_component: T) -> Self {
         Self {
             position: Vec3::default(),
             rotation: Quat::default(),
             kmp_component,
             visible: true,
+            order_id: None,
             e: None,
         }
     }
@@ -73,6 +80,10 @@ impl<U: Component + Clone + GetPointMaterialSection> PointSpawner<U> {
         self.visible = visible;
         self
     }
+    pub fn order_id(mut self, id: u32) -> Self {
+        self.order_id = Some(id);
+        self
+    }
     pub fn spawn_command(mut self, commands: &mut Commands) -> Entity {
         let e = self.e.unwrap_or_else(|| commands.spawn_empty().id());
         self.e = Some(e);
@@ -83,10 +94,14 @@ impl<U: Component + Clone + GetPointMaterialSection> PointSpawner<U> {
     }
 
     pub fn spawn(self, world: &mut World) -> Entity {
-        let meshes_materials = world.resource::<KmpMeshesMaterials>();
-        let meshes = meshes_materials.meshes.clone();
-        let materials = U::get_materials(&meshes_materials.materials).clone();
+        let meshes = world.resource::<KmpMeshes>().clone();
+        let materials = world.resource::<PointMaterials<T>>().clone();
         let outline = world.get_resource::<AppSettings>().unwrap().kmp_model.outline.clone();
+
+        // either gets the order id, or gets it from the NextOrderID (which will increment it for next time)
+        let order_id = self
+            .order_id
+            .unwrap_or_else(|| world.resource::<NextOrderID<T>>().get());
 
         let mut entity = match self.e {
             Some(e) => world.entity_mut(e),
@@ -109,6 +124,7 @@ impl<U: Component + Clone + GetPointMaterialSection> PointSpawner<U> {
             KmpSelectablePoint,
             Tweakable(SnapTo::Kcl),
             GizmoTransformable,
+            OrderID(order_id),
             Normalize::new(200., 30., BVec3::TRUE),
             OutlineBundle {
                 outline: OutlineVolume {
@@ -164,9 +180,8 @@ impl<U: Component + Clone + GetPointMaterialSection> PointSpawner<U> {
 pub struct AddRespawnPointPreview(pub Entity);
 impl Command for AddRespawnPointPreview {
     fn apply(self, world: &mut World) {
-        let meshes_materials = world.resource::<KmpMeshesMaterials>();
-        let mesh = meshes_materials.meshes.sphere.clone();
-        let material = meshes_materials.materials.respawn_points.line.clone();
+        let mesh = world.resource::<KmpMeshes>().sphere.clone();
+        let material = world.resource::<PointMaterials<RespawnPoint>>().line.clone();
 
         world.entity_mut(self.0).with_children(|parent| {
             // spawn respawn position previews

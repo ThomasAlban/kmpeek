@@ -15,7 +15,7 @@ use crate::{
         kmp::{
             checkpoints::get_selected_cp_lefts,
             components::{
-                AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, CheckpointLeft, CheckpointRight, EnemyPathPoint,
+                AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, CheckpointRight, EnemyPathPoint,
                 ItemPathPoint, KmpCamera, Object, PathOverallStart, RespawnPoint, StartPoint, TrackInfo,
                 TransformEditOptions,
             },
@@ -39,7 +39,7 @@ pub struct ShowEditTab<'w, 's> {
     q_start_point: Query<'w, 's, (Entity, &'static mut StartPoint), With<Selected>>,
     q_enemy_point: Query<'w, 's, (Entity, &'static mut EnemyPathPoint), With<Selected>>,
     q_item_point: Query<'w, 's, (Entity, &'static mut ItemPathPoint), With<Selected>>,
-    q_cp_left: Query<'w, 's, (&'static mut CheckpointLeft, Entity, Has<Selected>)>,
+    q_cp_left: Query<'w, 's, (&'static mut Checkpoint, Entity, Has<Selected>)>,
     q_cp_right: Query<'w, 's, &'static mut CheckpointRight, With<Selected>>,
     q_respawn_point: Query<'w, 's, (Entity, &'static mut RespawnPoint), With<Selected>>,
     q_object: Query<'w, 's, (Entity, &'static mut Object), With<Selected>>,
@@ -150,12 +150,11 @@ impl UiSubSection for ShowEditTab<'_, '_> {
                 &mut self.q_path_start,
                 &mut self.ev_recalc_paths,
                 items,
-                PathType::CheckpointLeft,
+                PathType::Checkpoint { right: false },
             );
         });
 
         edit_component(ui, "Respawn Point", self.q_respawn_point.iter_mut(), |ui, items| {
-            drag_value_edit_row(ui, "ID", DragSpeed::Slow, map!(items, id));
             drag_value_edit_row(ui, "Sound Trigger", DragSpeed::Slow, map!(items, sound_trigger));
         });
 
@@ -262,7 +261,6 @@ impl UiSubSection for ShowEditTab<'_, '_> {
         });
 
         edit_component(ui, "Cannon Point", self.q_cannon_point.iter_mut(), |ui, items| {
-            drag_value_edit_row(ui, "ID", DragSpeed::Slow, map!(items, id));
             combobox_edit_row(ui, "Shoot Effect", map!(items, shoot_effect));
         });
 
@@ -270,15 +268,13 @@ impl UiSubSection for ShowEditTab<'_, '_> {
             ui,
             "Battle Finish Point",
             self.q_battle_finish_point.iter_mut(),
-            |ui, items| {
-                drag_value_edit_row(ui, "ID", DragSpeed::Slow, map!(items, id));
-            },
+            |_ui, _items| {},
         );
     }
 }
 
 type PathStartQuery<'w, 's> =
-    Query<'w, 's, (Entity, Has<EnemyPathPoint>, Has<ItemPathPoint>, Has<CheckpointLeft>), With<PathOverallStart>>;
+    Query<'w, 's, (Entity, Has<EnemyPathPoint>, Has<ItemPathPoint>, Has<Checkpoint>), With<PathOverallStart>>;
 
 fn path_start_btn<T>(
     ui: &mut Ui,
@@ -296,7 +292,7 @@ fn path_start_btn<T>(
                 .filter(|x| match path_type {
                     PathType::Enemy => x.1,
                     PathType::Item => x.2,
-                    PathType::CheckpointLeft | PathType::CheckpointRight => x.3,
+                    PathType::Checkpoint { .. } => x.3,
                 })
                 .map(|x| x.0)
             {
@@ -306,7 +302,7 @@ fn path_start_btn<T>(
             let ev = match path_type {
                 PathType::Enemy => RecalcPaths::enemy(),
                 PathType::Item => RecalcPaths::item(),
-                PathType::CheckpointLeft | PathType::CheckpointRight => RecalcPaths::cp(),
+                PathType::Checkpoint { .. } => RecalcPaths::cp(),
             };
             ev_recalc_paths.send(ev);
         }

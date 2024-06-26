@@ -6,7 +6,7 @@ use crate::{
         camera::Gizmo2dCam,
         kmp::{
             checkpoints::get_both_cp_nodes,
-            components::{CheckpointLeft, CheckpointRight, EnemyPathPoint, ItemPathPoint, KmpSelectablePoint},
+            components::{Checkpoint, CheckpointRight, EnemyPathPoint, ItemPathPoint, KmpSelectablePoint},
             path::{KmpPathNode, RecalcPaths},
         },
     },
@@ -35,7 +35,7 @@ pub fn link_points(
 
     q_enemy_paths: Query<(), With<EnemyPathPoint>>,
     q_item_paths: Query<(), With<ItemPathPoint>>,
-    q_cp_left: Query<(), With<CheckpointLeft>>,
+    q_cp_left: Query<(), With<Checkpoint>>,
     q_cp_right: Query<(), With<CheckpointRight>>,
 ) {
     if !mouse_buttons.just_pressed(MouseButton::Left) {
@@ -109,7 +109,7 @@ pub fn unlink_points(
 
     let unlink_command = |world: &mut World, prev: Entity, next: Entity| {
         // if it is a checkpoint
-        if world.entity(prev).contains::<CheckpointLeft>() || world.entity(next).contains::<CheckpointRight>() {
+        if world.entity(prev).contains::<Checkpoint>() || world.entity(next).contains::<CheckpointRight>() {
             let (prev_left, prev_right) = get_both_cp_nodes(world, prev);
             let (next_left, next_right) = get_both_cp_nodes(world, next);
             KmpPathNode::unlink_nodes(prev_left, next_left, world);

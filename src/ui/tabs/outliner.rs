@@ -8,7 +8,7 @@ use crate::{
         edit::select::Selected,
         kmp::{
             components::{
-                AreaPoint, BattleFinishPoint, CannonPoint, CheckpointLeft, EnemyPathPoint, ItemPathPoint, KmpCamera,
+                AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint, KmpCamera,
                 Object, RespawnPoint, StartPoint,
             },
             path::{CheckPathGroups, EnemyPathGroups, ItemPathGroups, PathGroup},
@@ -34,7 +34,7 @@ pub struct ShowOutlinerTab<'w, 's> {
     start_points: Query<'w, 's, Entity, With<StartPoint>>,
     enemy_paths: Query<'w, 's, Entity, With<EnemyPathPoint>>,
     item_paths: Query<'w, 's, Entity, With<ItemPathPoint>>,
-    checkpoints: Query<'w, 's, Entity, With<CheckpointLeft>>,
+    checkpoints: Query<'w, 's, Entity, With<Checkpoint>>,
     respawn_points: Query<'w, 's, Entity, With<RespawnPoint>>,
     objects: Query<'w, 's, Entity, With<Object>>,
     areas: Query<'w, 's, Entity, With<AreaPoint>>,

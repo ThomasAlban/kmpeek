@@ -9,7 +9,8 @@ An in-progress 3D KMP editor for Mario Kart Wii. The goal is for it to be the ul
 These are the things I still need to do before an alpha release. Some of these are pretty quick and easy but others more difficult!
 
 - [x] Finish checkpoint editor
-- [ ] Finish Table viewer (+ export/import CSV)
+- [x] Finish Table viewer
+- [ ] Export/Import CSV from Table
 - [ ] Route editor
 - [ ] Saving back to KMP format
 - [ ] Custom object settings
@@ -36,5 +37,5 @@ Contributing to this project is very much welcome! The project is written in Rus
 
 ## How to build
 
-Have Rust installed and the repository cloned, then run `cargo run -r` in the directory (remove `-r` if you want debug mode rather than release mode).  
+Have Rust installed and the repository cloned, then run `cargo run -r` in the directory (remove `-r` if you want debug mode rather than release mode).
 Expect it to take a few minutes to compile for the first time (because it will need to download all the packages and compile them), but after that it should be pretty quick.

@@ -1,17 +1,17 @@
-use super::settings::{CheckpointColour, PathColor, PointColor};
+use std::marker::PhantomData;
+
+use super::{
+    settings::{CheckpointColor, PathColor, PointColor},
+    AreaPoint, BattleFinishPoint, CannonPoint, EnemyPathPoint, ItemPathPoint, KmpCamera, Object, RespawnPoint,
+    StartPoint,
+};
 use crate::{
     ui::settings::AppSettings,
     util::shapes::{Cone, Cylinder},
 };
 use bevy::prelude::*;
 
-#[derive(Resource)]
-pub struct KmpMeshesMaterials {
-    pub meshes: KmpMeshes,
-    pub materials: KmpMaterials,
-}
-
-#[derive(Clone)]
+#[derive(Clone, Resource)]
 pub struct KmpMeshes {
     pub sphere: Handle<Mesh>,
     pub cylinder: Handle<Mesh>,
@@ -19,54 +19,23 @@ pub struct KmpMeshes {
     pub cone: Handle<Mesh>,
     pub plane: Handle<Mesh>,
 }
-pub struct KmpMaterials {
-    pub start_points: PointMaterials,
-    pub enemy_paths: PathMaterials,
-    pub item_paths: PathMaterials,
-    pub checkpoints: CheckpointMaterials,
-    pub respawn_points: PointMaterials,
-    pub objects: PointMaterials,
-    pub areas: PointMaterials,
-    pub cameras: PointMaterials,
-    pub cannon_points: PointMaterials,
-    pub battle_finish_points: PointMaterials,
-}
 
-#[derive(Clone)]
-pub struct PathMaterials {
-    pub point: Handle<StandardMaterial>,
-    pub line: Handle<StandardMaterial>,
-    pub arrow: Handle<StandardMaterial>,
-}
-impl PathMaterials {
-    pub fn from_colors(materials: &mut Assets<StandardMaterial>, colors: &PathColor) -> Self {
-        Self {
-            point: unlit_material(materials, colors.point),
-            line: unlit_material(materials, colors.line),
-            arrow: unlit_material(materials, colors.arrow),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct PointMaterials {
+#[derive(Clone, Resource)]
+pub struct PointMaterials<T: Component + Clone> {
     pub point: Handle<StandardMaterial>,
     pub line: Handle<StandardMaterial>,
     pub arrow: Handle<StandardMaterial>,
     pub up_arrow: Handle<StandardMaterial>,
+    _p: PhantomData<T>,
 }
-impl PointMaterials {
-    pub fn from_colors(materials: &mut Assets<StandardMaterial>, colors: &PointColor) -> Self {
-        Self {
-            point: unlit_material(materials, colors.point),
-            line: unlit_material(materials, colors.line),
-            arrow: unlit_material(materials, colors.arrow),
-            up_arrow: unlit_material(materials, colors.up_arrow),
-        }
-    }
+#[derive(Clone, Resource)]
+pub struct PathMaterials<T: Component + Clone> {
+    pub point: Handle<StandardMaterial>,
+    pub line: Handle<StandardMaterial>,
+    pub arrow: Handle<StandardMaterial>,
+    _p: PhantomData<T>,
 }
-
-#[derive(Clone)]
+#[derive(Clone, Resource)]
 pub struct CheckpointMaterials {
     pub normal: Handle<StandardMaterial>,
     pub normal_plane: Handle<StandardMaterial>,
@@ -77,8 +46,33 @@ pub struct CheckpointMaterials {
     pub line: Handle<StandardMaterial>,
     pub arrow: Handle<StandardMaterial>,
 }
-impl CheckpointMaterials {
-    pub fn from_colors(materials: &mut Assets<StandardMaterial>, colors: &CheckpointColour) -> Self {
+
+pub trait MaterialsFromColors<Colors> {
+    fn from_colors(materials: &mut Assets<StandardMaterial>, colors: &Colors) -> Self;
+}
+impl<T: Component + Clone> MaterialsFromColors<PointColor> for PointMaterials<T> {
+    fn from_colors(materials: &mut Assets<StandardMaterial>, colors: &PointColor) -> Self {
+        Self {
+            point: unlit_material(materials, colors.point),
+            line: unlit_material(materials, colors.line),
+            arrow: unlit_material(materials, colors.arrow),
+            up_arrow: unlit_material(materials, colors.up_arrow),
+            _p: PhantomData,
+        }
+    }
+}
+impl<T: Component + Clone> MaterialsFromColors<PathColor> for PathMaterials<T> {
+    fn from_colors(materials: &mut Assets<StandardMaterial>, colors: &PathColor) -> Self {
+        Self {
+            point: unlit_material(materials, colors.point),
+            line: unlit_material(materials, colors.line),
+            arrow: unlit_material(materials, colors.arrow),
+            _p: PhantomData,
+        }
+    }
+}
+impl MaterialsFromColors<CheckpointColor> for CheckpointMaterials {
+    fn from_colors(materials: &mut Assets<StandardMaterial>, colors: &CheckpointColor) -> Self {
         let plane_color = |materials: &mut Assets<StandardMaterial>, color: Color| {
             materials.add(StandardMaterial {
                 base_color: color.with_a(0.2),
@@ -143,26 +137,29 @@ pub fn setup_kmp_meshes_materials(
         })),
         plane: meshes.add(Plane3d::default().mesh()),
     };
+    commands.insert_resource(kmp_meshes);
 
     let colors = &settings.kmp_model.color;
 
-    let kmp_materials = KmpMaterials {
-        start_points: PointMaterials::from_colors(&mut materials, &colors.start_points),
-        enemy_paths: PathMaterials::from_colors(&mut materials, &colors.enemy_paths),
-        item_paths: PathMaterials::from_colors(&mut materials, &colors.item_paths),
-        checkpoints: CheckpointMaterials::from_colors(&mut materials, &colors.checkpoints),
-        respawn_points: PointMaterials::from_colors(&mut materials, &colors.respawn_points),
-        objects: PointMaterials::from_colors(&mut materials, &colors.objects),
-        areas: PointMaterials::from_colors(&mut materials, &colors.areas),
-        cameras: PointMaterials::from_colors(&mut materials, &colors.cameras),
-        cannon_points: PointMaterials::from_colors(&mut materials, &colors.cannon_points),
-        battle_finish_points: PointMaterials::from_colors(&mut materials, &colors.battle_finish_points),
-    };
-
-    let kmp_meshes_materials = KmpMeshesMaterials {
-        meshes: kmp_meshes,
-        materials: kmp_materials,
-    };
-
-    commands.insert_resource(kmp_meshes_materials);
+    let start_points = PointMaterials::<StartPoint>::from_colors(&mut materials, &colors.start_points);
+    commands.insert_resource(start_points);
+    let enemy_paths = PathMaterials::<EnemyPathPoint>::from_colors(&mut materials, &colors.enemy_paths);
+    commands.insert_resource(enemy_paths);
+    let item_paths = PathMaterials::<ItemPathPoint>::from_colors(&mut materials, &colors.item_paths);
+    commands.insert_resource(item_paths);
+    let checkpoints = CheckpointMaterials::from_colors(&mut materials, &colors.checkpoints);
+    commands.insert_resource(checkpoints);
+    let respawn_points = PointMaterials::<RespawnPoint>::from_colors(&mut materials, &colors.respawn_points);
+    commands.insert_resource(respawn_points);
+    let objects = PointMaterials::<Object>::from_colors(&mut materials, &colors.objects);
+    commands.insert_resource(objects);
+    let areas = PointMaterials::<AreaPoint>::from_colors(&mut materials, &colors.areas);
+    commands.insert_resource(areas);
+    let cameras = PointMaterials::<KmpCamera>::from_colors(&mut materials, &colors.cameras);
+    commands.insert_resource(cameras);
+    let cannon_points = PointMaterials::<CannonPoint>::from_colors(&mut materials, &colors.cannon_points);
+    commands.insert_resource(cannon_points);
+    let battle_finish_points =
+        PointMaterials::<BattleFinishPoint>::from_colors(&mut materials, &colors.battle_finish_points);
+    commands.insert_resource(battle_finish_points);
 }

@@ -1,8 +1,9 @@
 use super::{
     calc_cp_arrow_transform, calc_line_transform,
-    meshes_materials::KmpMeshesMaterials,
+    meshes_materials::{CheckpointMaterials, KmpMeshes},
+    ordering::{NextOrderID, OrderID},
     path::{get_kmp_data_and_component_groups, link_entity_groups, EntityGroup, KmpPathNode},
-    CheckpointKind, CheckpointLeft, CheckpointLine, CheckpointPlane, CheckpointRight, Ckpt, KmpError, KmpFile,
+    Checkpoint, CheckpointKind, CheckpointLine, CheckpointPlane, CheckpointRight, Ckpt, KmpError, KmpFile,
     KmpSelectablePoint, PathOverallStart, TransformEditOptions,
 };
 use crate::{
@@ -68,22 +69,24 @@ impl Default for CheckpointHeight {
 }
 
 pub struct CheckpointSpawner {
-    kmp_component: CheckpointLeft,
+    kmp_component: Checkpoint,
     left_pos: Vec2,
     right_pos: Vec2,
     height: f32,
     visible: bool,
+    order_id: Option<u32>,
     left_e: Option<Entity>,
     right_e: Option<Entity>,
 }
 impl CheckpointSpawner {
-    pub fn new(kmp_component: CheckpointLeft) -> Self {
+    pub fn new(kmp_component: Checkpoint) -> Self {
         Self {
             kmp_component,
             left_pos: Vec2::default(),
             right_pos: Vec2::default(),
             height: DEFAULT_CP_HEIGHT,
             visible: true,
+            order_id: None,
             left_e: None,
             right_e: None,
         }
@@ -107,6 +110,10 @@ impl CheckpointSpawner {
         self.height = height;
         self
     }
+    pub fn order_id(mut self, id: u32) -> Self {
+        self.order_id = Some(id);
+        self
+    }
     pub fn left_transform(&self) -> Transform {
         Transform::from_xyz(self.left_pos.x, self.height, self.left_pos.y)
     }
@@ -122,12 +129,12 @@ impl CheckpointSpawner {
         // basically got these values from trial and error
         let child_transform = Transform::from_translation(vec3(0., 75., 0.)).with_scale(vec3(0.4, 1., 1.));
 
-        let meshes_materials = world.resource::<KmpMeshesMaterials>();
-        let mesh = meshes_materials.meshes.cone.clone();
+        let mesh = world.resource::<KmpMeshes>().cone.clone();
+        let cp_materials = world.resource::<CheckpointMaterials>();
         let material = match self.kmp_component.kind {
-            CheckpointKind::Normal => meshes_materials.materials.checkpoints.normal.clone(),
-            CheckpointKind::Key => meshes_materials.materials.checkpoints.key.clone(),
-            CheckpointKind::LapCount => meshes_materials.materials.checkpoints.lap_count.clone(),
+            CheckpointKind::Normal => cp_materials.normal.clone(),
+            CheckpointKind::Key => cp_materials.key.clone(),
+            CheckpointKind::LapCount => cp_materials.lap_count.clone(),
         };
 
         world
@@ -159,12 +166,12 @@ impl CheckpointSpawner {
         let r_tr = self.right_transform().translation;
         let line_transform = calc_line_transform(l_tr, r_tr);
 
-        let meshes_materials = world.resource::<KmpMeshesMaterials>();
-        let mesh = meshes_materials.meshes.cylinder.clone();
+        let mesh = world.resource::<KmpMeshes>().cylinder.clone();
+        let cp_materials = world.resource::<CheckpointMaterials>();
         let material = match self.kmp_component.kind {
-            CheckpointKind::Normal => meshes_materials.materials.checkpoints.normal.clone(),
-            CheckpointKind::Key => meshes_materials.materials.checkpoints.key.clone(),
-            CheckpointKind::LapCount => meshes_materials.materials.checkpoints.lap_count.clone(),
+            CheckpointKind::Normal => cp_materials.normal.clone(),
+            CheckpointKind::Key => cp_materials.key.clone(),
+            CheckpointKind::LapCount => cp_materials.lap_count.clone(),
         };
         world.get_entity_mut(entity).unwrap().insert((
             PbrBundle {
@@ -184,12 +191,12 @@ impl CheckpointSpawner {
     }
 
     fn spawn_plane(&self, world: &mut World, entity: Entity) {
-        let meshes_materials = world.resource::<KmpMeshesMaterials>();
-        let mesh = meshes_materials.meshes.plane.clone();
+        let mesh = world.resource::<KmpMeshes>().plane.clone();
+        let cp_materials = world.resource::<CheckpointMaterials>();
         let material = match self.kmp_component.kind {
-            CheckpointKind::Normal => meshes_materials.materials.checkpoints.normal_plane.clone(),
-            CheckpointKind::Key => meshes_materials.materials.checkpoints.key_plane.clone(),
-            CheckpointKind::LapCount => meshes_materials.materials.checkpoints.lap_count_plane.clone(),
+            CheckpointKind::Normal => cp_materials.normal_plane.clone(),
+            CheckpointKind::Key => cp_materials.key_plane.clone(),
+            CheckpointKind::LapCount => cp_materials.lap_count_plane.clone(),
         };
         let transform = calc_cp_plane_transform(self.left_pos, self.right_pos, self.height);
 
@@ -221,14 +228,19 @@ impl CheckpointSpawner {
     }
 
     pub fn spawn(mut self, world: &mut World) -> (Entity, Entity) {
-        let meshes_materials = world.resource::<KmpMeshesMaterials>();
-        let mesh = meshes_materials.meshes.sphere.clone();
+        let mesh = world.resource::<KmpMeshes>().sphere.clone();
+        let cp_materials = world.resource::<CheckpointMaterials>();
         let material = match self.kmp_component.kind {
-            CheckpointKind::Normal => meshes_materials.materials.checkpoints.normal.clone(),
-            CheckpointKind::Key => meshes_materials.materials.checkpoints.key.clone(),
-            CheckpointKind::LapCount => meshes_materials.materials.checkpoints.lap_count.clone(),
+            CheckpointKind::Normal => cp_materials.normal.clone(),
+            CheckpointKind::Key => cp_materials.key.clone(),
+            CheckpointKind::LapCount => cp_materials.lap_count.clone(),
         };
-        let outline = world.get_resource::<AppSettings>().unwrap().kmp_model.outline.clone();
+        let outline = world.resource::<AppSettings>().kmp_model.outline.clone();
+
+        // either gets the order id, or gets it from the NextOrderID (which will increment it for next time)
+        let order_id = self
+            .order_id
+            .unwrap_or_else(|| world.resource::<NextOrderID<Checkpoint>>().get());
 
         let left = self.left_e.unwrap_or_else(|| world.spawn_empty().id());
         let right = self.right_e.unwrap_or_else(|| world.spawn_empty().id());
@@ -273,13 +285,14 @@ impl CheckpointSpawner {
                 },
                 ..default()
             },
-            CheckpointLeft {
+            Checkpoint {
                 right,
                 line,
                 plane,
                 arrow,
                 ..self.kmp_component.clone()
             },
+            OrderID(order_id),
             cp_bundle(),
         ));
 
@@ -313,11 +326,12 @@ pub fn spawn_checkpoint_section(
     kmp_errors: &mut Vec<KmpError>,
     height: f32,
 ) {
-    let kmp_groups = get_kmp_data_and_component_groups::<Ckpt, CheckpointLeft>(kmp, kmp_errors);
+    let kmp_groups = get_kmp_data_and_component_groups::<Ckpt, Checkpoint>(kmp, kmp_errors);
 
     commands.add(move |world: &mut World| {
         let mut left_entity_groups: Vec<EntityGroup> = Vec::with_capacity(kmp_groups.len());
         let mut right_entity_groups = left_entity_groups.clone();
+        let mut acc = 0;
         for (i, (data_group, component_group)) in kmp_groups.iter().enumerate() {
             let mut left_entity_group = EntityGroup {
                 entities: Vec::with_capacity(data_group.nodes.len()),
@@ -330,12 +344,14 @@ pub fn spawn_checkpoint_section(
                     .pos(node.cp_left.into(), node.cp_right.into())
                     .visible(false)
                     .height(height)
+                    .order_id(acc)
                     .spawn(world);
                 if i == 0 && j == 0 {
                     world.entity_mut(left).insert(PathOverallStart);
                 }
                 left_entity_group.entities.push(left);
                 right_entity_group.entities.push(right);
+                acc += 1;
             }
             left_entity_groups.push(left_entity_group);
             right_entity_groups.push(right_entity_group);
@@ -346,8 +362,8 @@ pub fn spawn_checkpoint_section(
 }
 
 fn set_checkpoint_right_visibility(
-    q_cp_left: Query<(Ref<Visibility>, &CheckpointLeft)>,
-    mut q_visibility: Query<&mut Visibility, Without<CheckpointLeft>>,
+    q_cp_left: Query<(Ref<Visibility>, &Checkpoint)>,
+    mut q_visibility: Query<&mut Visibility, Without<Checkpoint>>,
 ) {
     for (left_vis, cp_left) in q_cp_left.iter() {
         if !left_vis.is_changed() {
@@ -361,7 +377,7 @@ fn set_checkpoint_right_visibility(
 }
 
 fn set_checkpoint_node_height(
-    mut q_cp: Query<&mut Transform, Or<(With<CheckpointLeft>, With<CheckpointRight>)>>,
+    mut q_cp: Query<&mut Transform, Or<(With<Checkpoint>, With<CheckpointRight>)>>,
     cp_height: Res<CheckpointHeight>,
 ) {
     for mut cp in q_cp.iter_mut() {
@@ -372,26 +388,25 @@ fn set_checkpoint_node_height(
 }
 
 fn update_checkpoint_colors(
-    q_cp_left: Query<(Ref<CheckpointLeft>, Entity)>,
+    q_cp_left: Query<(Ref<Checkpoint>, Entity)>,
     mut q_std_mat: Query<&mut Handle<StandardMaterial>>,
     q_children: Query<&Children>,
-    meshes_materials: Res<KmpMeshesMaterials>,
+    materials: Res<CheckpointMaterials>,
 ) {
     for (cp, cp_left_e) in q_cp_left.iter() {
         if !cp.is_changed() {
             continue;
         }
-        let cp_mats = &meshes_materials.materials.checkpoints;
 
         let point_material = match cp.kind {
-            CheckpointKind::Normal => cp_mats.normal.clone(),
-            CheckpointKind::Key => cp_mats.key.clone(),
-            CheckpointKind::LapCount => cp_mats.lap_count.clone(),
+            CheckpointKind::Normal => materials.normal.clone(),
+            CheckpointKind::Key => materials.key.clone(),
+            CheckpointKind::LapCount => materials.lap_count.clone(),
         };
         let plane_material = match cp.kind {
-            CheckpointKind::Normal => cp_mats.normal_plane.clone(),
-            CheckpointKind::Key => cp_mats.key_plane.clone(),
-            CheckpointKind::LapCount => cp_mats.lap_count_plane.clone(),
+            CheckpointKind::Normal => materials.normal_plane.clone(),
+            CheckpointKind::Key => materials.key_plane.clone(),
+            CheckpointKind::LapCount => materials.lap_count_plane.clone(),
         };
 
         let arrow = q_children.get(cp.arrow).unwrap().first().unwrap();
@@ -454,11 +469,11 @@ fn update_checkpoint_planes(
 }
 
 pub fn get_selected_cp_lefts<'a>(
-    q_cp_left: &'a mut Query<(&mut CheckpointLeft, Entity, Has<Selected>)>,
+    q_cp_left: &'a mut Query<(&mut Checkpoint, Entity, Has<Selected>)>,
     q_cp_right: &'a mut Query<&mut CheckpointRight, With<Selected>>,
-) -> impl Iterator<Item = (Entity, Mut<'a, CheckpointLeft>)> {
+) -> impl Iterator<Item = (Entity, Mut<'a, Checkpoint>)> {
     let cp_left_of_right: EntityHashSet = q_cp_right.iter().map(|x| x.left).collect();
-    let mut cps: EntityHashMap<Mut<CheckpointLeft>> = EntityHashMap::default();
+    let mut cps: EntityHashMap<Mut<Checkpoint>> = EntityHashMap::default();
     for (cp_l, e, selected) in q_cp_left.iter_mut() {
         if selected || cp_left_of_right.contains(&e) {
             cps.insert(e, cp_l);
@@ -469,7 +484,7 @@ pub fn get_selected_cp_lefts<'a>(
 
 /// Utility for getting both checkpoint nodes when we only have the Entity ID of one of them, and don't know whether the one we have is a left or a right
 pub fn get_both_cp_nodes(world: &mut World, e: Entity) -> (Entity, Entity) {
-    let left = if world.entity(e).contains::<CheckpointLeft>() {
+    let left = if world.entity(e).contains::<Checkpoint>() {
         e
     } else {
         world.entity(e).get::<CheckpointRight>().unwrap().left
@@ -477,7 +492,7 @@ pub fn get_both_cp_nodes(world: &mut World, e: Entity) -> (Entity, Entity) {
     let right = if world.entity(e).contains::<CheckpointRight>() {
         e
     } else {
-        world.entity(e).get::<CheckpointLeft>().unwrap().right
+        world.entity(e).get::<Checkpoint>().unwrap().right
     };
     (left, right)
 }

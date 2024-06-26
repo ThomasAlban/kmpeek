@@ -26,7 +26,7 @@ pub struct KmpModelColors {
     pub start_points: PointColor,
     pub enemy_paths: PathColor,
     pub item_paths: PathColor,
-    pub checkpoints: CheckpointColour,
+    pub checkpoints: CheckpointColor,
     pub respawn_points: PointColor,
     pub objects: PointColor,
     pub routes: PathColor,
@@ -54,7 +54,7 @@ impl Default for KmpModelColors {
                 line: Color::rgb(0., 1., 0.),
                 arrow: Color::rgb(0., 0.6, 0.),
             },
-            checkpoints: CheckpointColour {
+            checkpoints: CheckpointColor {
                 normal: Color::rgb(0., 0.55, 0.85),
                 key: Color::rgb(1., 0., 0.7),
                 lap_count: Color::rgb(1., 0.45, 0.8),
@@ -122,7 +122,7 @@ pub struct PointColor {
 }
 
 #[derive(Serialize, Deserialize, Reflect)]
-pub struct CheckpointColour {
+pub struct CheckpointColor {
     pub normal: Color,
     pub key: Color,
     pub lap_count: Color,

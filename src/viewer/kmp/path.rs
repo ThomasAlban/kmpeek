@@ -2,14 +2,18 @@
 
 use super::{
     components::FromKmp,
-    meshes_materials::KmpMeshesMaterials,
+    meshes_materials::{CheckpointMaterials, KmpMeshes, PathMaterials},
+    ordering::{NextOrderID, OrderID},
     sections::{KmpEditMode, KmpSections},
-    CheckpointLeft, CheckpointRight, EnemyPathPoint, GetPathMaterialSection, ItemPathPoint, KmpError,
-    KmpSelectablePoint, PathOverallStart, TransformEditOptions,
+    Checkpoint, CheckpointRight, EnemyPathPoint, ItemPathPoint, KmpError, KmpSelectablePoint, PathOverallStart,
+    TransformEditOptions,
 };
 use crate::{
     ui::settings::AppSettings,
-    util::kmp_file::{KmpFile, KmpGetPathSection, KmpGetSection, KmpPositionPoint},
+    util::{
+        kmp_file::{KmpFile, KmpGetPathSection, KmpGetSection, KmpPositionPoint},
+        VisibilityToBool,
+    },
     viewer::{
         edit::{
             transform_gizmo::GizmoTransformable,
@@ -21,15 +25,34 @@ use crate::{
 use bevy::{
     ecs::{
         entity::EntityHashMap,
-        query::{QueryData, QueryFilter, WorldQuery},
-        system::SystemParam,
+        system::{QueryLens, SystemParam},
     },
     prelude::*,
-    utils::HashMap,
+    utils::{HashMap, HashSet},
 };
 use bevy_mod_outline::{OutlineBundle, OutlineVolume};
-use std::fmt::Debug;
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
+use std::{any::TypeId, fmt::Debug};
+
+pub struct PathPlugin;
+impl Plugin for PathPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_event::<RecalcPaths>().add_systems(
+            Update,
+            (
+                update_node_links::<EnemyPathPoint>.run_if(edit_mode_is(KmpSections::EnemyPaths)),
+                update_node_links::<ItemPathPoint>.run_if(edit_mode_is(KmpSections::ItemPaths)),
+                update_node_links::<Checkpoint>.run_if(edit_mode_is(KmpSections::Checkpoints)),
+                update_node_links::<CheckpointRight>.run_if(edit_mode_is(KmpSections::Checkpoints)),
+                traverse_paths,
+            ),
+        );
+    }
+}
+
+fn edit_mode_is(edit_mode: KmpSections) -> impl Fn(Res<KmpEditMode>) -> bool {
+    move |x: Res<KmpEditMode>| x.0 == edit_mode
+}
 
 // represents a link between 2 nodes
 #[derive(Component)]
@@ -43,8 +66,30 @@ pub struct KmpPathNodeLink {
 pub enum PathType {
     Enemy,
     Item,
-    CheckpointLeft,
-    CheckpointRight,
+    Checkpoint { right: bool },
+}
+pub trait ToPathType {
+    fn to_path_type() -> PathType;
+}
+impl ToPathType for EnemyPathPoint {
+    fn to_path_type() -> PathType {
+        PathType::Enemy
+    }
+}
+impl ToPathType for ItemPathPoint {
+    fn to_path_type() -> PathType {
+        PathType::Item
+    }
+}
+impl ToPathType for Checkpoint {
+    fn to_path_type() -> PathType {
+        PathType::Checkpoint { right: false }
+    }
+}
+impl ToPathType for CheckpointRight {
+    fn to_path_type() -> PathType {
+        PathType::Checkpoint { right: true }
+    }
 }
 
 // represents the line that links the 2 entities
@@ -88,11 +133,8 @@ impl KmpPathNode {
     pub fn is_linked_with(&self, self_e: Entity, other: &KmpPathNode, other_e: Entity) -> bool {
         self.is_next_node_of(self_e, other, other_e) || self.is_prev_node_of(self_e, other, other_e)
     }
-    #[allow(dead_code)]
-    pub fn delete<Q: QueryData, F: QueryFilter>(self, self_entity: Entity, q_kmp_path_node: &mut Query<'_, '_, Q, F>)
-    where
-        for<'a> Q: WorldQuery<Item<'a> = Mut<'a, KmpPathNode>>,
-    {
+    pub fn delete(self, self_entity: Entity, mut q_kmp_path_node: QueryLens<&mut KmpPathNode>) {
+        let mut q_kmp_path_node = q_kmp_path_node.query();
         // for all next nodes
         for e in self.next_nodes.iter() {
             // delete all references to self
@@ -174,9 +216,10 @@ pub struct PathPointSpawner<T> {
     kmp_component: T,
     visible: bool,
     prev_nodes: HashSet<Entity>,
+    order_id: Option<u32>,
     e: Option<Entity>,
 }
-impl<T: Component + Clone + GetPathMaterialSection> PathPointSpawner<T> {
+impl<T: Component + Clone> PathPointSpawner<T> {
     pub fn new(kmp_component: T) -> Self {
         Self {
             position: Vec3::default(),
@@ -184,6 +227,7 @@ impl<T: Component + Clone + GetPathMaterialSection> PathPointSpawner<T> {
             kmp_component,
             visible: true,
             prev_nodes: HashSet::new(),
+            order_id: None,
             e: None,
         }
     }
@@ -203,6 +247,10 @@ impl<T: Component + Clone + GetPathMaterialSection> PathPointSpawner<T> {
         self.prev_nodes = prev_nodes;
         self
     }
+    pub fn order_id(mut self, id: u32) -> Self {
+        self.order_id = Some(id);
+        self
+    }
 
     pub fn spawn_command(mut self, commands: &mut Commands) -> Entity {
         let e = self.e.unwrap_or_else(|| commands.spawn_empty().id());
@@ -213,10 +261,14 @@ impl<T: Component + Clone + GetPathMaterialSection> PathPointSpawner<T> {
         e
     }
     pub fn spawn(self, world: &mut World) -> Entity {
-        let meshes_materials = world.resource::<KmpMeshesMaterials>();
-        let mesh = meshes_materials.meshes.sphere.clone();
-        let material = T::get_materials(&meshes_materials.materials).point.clone();
+        let mesh = world.resource::<KmpMeshes>().sphere.clone();
+        let material = world.resource::<PathMaterials<T>>().point.clone();
         let outline = world.get_resource::<AppSettings>().unwrap().kmp_model.outline.clone();
+
+        // either gets the order id, or gets it from the NextOrderID (which will increment it for next time)
+        let order_id = self
+            .order_id
+            .unwrap_or_else(|| world.resource::<NextOrderID<T>>().get());
 
         let mut entity = match self.e {
             Some(e) => world.entity_mut(e),
@@ -241,6 +293,7 @@ impl<T: Component + Clone + GetPathMaterialSection> PathPointSpawner<T> {
             self.kmp_component.clone(),
             KmpSelectablePoint,
             Tweakable(SnapTo::Kcl),
+            OrderID(order_id),
             TransformEditOptions {
                 hide_rotation: true,
                 hide_y_translation: false,
@@ -262,7 +315,7 @@ impl<T: Component + Clone + GetPathMaterialSection> PathPointSpawner<T> {
 
 pub fn spawn_enemy_item_path_section<
     T: KmpGetSection + KmpGetPathSection + KmpPositionPoint + Send + 'static + Clone,
-    U: Component + FromKmp<T> + Clone + Debug + GetPathMaterialSection,
+    U: Component + FromKmp<T> + Clone + Debug,
 >(
     commands: &mut Commands,
     kmp: Arc<KmpFile>,
@@ -272,6 +325,7 @@ pub fn spawn_enemy_item_path_section<
 
     commands.add(move |world: &mut World| {
         let mut entity_groups: Vec<EntityGroup> = Vec::with_capacity(kmp_groups.len());
+        let mut acc = 0;
         for (i, (data_group, component_group)) in kmp_groups.iter().enumerate() {
             let mut entity_group = EntityGroup {
                 entities: Vec::with_capacity(data_group.nodes.len()),
@@ -282,11 +336,13 @@ pub fn spawn_enemy_item_path_section<
                 let spawned_entity = PathPointSpawner::<_>::new(kmp_component)
                     .pos(node.get_position().into())
                     .visible(false)
+                    .order_id(acc)
                     .spawn(world);
                 if i == 0 && j == 0 {
                     world.entity_mut(spawned_entity).insert(PathOverallStart);
                 }
                 entity_group.entities.push(spawned_entity);
+                acc += 1;
             }
             entity_groups.push(entity_group);
         }
@@ -309,7 +365,6 @@ pub fn get_kmp_data_and_component_groups<
 
     let mut result: Vec<(KmpDataGroup<T>, Vec<U>)> = Vec::with_capacity(pathgroup_entries.len());
 
-    let mut acc = 0;
     for group in pathgroup_entries.iter() {
         let mut next_groups = Vec::new();
         let mut kmp_component_group = Vec::new();
@@ -324,9 +379,8 @@ pub fn get_kmp_data_and_component_groups<
         for i in group.start..(group.start + group.group_length) {
             let node = &node_entries[i as usize];
             nodes.push(node.clone());
-            let kmp_component = U::from_kmp(node, kmp_errors, acc);
+            let kmp_component = U::from_kmp(node, kmp_errors);
             kmp_component_group.push(kmp_component);
-            acc += 1;
         }
         result.push((KmpDataGroup { nodes, next_groups }, kmp_component_group));
     }
@@ -394,17 +448,22 @@ pub fn spawn_path_section<
     });
 }
 
-fn spawn_node_link(
+fn spawn_node_link<T: Component + ToPathType + Clone>(
     world: &mut World,
     prev_node: Entity,
     next_node: Entity,
-    kind: PathType,
-    cylinder_mesh: Handle<Mesh>,
-    frustrum_mesh: Handle<Mesh>,
-    line_material: Handle<StandardMaterial>,
-    arrow_material: Handle<StandardMaterial>,
     visible: bool,
 ) {
+    let meshes = world.resource::<KmpMeshes>().clone();
+    let (line, arrow) =
+        if TypeId::of::<T>() == TypeId::of::<Checkpoint>() || TypeId::of::<T>() == TypeId::of::<CheckpointRight>() {
+            let materials = world.resource::<CheckpointMaterials>().clone();
+            (materials.line, materials.arrow)
+        } else {
+            let materials = world.resource::<PathMaterials<T>>().clone();
+            (materials.line, materials.arrow)
+        };
+
     let prev_pos = world.get::<Transform>(prev_node).unwrap().translation;
     let next_pos = world.get::<Transform>(next_node).unwrap().translation;
 
@@ -429,15 +488,15 @@ fn spawn_node_link(
             KmpPathNodeLink {
                 prev_node,
                 next_node,
-                kind,
+                kind: T::to_path_type(),
             },
         ))
         // spawn the line and arrow as children of this parent component, which will inherit its transform & visibility
         .with_children(|parent| {
             parent.spawn((
                 PbrBundle {
-                    mesh: cylinder_mesh,
-                    material: line_material,
+                    mesh: meshes.cylinder,
+                    material: line,
                     transform: line_transform,
                     ..default()
                 },
@@ -447,8 +506,8 @@ fn spawn_node_link(
             ));
             parent.spawn((
                 PbrBundle {
-                    mesh: frustrum_mesh,
-                    material: arrow_material,
+                    mesh: meshes.frustrum,
+                    material: arrow,
                     ..default()
                 },
                 // KmpSection,
@@ -457,49 +516,46 @@ fn spawn_node_link(
         });
 }
 
-pub fn update_node_links(
-    q_kmp_node_link: Query<(Entity, &KmpPathNodeLink, &Children, &ViewVisibility)>,
-    q_kmp_node: Query<(
-        Entity,
-        Has<EnemyPathPoint>,
-        Has<ItemPathPoint>,
-        Has<CheckpointLeft>,
-        Has<CheckpointRight>,
-        &KmpPathNode,
-    )>,
+pub fn update_node_links<T: Component + ToPathType + Clone>(
+    q_visibility: Query<&Visibility, Without<KmpPathNodeLink>>,
+    mut q_kmp_node_link: Query<(Entity, &KmpPathNodeLink, &Children, &mut Visibility)>,
+    q_kmp_node: Query<(Entity, &KmpPathNode), With<T>>,
     mut q_transform: Query<&mut Transform>,
     q_line: Query<&KmpPathNodeLinkLine>,
     mut commands: Commands,
-    kmp_edit_mode: Res<KmpEditMode>,
 ) {
-    let mut nodes_to_be_linked: HashMap<(Entity, Entity), PathType> = HashMap::new();
-    for (cur_node, is_enemy, is_item, is_cp_left, _, node_data) in q_kmp_node.iter() {
-        let path_type = if is_enemy {
-            PathType::Enemy
-        } else if is_item {
-            PathType::Item
-        } else if is_cp_left {
-            PathType::CheckpointLeft
-        } else {
-            PathType::CheckpointRight
-        };
+    let mut nodes_to_be_linked: HashSet<(Entity, Entity)> = HashSet::new();
+    for (cur_node, node_data) in q_kmp_node.iter() {
         for prev_node in node_data.prev_nodes.iter() {
-            nodes_to_be_linked.insert((*prev_node, cur_node), path_type);
+            nodes_to_be_linked.insert((*prev_node, cur_node));
         }
         for next_node in node_data.next_nodes.iter() {
-            nodes_to_be_linked.insert((cur_node, *next_node), path_type);
+            nodes_to_be_linked.insert((cur_node, *next_node));
         }
     }
 
     // go through each node line
-    for (link_entity, kmp_node_link, children, visibility) in q_kmp_node_link.iter() {
-        if !nodes_to_be_linked.contains_key(&(kmp_node_link.prev_node, kmp_node_link.next_node)) {
+    for (link_entity, kmp_node_link, children, mut visibility) in q_kmp_node_link.iter_mut() {
+        if !nodes_to_be_linked.contains(&(kmp_node_link.prev_node, kmp_node_link.next_node))
+            && kmp_node_link.kind == T::to_path_type()
+        {
             commands.entity(link_entity).despawn_recursive();
             continue;
         }
         nodes_to_be_linked.remove(&(kmp_node_link.prev_node, kmp_node_link.next_node));
+
+        // update visibility of node link based on the linking nodes
+        if let Ok([prev_visib, next_visib]) = q_visibility.get_many([kmp_node_link.prev_node, kmp_node_link.next_node])
+        {
+            if prev_visib.to_bool() && next_visib.to_bool() {
+                *visibility = Visibility::Visible;
+            } else {
+                *visibility = Visibility::Hidden;
+            }
+        }
+
         // don't bother unless the kmp node link is actually visible
-        if *visibility == ViewVisibility::HIDDEN {
+        if *visibility == Visibility::Hidden {
             continue;
         }
 
@@ -537,33 +593,9 @@ pub fn update_node_links(
     }
     // spawn any links in that need to be spawned
     for node_not_linked in nodes_to_be_linked.iter() {
-        let (prev_node, next_node) = *node_not_linked.0;
-        let path_type = *node_not_linked.1;
-        let kmp_edit_mode = kmp_edit_mode.0;
+        let (prev_node, next_node) = *node_not_linked;
         commands.add(move |world: &mut World| {
-            let meshes_materials = world.resource::<KmpMeshesMaterials>();
-            macro_rules! spawn_node_link {
-                ($mat:ident, $edit_mode:ident, $path_type:ident) => {
-                    spawn_node_link(
-                        world,
-                        prev_node,
-                        next_node,
-                        $path_type,
-                        meshes_materials.meshes.cylinder.clone(),
-                        meshes_materials.meshes.frustrum.clone(),
-                        meshes_materials.materials.$mat.line.clone(),
-                        meshes_materials.materials.$mat.arrow.clone(),
-                        kmp_edit_mode == KmpSections::$edit_mode,
-                    )
-                };
-            }
-            match path_type {
-                PathType::Enemy => spawn_node_link!(enemy_paths, EnemyPaths, path_type),
-                PathType::Item => spawn_node_link!(item_paths, ItemPaths, path_type),
-                PathType::CheckpointLeft | PathType::CheckpointRight => {
-                    spawn_node_link!(checkpoints, Checkpoints, path_type)
-                }
-            };
+            spawn_node_link::<T>(world, prev_node, next_node, true);
         });
     }
 }
@@ -611,7 +643,7 @@ pub fn traverse_paths(
     mut p: ParamSet<(
         TraversePath<EnemyPathPoint>,
         TraversePath<ItemPathPoint>,
-        TraversePath<CheckpointLeft>,
+        TraversePath<Checkpoint>,
     )>,
 ) {
     for ev in ev_recalc_paths.read() {

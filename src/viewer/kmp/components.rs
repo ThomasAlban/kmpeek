@@ -1,6 +1,5 @@
 use super::{
     checkpoints::CheckpointSpawner,
-    meshes_materials::{KmpMaterials, PathMaterials, PointMaterials},
     path::{KmpPathNode, PathPointSpawner},
     point::PointSpawner,
     Ckpt, Cnpt, Jgpt, Mspt,
@@ -118,7 +117,7 @@ pub enum ItemPathBulletHeight {
 // --- CHECKPOINT COMPONENTS ---
 // for checkpoints, the left checkpoint entity stores all the info
 #[derive(Component, Clone, PartialEq, Debug)]
-pub struct CheckpointLeft {
+pub struct Checkpoint {
     pub right: Entity,
     pub line: Entity,
     pub plane: Entity,
@@ -126,7 +125,7 @@ pub struct CheckpointLeft {
     pub kind: CheckpointKind,
     // will contain link to respawn entity
 }
-impl Default for CheckpointLeft {
+impl Default for Checkpoint {
     fn default() -> Self {
         Self {
             right: Entity::PLACEHOLDER,
@@ -315,14 +314,12 @@ pub enum KmpCameraKind {
 // --- RESPAWN POINT COMPONENTS ---
 #[derive(Component, Default, Clone, PartialEq)]
 pub struct RespawnPoint {
-    pub id: u16,
     pub sound_trigger: i8,
 }
 
 // --- CANNON POINT COMPONENTS
 #[derive(Component, Default, Clone, PartialEq)]
 pub struct CannonPoint {
-    pub id: u16,
     pub shoot_effect: CannonShootEffect,
 }
 #[derive(Default, Display, EnumIter, EnumString, IntoStaticStr, PartialEq, Clone)]
@@ -335,9 +332,7 @@ pub enum CannonShootEffect {
 }
 
 #[derive(Component, Default, Clone, PartialEq)]
-pub struct BattleFinishPoint {
-    pub id: u16,
-}
+pub struct BattleFinishPoint;
 
 //
 // --- CONVERT COMPONENTS FROM KMP STORAGE FORMAT ---
@@ -357,11 +352,11 @@ impl KmpError {
 }
 
 pub trait FromKmp<T> {
-    fn from_kmp(data: &T, errors: &mut Vec<KmpError>, index: usize) -> Self;
+    fn from_kmp(data: &T, errors: &mut Vec<KmpError>) -> Self;
 }
 
 impl FromKmp<Stgi> for TrackInfo {
-    fn from_kmp(data: &Stgi, errors: &mut Vec<KmpError>, _: usize) -> Self {
+    fn from_kmp(data: &Stgi, errors: &mut Vec<KmpError>) -> Self {
         Self {
             track_type: TrackType::Race,
             lap_count: data.lap_count,
@@ -381,14 +376,14 @@ impl FromKmp<Stgi> for TrackInfo {
     }
 }
 impl FromKmp<Ktpt> for StartPoint {
-    fn from_kmp(data: &Ktpt, _: &mut Vec<KmpError>, _: usize) -> Self {
+    fn from_kmp(data: &Ktpt, _: &mut Vec<KmpError>) -> Self {
         Self {
             player_index: data.player_index,
         }
     }
 }
 impl FromKmp<Enpt> for EnemyPathPoint {
-    fn from_kmp(data: &Enpt, errors: &mut Vec<KmpError>, _: usize) -> Self {
+    fn from_kmp(data: &Enpt, errors: &mut Vec<KmpError>) -> Self {
         Self {
             leniency: data.leniency,
             setting_1: match data.setting_1 {
@@ -417,7 +412,7 @@ impl FromKmp<Enpt> for EnemyPathPoint {
     }
 }
 impl FromKmp<Itpt> for ItemPathPoint {
-    fn from_kmp(data: &Itpt, errors: &mut Vec<KmpError>, _: usize) -> Self {
+    fn from_kmp(data: &Itpt, errors: &mut Vec<KmpError>) -> Self {
         Self {
             bullet_control: data.bullet_control,
             bullet_height: match data.setting_1 {
@@ -438,8 +433,8 @@ impl FromKmp<Itpt> for ItemPathPoint {
         }
     }
 }
-impl FromKmp<Ckpt> for CheckpointLeft {
-    fn from_kmp(data: &Ckpt, errors: &mut Vec<KmpError>, _: usize) -> Self {
+impl FromKmp<Ckpt> for Checkpoint {
+    fn from_kmp(data: &Ckpt, errors: &mut Vec<KmpError>) -> Self {
         Self {
             kind: match data.cp_type {
                 -1 => CheckpointKind::Normal,
@@ -455,7 +450,7 @@ impl FromKmp<Ckpt> for CheckpointLeft {
     }
 }
 impl FromKmp<Gobj> for Object {
-    fn from_kmp(data: &Gobj, _: &mut Vec<KmpError>, _: usize) -> Self {
+    fn from_kmp(data: &Gobj, _: &mut Vec<KmpError>) -> Self {
         Self {
             object_id: data.object_id,
             scale: data.scale.into(),
@@ -466,7 +461,7 @@ impl FromKmp<Gobj> for Object {
     }
 }
 impl FromKmp<Poti> for Route {
-    fn from_kmp(data: &Poti, _: &mut Vec<KmpError>, _: usize) -> Self {
+    fn from_kmp(data: &Poti, _: &mut Vec<KmpError>) -> Self {
         Self {
             setting_1: data.setting_1,
             setting_2: data.setting_2,
@@ -474,7 +469,7 @@ impl FromKmp<Poti> for Route {
     }
 }
 impl FromKmp<PotiPoint> for RoutePoint {
-    fn from_kmp(data: &PotiPoint, _: &mut Vec<KmpError>, _: usize) -> Self {
+    fn from_kmp(data: &PotiPoint, _: &mut Vec<KmpError>) -> Self {
         Self {
             setting_1: data.setting_1,
             setting_2: data.setting_2,
@@ -482,7 +477,7 @@ impl FromKmp<PotiPoint> for RoutePoint {
     }
 }
 impl FromKmp<Area> for AreaPoint {
-    fn from_kmp(data: &Area, errors: &mut Vec<KmpError>, _: usize) -> Self {
+    fn from_kmp(data: &Area, errors: &mut Vec<KmpError>) -> Self {
         Self {
             shape: match data.shape {
                 0 => AreaShape::Box,
@@ -538,7 +533,7 @@ impl FromKmp<Area> for AreaPoint {
     }
 }
 impl FromKmp<Came> for KmpCamera {
-    fn from_kmp(data: &Came, errors: &mut Vec<KmpError>, _: usize) -> Self {
+    fn from_kmp(data: &Came, errors: &mut Vec<KmpError>) -> Self {
         Self {
             kind: match data.kind {
                 0 => KmpCameraKind::Goal,
@@ -573,9 +568,8 @@ impl FromKmp<Came> for KmpCamera {
     }
 }
 impl FromKmp<Jgpt> for RespawnPoint {
-    fn from_kmp(data: &Jgpt, _: &mut Vec<KmpError>, index: usize) -> Self {
+    fn from_kmp(data: &Jgpt, _: &mut Vec<KmpError>) -> Self {
         Self {
-            id: index as u16,
             sound_trigger: if data.extra_data >= 0 {
                 ((data.extra_data / 100) - 1) as i8
             } else {
@@ -585,9 +579,8 @@ impl FromKmp<Jgpt> for RespawnPoint {
     }
 }
 impl FromKmp<Cnpt> for CannonPoint {
-    fn from_kmp(data: &Cnpt, errors: &mut Vec<KmpError>, index: usize) -> Self {
+    fn from_kmp(data: &Cnpt, errors: &mut Vec<KmpError>) -> Self {
         Self {
-            id: index as u16,
             shoot_effect: match data.shoot_effect {
                 0 => CannonShootEffect::Straight,
                 1 => CannonShootEffect::Curved,
@@ -601,8 +594,8 @@ impl FromKmp<Cnpt> for CannonPoint {
     }
 }
 impl FromKmp<Mspt> for BattleFinishPoint {
-    fn from_kmp(_: &Mspt, _: &mut Vec<KmpError>, index: usize) -> Self {
-        Self { id: index as u16 }
+    fn from_kmp(_: &Mspt, _: &mut Vec<KmpError>) -> Self {
+        Self
     }
 }
 
@@ -612,9 +605,6 @@ impl FromKmp<Mspt> for BattleFinishPoint {
 
 pub trait SpawnNewPoint {
     fn spawn(commands: &mut Commands, pos: Vec3) -> Entity;
-}
-pub trait SpawnNewWithId {
-    fn spawn(commands: &mut Commands, pos: Vec3, id: usize) -> Entity;
 }
 pub trait SpawnNewPath {
     fn spawn(commands: &mut Commands, pos: Vec3, prev_nodes: HashSet<Entity>) -> Entity;
@@ -647,32 +637,17 @@ macro_rules! impl_spawn_new_path {
         }
     };
 }
-macro_rules! impl_spawn_new_with_id {
-    ($ty:ty) => {
-        impl SpawnNewWithId for $ty {
-            fn spawn(commands: &mut Commands, pos: Vec3, id: usize) -> Entity {
-                #[allow(clippy::needless_update)]
-                PointSpawner::new(Self {
-                    id: id as u16,
-                    ..default()
-                })
-                .pos(pos)
-                .spawn_command(commands)
-            }
-        }
-    };
-}
 impl_spawn_new!(StartPoint);
 impl_spawn_new!(Object);
 impl_spawn_new!(AreaPoint);
 impl_spawn_new!(KmpCamera);
+impl_spawn_new!(RespawnPoint);
+impl_spawn_new!(CannonPoint);
+impl_spawn_new!(BattleFinishPoint);
 impl_spawn_new_path!(ItemPathPoint, ItemPathMarker);
 impl_spawn_new_path!(EnemyPathPoint, EnemyPathMarker);
-impl_spawn_new_with_id!(RespawnPoint);
-impl_spawn_new_with_id!(CannonPoint);
-impl_spawn_new_with_id!(BattleFinishPoint);
 
-impl CheckpointLeft {
+impl Checkpoint {
     pub fn spawn(commands: &mut Commands, pos: Vec3, prev_left_nodes: HashSet<Entity>) -> (Entity, Entity) {
         let (left, right) = CheckpointSpawner::new(Self::default())
             .single_3d_pos(pos)
@@ -680,47 +655,10 @@ impl CheckpointLeft {
         commands.add(move |world: &mut World| {
             for prev_left in prev_left_nodes {
                 KmpPathNode::link_nodes(prev_left, left, world);
-                let prev_right = world.entity(prev_left).get::<CheckpointLeft>().unwrap().right;
+                let prev_right = world.entity(prev_left).get::<Checkpoint>().unwrap().right;
                 KmpPathNode::link_nodes(prev_right, right, world);
             }
         });
         (left, right)
-    }
-}
-
-//
-// --- IMPLEMENT HOW TO GET THE RELEVANT MATERIALS SECTION FOR THE COMPONENTS ---
-//
-
-pub trait GetPointMaterialSection {
-    fn get_materials(materials: &KmpMaterials) -> &PointMaterials;
-}
-macro_rules! impl_point_material_section {
-    ($ty:ty, $s:ident) => {
-        impl GetPointMaterialSection for $ty {
-            fn get_materials(materials: &KmpMaterials) -> &PointMaterials {
-                &materials.$s
-            }
-        }
-    };
-}
-impl_point_material_section!(StartPoint, start_points);
-impl_point_material_section!(RespawnPoint, respawn_points);
-impl_point_material_section!(Object, objects);
-impl_point_material_section!(AreaPoint, areas);
-impl_point_material_section!(KmpCamera, cameras);
-impl_point_material_section!(CannonPoint, cannon_points);
-impl_point_material_section!(BattleFinishPoint, battle_finish_points);
-pub trait GetPathMaterialSection {
-    fn get_materials(materials: &KmpMaterials) -> &PathMaterials;
-}
-impl GetPathMaterialSection for EnemyPathPoint {
-    fn get_materials(materials: &KmpMaterials) -> &PathMaterials {
-        &materials.enemy_paths
-    }
-}
-impl GetPathMaterialSection for ItemPathPoint {
-    fn get_materials(materials: &KmpMaterials) -> &PathMaterials {
-        &materials.item_paths
     }
 }

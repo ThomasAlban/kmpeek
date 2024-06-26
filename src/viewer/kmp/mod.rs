@@ -1,6 +1,7 @@
 pub mod checkpoints;
 pub mod components;
 pub mod meshes_materials;
+pub mod ordering;
 pub mod path;
 pub mod point;
 pub mod sections;
@@ -10,7 +11,7 @@ use self::{
     checkpoints::{spawn_checkpoint_section, CheckpointHeight, CheckpointPlugin},
     components::*,
     meshes_materials::setup_kmp_meshes_materials,
-    path::{spawn_enemy_item_path_section, traverse_paths, update_node_links, KmpPathNodeLink, RecalcPaths},
+    path::{spawn_enemy_item_path_section, KmpPathNodeLink, RecalcPaths},
     point::{spawn_point_section, AddRespawnPointPreview},
     sections::KmpEditMode,
 };
@@ -21,6 +22,8 @@ use crate::{
 };
 use bevy::prelude::*;
 use binrw::BinRead;
+use ordering::OrderingPlugin;
+use path::PathPlugin;
 use std::{ffi::OsStr, fs::File, sync::Arc};
 
 pub struct KmpPlugin;
@@ -28,6 +31,8 @@ pub struct KmpPlugin;
 impl Plugin for KmpPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(CheckpointPlugin)
+            .add_plugins(PathPlugin)
+            .add_plugins(OrderingPlugin)
             .add_event::<RecalcPaths>()
             .init_resource::<KmpEditMode>()
             .add_systems(Startup, setup_kmp_meshes_materials.after(SetupAppSettingsSet))
@@ -35,9 +40,7 @@ impl Plugin for KmpPlugin {
                 Update,
                 (
                     spawn_model.run_if(on_event::<KmpFileSelected>()),
-                    update_node_links,
                     update_visible.run_if(resource_changed::<KmpVisibility>),
-                    traverse_paths,
                 ),
             );
     }
@@ -74,7 +77,7 @@ pub fn spawn_model(
     // --- TRACK INFO ---
 
     let stgi = kmp.stgi.entries.first().unwrap();
-    commands.insert_resource(TrackInfo::from_kmp(stgi, &mut kmp_errors, 0));
+    commands.insert_resource(TrackInfo::from_kmp(stgi, &mut kmp_errors));
 
     // --- START POINTS ---
 
@@ -129,7 +132,7 @@ fn update_visible(
             Query<&mut Visibility, With<StartPoint>>,
             Query<&mut Visibility, With<EnemyPathPoint>>,
             Query<&mut Visibility, With<ItemPathPoint>>,
-            Query<&mut Visibility, With<CheckpointLeft>>,
+            Query<&mut Visibility, With<Checkpoint>>,
             Query<&mut Visibility, With<Object>>,
             Query<&mut Visibility, With<AreaPoint>>,
         )>,
@@ -174,7 +177,7 @@ fn update_visible(
         match node_link.kind {
             PathType::Enemy => set_visibility(&mut visibility, visibilities[KmpSections::EnemyPaths as usize]),
             PathType::Item => set_visibility(&mut visibility, visibilities[KmpSections::ItemPaths as usize]),
-            PathType::CheckpointLeft | PathType::CheckpointRight => {
+            PathType::Checkpoint { .. } => {
                 set_visibility(&mut visibility, visibilities[KmpSections::Checkpoints as usize])
             }
         }

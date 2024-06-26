@@ -1,12 +1,14 @@
+use super::UiSubSection;
 use crate::{
     ui::util::{combobox_enum, drag_vec3, euler_to_quat, quat_to_euler, DragSpeed},
     viewer::{
         edit::{create_delete::CreatePoint, select::Selected},
         kmp::{
             components::{
-                AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, CheckpointLeft, EnemyPathPoint, ItemPathPoint,
+                AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint,
                 KmpCamera, Object, RespawnPoint, StartPoint,
             },
+            ordering::OrderID,
             sections::{KmpEditMode, KmpSections},
         },
     },
@@ -15,9 +17,19 @@ use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::egui::{self, emath::Numeric, Checkbox, Direction, DragValue, Layout, Response, Ui};
 use egui_extras::{Column, TableBuilder, TableRow};
 
-use super::UiSubSection;
+type KmpTableItem<'a, 'w, 's, C> = (Mut<'a, C>, Mut<'a, Transform>, Entity, bool, &'a OrderID);
 
-type KmpTableQuery<'w, 's, C> = Query<'w, 's, (&'static mut C, &'static mut Transform, Entity, Has<Selected>)>;
+type KmpTableQuery<'w, 's, C> = Query<
+    'w,
+    's,
+    (
+        &'static mut C,
+        &'static mut Transform,
+        Entity,
+        Has<Selected>,
+        &'static OrderID,
+    ),
+>;
 
 #[derive(SystemParam)]
 pub struct ShowTableTab<'w, 's> {
@@ -35,7 +47,7 @@ pub struct ShowTableTab<'w, 's> {
                     KmpTableQuery<'w, 's, StartPoint>,
                     KmpTableQuery<'w, 's, EnemyPathPoint>,
                     KmpTableQuery<'w, 's, ItemPathPoint>,
-                    KmpTableQuery<'w, 's, CheckpointLeft>,
+                    KmpTableQuery<'w, 's, Checkpoint>,
                     KmpTableQuery<'w, 's, RespawnPoint>,
                 ),
             >,
@@ -230,7 +242,7 @@ struct KmpTable<'a, 'w, 's, T: Component + PartialEq + Clone> {
     ui: &'a mut Ui,
     commands: &'a mut Commands<'w, 's>,
     columns: Vec<&'static str>,
-    items: Vec<(Mut<'a, T>, Mut<'a, Transform>, Entity, bool)>,
+    items: Vec<KmpTableItem<'a, 'w, 's, T>>,
     show_rotation: bool,
     show_y_translation: bool,
 }
@@ -238,13 +250,15 @@ impl<'a, 'w, 's, T: Component + PartialEq + Clone> KmpTable<'a, 'w, 's, T> {
     fn new(
         ui: &'a mut Ui,
         commands: &'a mut Commands<'w, 's>,
-        items: impl Iterator<Item = (Mut<'a, T>, Mut<'a, Transform>, Entity, bool)>,
+        items: impl Iterator<Item = KmpTableItem<'a, 'w, 's, T>>,
     ) -> Self {
+        let mut items: Vec<_> = items.collect();
+        items.sort_by(|x, y| x.4.cmp(y.4));
         Self {
             ui,
             commands,
             columns: vec![],
-            items: items.into_iter().collect(),
+            items,
             show_rotation: true,
             show_y_translation: true,
         }
@@ -267,9 +281,9 @@ impl<'a, 'w, 's, T: Component + PartialEq + Clone> KmpTable<'a, 'w, 's, T> {
             .vscroll(false)
             // .sense(Sense::click())
             .cell_layout(Layout::centered_and_justified(egui::Direction::TopDown))
-            .column(Column::exact(50.))
-            // translation column
-            .column(Column::auto().resizable(true));
+            .column(Column::exact(25.)) // id
+            .column(Column::exact(50.)) // selected
+            .column(Column::auto().resizable(true)); // translation
         if self.show_rotation {
             table_builder = table_builder.column(Column::auto().resizable(true));
         }
@@ -280,6 +294,9 @@ impl<'a, 'w, 's, T: Component + PartialEq + Clone> KmpTable<'a, 'w, 's, T> {
         table_builder = table_builder.column(Column::remainder());
 
         let table = table_builder.header(20., |mut header| {
+            header.col(|ui| {
+                ui.label("ID");
+            });
             header.col(|ui| {
                 ui.label("Selected");
             });
@@ -300,13 +317,16 @@ impl<'a, 'w, 's, T: Component + PartialEq + Clone> KmpTable<'a, 'w, 's, T> {
             header.col(|_| {});
         });
         table.body(|mut body| {
-            for (mut t, mut transform, e, is_selected) in self.items {
+            for (mut t, mut transform, e, is_selected, order_id) in self.items {
                 body.row(20., |mut row| {
                     row.set_selected(is_selected);
 
                     // show the 'select' ui (which is the same for every KMP table)
                     let mut select_checkbox = is_selected;
                     let mut select_checkbox_changed = false;
+                    row.col(|ui| {
+                        ui.label(order_id.to_string());
+                    });
                     row.col(|ui| {
                         select_checkbox_changed = ui.checkbox(&mut select_checkbox, "").changed();
                     });

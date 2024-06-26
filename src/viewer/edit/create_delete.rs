@@ -10,10 +10,10 @@ use crate::{
         kmp::{
             checkpoints::{get_selected_cp_lefts, CheckpointHeight},
             components::{
-                AreaPoint, BattleFinishPoint, CannonPoint, CheckpointLeft, CheckpointRight, EnemyPathPoint,
-                ItemPathPoint, KmpCamera, KmpSelectablePoint, Object, RespawnPoint, SpawnNewPath, SpawnNewPoint,
-                SpawnNewWithId, StartPoint,
+                AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, CheckpointRight, EnemyPathPoint, ItemPathPoint,
+                KmpCamera, KmpSelectablePoint, Object, RespawnPoint, SpawnNewPath, SpawnNewPoint, StartPoint,
             },
+            ordering::RefreshOrdering,
             path::{KmpPathNode, RecalcPaths},
             sections::{KmpEditMode, KmpSections},
         },
@@ -50,11 +50,8 @@ fn create_point(
 
     q_selected_item_pt: Query<Entity, (With<ItemPathPoint>, With<Selected>)>,
     q_selected_enemy_pt: Query<Entity, (With<EnemyPathPoint>, With<Selected>)>,
-    mut q_cp_left: Query<(&mut CheckpointLeft, Entity, Has<Selected>)>,
+    mut q_cp_left: Query<(&mut Checkpoint, Entity, Has<Selected>)>,
     mut q_cp_right: Query<&mut CheckpointRight, With<Selected>>,
-    q_cannon_pt: Query<(), With<CannonPoint>>,
-    q_respawn_pt: Query<(), With<RespawnPoint>>,
-    q_battle_finish_pt: Query<(), With<BattleFinishPoint>>,
 ) {
     for create_pt in ev_create_point.read() {
         let pos = create_pt.position;
@@ -73,17 +70,17 @@ fn create_point(
             }
             Checkpoints => {
                 let prev_nodes = get_selected_cp_lefts(&mut q_cp_left, &mut q_cp_right).map(|x| x.0);
-                let (_, right) = CheckpointLeft::spawn(&mut commands, pos, prev_nodes.collect());
+                let (_, right) = Checkpoint::spawn(&mut commands, pos, prev_nodes.collect());
                 ev_recalc_paths.send(RecalcPaths::cp());
                 // return the right entity, so that that's the one that is selected and interacted with
                 right
             }
-            RespawnPoints => RespawnPoint::spawn(&mut commands, pos, q_respawn_pt.iter().count()),
+            RespawnPoints => RespawnPoint::spawn(&mut commands, pos),
             Objects => Object::spawn(&mut commands, pos),
             Areas => AreaPoint::spawn(&mut commands, pos),
             Cameras => KmpCamera::spawn(&mut commands, pos),
-            CannonPoints => CannonPoint::spawn(&mut commands, pos, q_cannon_pt.iter().count()),
-            BattleFinishPoints => BattleFinishPoint::spawn(&mut commands, pos, q_battle_finish_pt.iter().count()),
+            CannonPoints => CannonPoint::spawn(&mut commands, pos),
+            BattleFinishPoints => BattleFinishPoint::spawn(&mut commands, pos),
             TrackInfo => return,
         };
         // we send this event which is recieved by the Select system, so it knows to add the Selected component
@@ -155,11 +152,12 @@ fn alt_click_create_point(
 
 fn delete_point(
     keys: Res<ButtonInput<KeyCode>>,
-    mut q_selected: Query<(Entity, Option<&CheckpointLeft>, Option<&CheckpointRight>), With<Selected>>,
+    mut q_selected: Query<(Entity, Option<&Checkpoint>, Option<&CheckpointRight>), With<Selected>>,
     mut q_kmp_path_node: Query<&mut KmpPathNode>,
     mut commands: Commands,
     viewport_info: Res<ViewportInfo>,
     mut ev_recalc_paths: EventWriter<RecalcPaths>,
+    mut ev_refresh_ordering: EventWriter<RefreshOrdering>,
 ) {
     if !viewport_info.mouse_in_viewport
         || (!keys.just_pressed(KeyCode::Backspace) && !keys.just_pressed(KeyCode::Delete))
@@ -172,13 +170,13 @@ fn delete_point(
     for (entity, cp_left, cp_right) in q_selected.iter_mut() {
         // unlink ourselves if we are a kmp path node so we don't have any stale references before we delete
         if let Ok(kmp_path_node) = q_kmp_path_node.get(entity) {
-            kmp_path_node.clone().delete(entity, &mut q_kmp_path_node);
+            kmp_path_node.clone().delete(entity, q_kmp_path_node.as_query_lens());
         }
         // if we are a checkpoint, get the other checkpoint entity
         if let Some(other_cp) = cp_left.map(|x| x.right).or_else(|| cp_right.map(|x| x.left)) {
             // unlink that checkpoint first
             if let Ok(kmp_path_node) = q_kmp_path_node.get(other_cp) {
-                kmp_path_node.clone().delete(other_cp, &mut q_kmp_path_node);
+                kmp_path_node.clone().delete(other_cp, q_kmp_path_node.as_query_lens());
             }
             // then delete it
             if !despawned_entities.contains(&other_cp) {
@@ -198,4 +196,5 @@ fn delete_point(
         // do all because we don't know what type of path it is
         ev_recalc_paths.send(RecalcPaths::all());
     }
+    ev_refresh_ordering.send_default();
 }

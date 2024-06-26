@@ -215,7 +215,7 @@ pub struct Jgpt {
 pub struct Cnpt {
     pub position: [f32; 3],
     pub rotation: [f32; 3],
-    pub id: u16,
+    #[brw(pad_before = 2)] // this is the id field which is irrelevant as it is just the index
     pub shoot_effect: i16,
 }
 
@@ -225,7 +225,7 @@ pub struct Cnpt {
 pub struct Mspt {
     position: [f32; 3],
     rotation: [f32; 3],
-    id: u16,
+    #[brw(pad_before = 2)] // this is the id field which is irrelevant as it is just the index
     unknown: u16,
 }
 
