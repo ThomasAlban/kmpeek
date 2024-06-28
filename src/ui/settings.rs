@@ -3,11 +3,8 @@ use bevy::prelude::*;
 use bevy_pkv::PkvStore;
 use serde::{Deserialize, Serialize};
 
-pub struct AppSettingsPlugin;
-impl Plugin for AppSettingsPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_app_settings.in_set(SetupAppSettingsSet));
-    }
+pub fn app_settings_plugin(app: &mut App) {
+    app.add_systems(Startup, setup_app_settings.in_set(SetupAppSettingsSet));
 }
 
 #[derive(Serialize, Deserialize, Resource)]

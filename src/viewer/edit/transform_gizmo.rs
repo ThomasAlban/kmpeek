@@ -6,21 +6,18 @@ use transform_gizmo_bevy::{enum_set, GizmoMode, GizmoOptions, GizmoTarget, Gizmo
 #[derive(Component)]
 pub struct GizmoTransformable;
 
-pub struct TransformGizmoPlugin;
-impl Plugin for TransformGizmoPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_plugins(transform_gizmo_bevy::prelude::TransformGizmoPlugin)
-            .insert_resource(GizmoOptions {
-                gizmo_modes: enum_set!(GizmoMode::Translate),
-                visuals: GizmoVisuals {
-                    gizmo_size: 125.,
-                    stroke_width: 8.,
-                    ..default()
-                },
+pub fn transform_gizmo_plugin(app: &mut App) {
+    app.add_plugins(transform_gizmo_bevy::prelude::TransformGizmoPlugin)
+        .insert_resource(GizmoOptions {
+            gizmo_modes: enum_set!(GizmoMode::Translate),
+            visuals: GizmoVisuals {
+                gizmo_size: 125.,
+                stroke_width: 8.,
                 ..default()
-            })
-            .add_systems(Update, update_gizmo);
-    }
+            },
+            ..default()
+        })
+        .add_systems(Update, update_gizmo);
 }
 
 fn update_gizmo(

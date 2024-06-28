@@ -14,11 +14,8 @@ use crate::{
 use bevy::prelude::*;
 use bevy_mod_raycast::prelude::*;
 
-pub struct LinkUnlinkPlugin;
-impl Plugin for LinkUnlinkPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Update, (link_points, unlink_points).after(SelectSet));
-    }
+pub fn link_unlink_plugin(app: &mut App) {
+    app.add_systems(Update, (link_points, unlink_points).after(SelectSet));
 }
 
 pub fn link_points(

@@ -13,40 +13,40 @@ use crate::{
     viewer::{
         edit::select::Selected,
         kmp::{
-            checkpoints::get_selected_cp_lefts,
+            checkpoints::GetSelectedCheckpoints,
             components::{
-                AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, CheckpointRight, EnemyPathPoint,
-                ItemPathPoint, KmpCamera, Object, PathOverallStart, RespawnPoint, StartPoint, TrackInfo,
-                TransformEditOptions,
+                AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint,
+                KmpCamera, Object, PathOverallStart, RespawnPoint, StartPoint, TrackInfo, TransformEditOptions,
             },
             path::{PathType, RecalcPaths},
-            sections::{KmpEditMode, KmpSections},
+            sections::KmpEditMode,
         },
     },
 };
 use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::egui::{self, emath::Numeric, Align, Checkbox, DragValue, Layout, Response, Ui, WidgetText};
 
+type KmpComponentQuery<'w, 's, C> = Query<'w, 's, (Entity, &'static mut C), With<Selected>>;
+
 #[derive(SystemParam)]
 pub struct ShowEditTab<'w, 's> {
     commands: Commands<'w, 's>,
-    kmp_edit_mode: Res<'w, KmpEditMode>,
+    track_info_mode: Option<Res<'w, KmpEditMode<TrackInfo>>>,
     track_info: Option<ResMut<'w, TrackInfo>>,
 
     q_transform: Query<'w, 's, (Entity, &'static mut Transform), With<Selected>>,
     q_transform_opts: Query<'w, 's, &'static TransformEditOptions>,
 
-    q_start_point: Query<'w, 's, (Entity, &'static mut StartPoint), With<Selected>>,
-    q_enemy_point: Query<'w, 's, (Entity, &'static mut EnemyPathPoint), With<Selected>>,
-    q_item_point: Query<'w, 's, (Entity, &'static mut ItemPathPoint), With<Selected>>,
-    q_cp_left: Query<'w, 's, (&'static mut Checkpoint, Entity, Has<Selected>)>,
-    q_cp_right: Query<'w, 's, &'static mut CheckpointRight, With<Selected>>,
-    q_respawn_point: Query<'w, 's, (Entity, &'static mut RespawnPoint), With<Selected>>,
-    q_object: Query<'w, 's, (Entity, &'static mut Object), With<Selected>>,
-    q_area: Query<'w, 's, (Entity, &'static mut AreaPoint), With<Selected>>,
-    q_camera: Query<'w, 's, (Entity, &'static mut KmpCamera), With<Selected>>,
-    q_cannon_point: Query<'w, 's, (Entity, &'static mut CannonPoint), With<Selected>>,
-    q_battle_finish_point: Query<'w, 's, (Entity, &'static mut BattleFinishPoint), With<Selected>>,
+    q_start_point: KmpComponentQuery<'w, 's, StartPoint>,
+    q_enemy_point: KmpComponentQuery<'w, 's, EnemyPathPoint>,
+    q_item_point: KmpComponentQuery<'w, 's, ItemPathPoint>,
+    q_cp: GetSelectedCheckpoints<'w, 's>,
+    q_respawn_point: KmpComponentQuery<'w, 's, RespawnPoint>,
+    q_object: KmpComponentQuery<'w, 's, Object>,
+    q_area: KmpComponentQuery<'w, 's, AreaPoint>,
+    q_camera: KmpComponentQuery<'w, 's, KmpCamera>,
+    q_cannon_point: KmpComponentQuery<'w, 's, CannonPoint>,
+    q_battle_finish_point: KmpComponentQuery<'w, 's, BattleFinishPoint>,
 
     q_path_start: PathStartQuery<'w, 's>,
     ev_recalc_paths: EventWriter<'w, RecalcPaths>,
@@ -54,7 +54,7 @@ pub struct ShowEditTab<'w, 's> {
 impl UiSubSection for ShowEditTab<'_, '_> {
     fn show(&mut self, ui: &mut Ui) {
         if let Some(track_info) = &mut self.track_info {
-            if self.kmp_edit_mode.0 == KmpSections::TrackInfo {
+            if self.track_info_mode.is_some() {
                 framed_collapsing_header("Track Info", ui, |ui| {
                     edit_row(ui, "Track Type", false, |ui| {
                         combobox_enum(ui, &mut track_info.track_type, None);
@@ -141,8 +141,7 @@ impl UiSubSection for ShowEditTab<'_, '_> {
             );
         });
 
-        let cp_iter = get_selected_cp_lefts(&mut self.q_cp_left, &mut self.q_cp_right);
-        edit_component(ui, "Checkpoint", cp_iter, |ui, items| {
+        edit_component(ui, "Checkpoint", self.q_cp.get(), |ui, items| {
             combobox_edit_row(ui, "Type", map!(items, kind));
             path_start_btn(
                 ui,
@@ -183,9 +182,9 @@ impl UiSubSection for ShowEditTab<'_, '_> {
             // for now, area type UI settings will only work when 1 point is selected
             if let Some(item) = items.iter_mut().next() {
                 match &mut item.1.kind {
-                    AreaKind::Camera(cam_index) => {
+                    AreaKind::Camera { cam_index } => {
                         edit_row(ui, "Camera Index", true, |ui| {
-                            ui.add(DragValue::new(&mut cam_index.0).speed(DragSpeed::Slow));
+                            ui.add(DragValue::new(cam_index).speed(DragSpeed::Slow));
                         });
                     }
                     AreaKind::EnvEffect(env_effect_obj) => {

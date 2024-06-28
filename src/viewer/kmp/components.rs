@@ -6,6 +6,7 @@ use super::{
 };
 use crate::util::kmp_file::{Area, Came, Enpt, Gobj, Itpt, Ktpt, Poti, PotiPoint, Stgi};
 use bevy::{math::vec3, prelude::*};
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 
@@ -27,7 +28,7 @@ pub struct PathStart;
 pub struct PathOverallStart;
 
 // --- TRACK INFO COMPONENTS ---
-#[derive(Resource, Default)]
+#[derive(Resource, Component, Default, Serialize, Deserialize)]
 pub struct TrackInfo {
     pub track_type: TrackType,
     pub lap_count: u8,
@@ -37,13 +38,13 @@ pub struct TrackInfo {
     pub first_player_pos: FirstPlayerPos,
     pub narrow_player_spacing: bool,
 }
-#[derive(Default, Display, EnumIter, EnumString, IntoStaticStr, PartialEq, Clone)]
+#[derive(Default, Display, EnumIter, EnumString, IntoStaticStr, PartialEq, Clone, Serialize, Deserialize)]
 pub enum TrackType {
     #[default]
     Race,
     Battle,
 }
-#[derive(Default, Display, EnumIter, EnumString, IntoStaticStr, PartialEq, Clone)]
+#[derive(Default, Display, EnumIter, EnumString, IntoStaticStr, PartialEq, Clone, Serialize, Deserialize)]
 pub enum FirstPlayerPos {
     #[default]
     Left,
@@ -51,7 +52,7 @@ pub enum FirstPlayerPos {
 }
 
 // --- START POINT COMPONENTS ---
-#[derive(Component, Clone, Copy, PartialEq, Debug)]
+#[derive(Component, Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub struct StartPoint {
     pub player_index: i16,
 }
@@ -62,14 +63,16 @@ impl Default for StartPoint {
 }
 
 // --- ENEMY PATH COMPONENTS ---
-#[derive(Component, Clone, Copy, PartialEq, Default, Debug)]
+#[derive(Component, Clone, Copy, PartialEq, Default, Debug, Serialize, Deserialize)]
 pub struct EnemyPathPoint {
     pub leniency: f32,
     pub setting_1: EnemyPathSetting1,
     pub setting_2: EnemyPathSetting2,
     pub setting_3: u8,
 }
-#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy, Debug)]
+#[derive(
+    Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy, Debug, Serialize, Deserialize,
+)]
 pub enum EnemyPathSetting1 {
     #[default]
     None,
@@ -81,7 +84,9 @@ pub enum EnemyPathSetting1 {
     #[strum(serialize = "End Wheelie")]
     EndWheelie,
 }
-#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy, Debug)]
+#[derive(
+    Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy, Debug, Serialize, Deserialize,
+)]
 pub enum EnemyPathSetting2 {
     #[default]
     None,
@@ -94,7 +99,7 @@ pub enum EnemyPathSetting2 {
 }
 
 // --- ITEM PATH COMPONENTS ---
-#[derive(Component, PartialEq, Clone, Default, Debug)]
+#[derive(Component, PartialEq, Clone, Default, Debug, Serialize, Deserialize)]
 pub struct ItemPathPoint {
     pub bullet_control: f32,
     pub bullet_height: ItemPathBulletHeight,
@@ -102,7 +107,9 @@ pub struct ItemPathPoint {
     pub low_shell_priority: bool,
 }
 
-#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy, Debug)]
+#[derive(
+    Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Clone, Copy, Debug, Serialize, Deserialize,
+)]
 pub enum ItemPathBulletHeight {
     #[default]
     Auto,
@@ -116,23 +123,25 @@ pub enum ItemPathBulletHeight {
 
 // --- CHECKPOINT COMPONENTS ---
 // for checkpoints, the left checkpoint entity stores all the info
-#[derive(Component, Clone, PartialEq, Debug)]
+#[derive(Component, Clone, PartialEq, Debug, Serialize, Deserialize, Default)]
 pub struct Checkpoint {
+    pub kind: CheckpointKind,
+    // will contain link to respawn entity
+}
+#[derive(Component, Clone, PartialEq, Debug)]
+pub struct CheckpointLeft {
     pub right: Entity,
     pub line: Entity,
     pub plane: Entity,
     pub arrow: Entity,
-    pub kind: CheckpointKind,
-    // will contain link to respawn entity
 }
-impl Default for Checkpoint {
+impl Default for CheckpointLeft {
     fn default() -> Self {
         Self {
             right: Entity::PLACEHOLDER,
             line: Entity::PLACEHOLDER,
             plane: Entity::PLACEHOLDER,
             arrow: Entity::PLACEHOLDER,
-            kind: CheckpointKind::default(),
         }
     }
 }
@@ -163,7 +172,9 @@ pub struct CheckpointPlane {
     pub right: Entity,
 }
 
-#[derive(Component, PartialEq, Clone, Default, Debug, Display, EnumString, IntoStaticStr, EnumIter)]
+#[derive(
+    Component, PartialEq, Clone, Default, Debug, Display, EnumString, IntoStaticStr, EnumIter, Serialize, Deserialize,
+)]
 pub enum CheckpointKind {
     #[default]
     Normal,
@@ -173,7 +184,7 @@ pub enum CheckpointKind {
 }
 
 // --- OBJECT COMPONENTS ---
-#[derive(Component, Default, Clone, PartialEq)]
+#[derive(Component, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Object {
     pub object_id: u16,
     pub scale: Vec3,
@@ -198,7 +209,7 @@ pub struct RoutePoint {
 }
 
 // --- AREA COMPONENTS ---
-#[derive(Component, Clone, PartialEq)]
+#[derive(Component, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AreaPoint {
     pub shape: AreaShape,
     pub kind: AreaKind,
@@ -217,15 +228,17 @@ impl Default for AreaPoint {
         }
     }
 }
-#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, Clone, PartialEq)]
+#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AreaShape {
     #[default]
     Box,
     Cylinder,
 }
-#[derive(Display, EnumString, IntoStaticStr, EnumIter, Clone, PartialEq)]
+#[derive(Display, EnumString, IntoStaticStr, EnumIter, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AreaKind {
-    Camera(AreaCameraIndex),
+    Camera {
+        cam_index: u8,
+    },
     #[strum(serialize = "Env Effect")]
     EnvEffect(AreaEnvEffectObject),
     #[strum(serialize = "Fog Effect")]
@@ -264,12 +277,10 @@ pub enum AreaKind {
 }
 impl Default for AreaKind {
     fn default() -> Self {
-        Self::Camera(AreaCameraIndex(0))
+        Self::Camera { cam_index: 0 }
     }
 }
-#[derive(Default, Clone, PartialEq)]
-pub struct AreaCameraIndex(pub u8);
-#[derive(Default, Clone, PartialEq, Display, EnumString, IntoStaticStr, EnumIter)]
+#[derive(Default, Clone, PartialEq, Display, EnumString, IntoStaticStr, EnumIter, Serialize, Deserialize)]
 pub enum AreaEnvEffectObject {
     #[default]
     EnvKareha,
@@ -277,7 +288,7 @@ pub enum AreaEnvEffectObject {
 }
 
 // --- CAMERA COMPONENTS ---
-#[derive(Component, Default, Clone, PartialEq)]
+#[derive(Component, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KmpCamera {
     pub kind: KmpCameraKind,
     pub next_index: u8,
@@ -294,7 +305,7 @@ pub struct KmpCamera {
     pub view_end: Vec3,
     pub time: f32,
 }
-#[derive(Default, Clone, PartialEq, Display, EnumString, IntoStaticStr, EnumIter)]
+#[derive(Default, Clone, PartialEq, Display, EnumString, IntoStaticStr, EnumIter, Serialize, Deserialize)]
 pub enum KmpCameraKind {
     #[default]
     Goal,
@@ -312,17 +323,17 @@ pub enum KmpCameraKind {
 }
 
 // --- RESPAWN POINT COMPONENTS ---
-#[derive(Component, Default, Clone, PartialEq)]
+#[derive(Component, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RespawnPoint {
     pub sound_trigger: i8,
 }
 
 // --- CANNON POINT COMPONENTS
-#[derive(Component, Default, Clone, PartialEq)]
+#[derive(Component, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CannonPoint {
     pub shoot_effect: CannonShootEffect,
 }
-#[derive(Default, Display, EnumIter, EnumString, IntoStaticStr, PartialEq, Clone)]
+#[derive(Default, Display, EnumIter, EnumString, IntoStaticStr, PartialEq, Clone, Serialize, Deserialize)]
 pub enum CannonShootEffect {
     #[default]
     Straight,
@@ -331,7 +342,7 @@ pub enum CannonShootEffect {
     CurvedSlow,
 }
 
-#[derive(Component, Default, Clone, PartialEq)]
+#[derive(Component, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BattleFinishPoint;
 
 //
@@ -445,7 +456,6 @@ impl FromKmp<Ckpt> for Checkpoint {
                     CheckpointKind::Normal
                 }
             },
-            ..default()
         }
     }
 }
@@ -490,7 +500,9 @@ impl FromKmp<Area> for AreaPoint {
             priority: data.priority,
             scale: Vec3::from(data.scale) * vec3(5000., 10000., 5000.),
             kind: match data.kind {
-                0 => AreaKind::Camera(AreaCameraIndex(data.came_index)),
+                0 => AreaKind::Camera {
+                    cam_index: data.came_index,
+                },
                 1 => AreaKind::EnvEffect(match data.setting_1 {
                     0 => AreaEnvEffectObject::EnvKareha,
                     1 => AreaEnvEffectObject::EnvKarehaUp,
@@ -647,18 +659,18 @@ impl_spawn_new!(BattleFinishPoint);
 impl_spawn_new_path!(ItemPathPoint, ItemPathMarker);
 impl_spawn_new_path!(EnemyPathPoint, EnemyPathMarker);
 
-impl Checkpoint {
-    pub fn spawn(commands: &mut Commands, pos: Vec3, prev_left_nodes: HashSet<Entity>) -> (Entity, Entity) {
+impl SpawnNewPath for Checkpoint {
+    fn spawn(commands: &mut Commands, pos: Vec3, prev_left_nodes: HashSet<Entity>) -> Entity {
         let (left, right) = CheckpointSpawner::new(Self::default())
             .single_3d_pos(pos)
             .spawn_command(commands);
         commands.add(move |world: &mut World| {
             for prev_left in prev_left_nodes {
                 KmpPathNode::link_nodes(prev_left, left, world);
-                let prev_right = world.entity(prev_left).get::<Checkpoint>().unwrap().right;
+                let prev_right = world.entity(prev_left).get::<CheckpointLeft>().unwrap().right;
                 KmpPathNode::link_nodes(prev_right, right, world);
             }
         });
-        (left, right)
+        right
     }
 }

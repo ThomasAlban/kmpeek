@@ -4,7 +4,7 @@ use super::{
     components::FromKmp,
     meshes_materials::{CheckpointMaterials, KmpMeshes, PathMaterials},
     ordering::{NextOrderID, OrderID},
-    sections::{KmpEditMode, KmpSections},
+    sections::KmpEditMode,
     Checkpoint, CheckpointRight, EnemyPathPoint, ItemPathPoint, KmpError, KmpSelectablePoint, PathOverallStart,
     TransformEditOptions,
 };
@@ -31,27 +31,20 @@ use bevy::{
     utils::{HashMap, HashSet},
 };
 use bevy_mod_outline::{OutlineBundle, OutlineVolume};
-use std::sync::Arc;
 use std::{any::TypeId, fmt::Debug};
+use std::{marker::PhantomData, sync::Arc};
 
-pub struct PathPlugin;
-impl Plugin for PathPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_event::<RecalcPaths>().add_systems(
-            Update,
-            (
-                update_node_links::<EnemyPathPoint>.run_if(edit_mode_is(KmpSections::EnemyPaths)),
-                update_node_links::<ItemPathPoint>.run_if(edit_mode_is(KmpSections::ItemPaths)),
-                update_node_links::<Checkpoint>.run_if(edit_mode_is(KmpSections::Checkpoints)),
-                update_node_links::<CheckpointRight>.run_if(edit_mode_is(KmpSections::Checkpoints)),
-                traverse_paths,
-            ),
-        );
-    }
-}
-
-fn edit_mode_is(edit_mode: KmpSections) -> impl Fn(Res<KmpEditMode>) -> bool {
-    move |x: Res<KmpEditMode>| x.0 == edit_mode
+pub fn path_plugin(app: &mut App) {
+    app.add_event::<RecalcPaths>().add_systems(
+        Update,
+        (
+            update_node_links::<EnemyPathPoint>,
+            update_node_links::<ItemPathPoint>,
+            update_node_links::<Checkpoint>,
+            update_node_links::<CheckpointRight>,
+            traverse_paths,
+        ),
+    );
 }
 
 // represents a link between 2 nodes
@@ -517,6 +510,9 @@ fn spawn_node_link<T: Component + ToPathType + Clone>(
 }
 
 pub fn update_node_links<T: Component + ToPathType + Clone>(
+    mode: Option<Res<KmpEditMode<T>>>,
+    cp_mode: Option<Res<KmpEditMode<Checkpoint>>>,
+
     q_visibility: Query<&Visibility, Without<KmpPathNodeLink>>,
     mut q_kmp_node_link: Query<(Entity, &KmpPathNodeLink, &Children, &mut Visibility)>,
     q_kmp_node: Query<(Entity, &KmpPathNode), With<T>>,
@@ -524,6 +520,10 @@ pub fn update_node_links<T: Component + ToPathType + Clone>(
     q_line: Query<&KmpPathNodeLinkLine>,
     mut commands: Commands,
 ) {
+    if mode.is_none() && !(TypeId::of::<T>() == TypeId::of::<CheckpointRight>() && cp_mode.is_some()) {
+        return;
+    }
+
     let mut nodes_to_be_linked: HashSet<(Entity, Entity)> = HashSet::new();
     for (cur_node, node_data) in q_kmp_node.iter() {
         for prev_node in node_data.prev_nodes.iter() {
@@ -648,13 +648,13 @@ pub fn traverse_paths(
 ) {
     for ev in ev_recalc_paths.read() {
         if ev.do_enemy {
-            commands.insert_resource(EnemyPathGroups(p.p0().traverse()));
+            commands.insert_resource(p.p0().traverse());
         }
         if ev.do_item {
-            commands.insert_resource(ItemPathGroups(p.p1().traverse()));
+            commands.insert_resource(p.p1().traverse());
         }
         if ev.do_cp {
-            commands.insert_resource(CheckPathGroups(p.p2().traverse()));
+            commands.insert_resource(p.p2().traverse());
         }
     }
 }
@@ -665,7 +665,7 @@ pub struct TraversePath<'w, 's, T: Component> {
     q: Query<'w, 's, (Entity, &'static KmpPathNode), With<T>>,
 }
 impl<'w, 's, T: Component> TraversePath<'w, 's, T> {
-    fn traverse(self) -> Vec<PathGroup> {
+    fn traverse(self) -> PathGroups<T> {
         let mut paths: Vec<PathGroup> = Vec::new();
         let mut node_to_path_index: HashMap<Entity, usize> = HashMap::default();
         let battle_mode = false;
@@ -675,7 +675,7 @@ impl<'w, 's, T: Component> TraversePath<'w, 's, T> {
 
         let mut nodes_to_handle: EntityHashMap<&KmpPathNode> = self.q.iter().collect();
         if nodes_to_handle.is_empty() {
-            return Vec::new();
+            return PathGroups::new(Vec::new());
         }
         let first = self
             .q_start
@@ -761,7 +761,7 @@ impl<'w, 's, T: Component> TraversePath<'w, 's, T> {
             }
         }
 
-        paths
+        PathGroups::new(paths)
     }
 }
 
@@ -773,8 +773,15 @@ pub struct PathGroup {
 }
 
 #[derive(Resource, Clone)]
-pub struct EnemyPathGroups(pub Vec<PathGroup>);
-#[derive(Resource, Clone)]
-pub struct ItemPathGroups(pub Vec<PathGroup>);
-#[derive(Resource, Clone)]
-pub struct CheckPathGroups(pub Vec<PathGroup>);
+pub struct PathGroups<T: Component> {
+    pub groups: Vec<PathGroup>,
+    _p: PhantomData<T>,
+}
+impl<T: Component> PathGroups<T> {
+    fn new(groups: Vec<PathGroup>) -> Self {
+        Self {
+            groups,
+            _p: PhantomData,
+        }
+    }
+}

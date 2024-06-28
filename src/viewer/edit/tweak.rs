@@ -26,11 +26,8 @@ pub struct SnapToKcl;
 #[derive(Component)]
 pub struct SnapToCheckpointPlane;
 
-pub struct TweakPlugin;
-impl Plugin for TweakPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Update, tweak_interaction.after(SelectSet));
-    }
+pub fn tweak_plugin(app: &mut App) {
+    app.add_systems(Update, tweak_interaction.after(SelectSet));
 }
 
 #[derive(Resource, Clone, Debug)]

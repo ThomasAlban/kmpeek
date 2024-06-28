@@ -1,16 +1,12 @@
 use bevy::{
-    app::{Plugin, Startup},
+    app::{App, Startup},
     ecs::system::Commands,
     prelude::default,
 };
 use bevy_infinite_grid::{InfiniteGridBundle, InfiniteGridPlugin, InfiniteGridSettings};
 
-pub struct GridPlugin;
-impl Plugin for GridPlugin {
-    fn build(&self, app: &mut bevy::prelude::App) {
-        app.add_plugins(InfiniteGridPlugin)
-            .add_systems(Startup, setup);
-    }
+pub fn grid_plugin(app: &mut App) {
+    app.add_plugins(InfiniteGridPlugin).add_systems(Startup, setup);
 }
 
 fn setup(mut commands: Commands) {

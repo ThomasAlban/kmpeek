@@ -1,5 +1,6 @@
 pub mod checkpoints;
 pub mod components;
+pub mod csv;
 pub mod meshes_materials;
 pub mod ordering;
 pub mod path;
@@ -8,43 +9,44 @@ pub mod sections;
 pub mod settings;
 
 use self::{
-    checkpoints::{spawn_checkpoint_section, CheckpointHeight, CheckpointPlugin},
+    checkpoints::{checkpoint_plugin, spawn_checkpoint_section, CheckpointHeight},
     components::*,
     meshes_materials::setup_kmp_meshes_materials,
     path::{spawn_enemy_item_path_section, KmpPathNodeLink, RecalcPaths},
     point::{spawn_point_section, AddRespawnPointPreview},
-    sections::KmpEditMode,
 };
 use crate::{
     ui::{settings::SetupAppSettingsSet, ui_state::KmpVisibility, update_ui::KmpFileSelected},
-    util::kmp_file::*,
-    viewer::kmp::{path::PathType, sections::KmpSections},
+    util::{kmp_file::*, BoolToVisibility},
+    viewer::kmp::path::PathType,
 };
 use bevy::prelude::*;
 use binrw::BinRead;
-use ordering::OrderingPlugin;
-use path::PathPlugin;
+use csv::csv_plugin;
+use ordering::ordering_plugin;
+use path::path_plugin;
+use sections::{section_plugin, KmpSection};
 use std::{ffi::OsStr, fs::File, sync::Arc};
 
-pub struct KmpPlugin;
-
-impl Plugin for KmpPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_plugins(CheckpointPlugin)
-            .add_plugins(PathPlugin)
-            .add_plugins(OrderingPlugin)
-            .add_event::<RecalcPaths>()
-            .init_resource::<KmpEditMode>()
-            .add_systems(Startup, setup_kmp_meshes_materials.after(SetupAppSettingsSet))
-            .add_systems(
-                Update,
-                (
-                    spawn_model.run_if(on_event::<KmpFileSelected>()),
-                    update_visible.run_if(resource_changed::<KmpVisibility>),
-                ),
-            );
-    }
+pub fn kmp_plugin(app: &mut App) {
+    app.add_plugins((
+        checkpoint_plugin,
+        path_plugin,
+        ordering_plugin,
+        csv_plugin,
+        section_plugin,
+    ))
+    .add_event::<RecalcPaths>()
+    .add_systems(Startup, setup_kmp_meshes_materials.after(SetupAppSettingsSet))
+    .add_systems(
+        Update,
+        (
+            spawn_model.run_if(on_event::<KmpFileSelected>()),
+            update_visible.run_if(resource_changed::<KmpVisibility>),
+        ),
+    );
 }
+
 pub fn spawn_model(
     mut commands: Commands,
     mut ev_kmp_file_selected: EventReader<KmpFileSelected>,
@@ -118,7 +120,11 @@ pub fn spawn_model(
 
     // --- CANNON POINTS ---
 
+    spawn_point_section::<Cnpt, CannonPoint>(&mut commands, kmp.clone(), &mut kmp_errors);
+
     // --- FINISH POINTS ---
+
+    spawn_point_section::<Mspt, BattleFinishPoint>(&mut commands, kmp.clone(), &mut kmp_errors);
 
     // ---
 
@@ -145,41 +151,36 @@ fn update_visible(
         )>,
     )>,
 ) {
-    let visibilities = kmp_visibility.0;
+    use KmpSection::*;
 
-    let set_visibility = |visibility: &mut Visibility, visible: bool| {
-        *visibility = if visible {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
+    let visibilities = kmp_visibility.0;
+    let set_visibility = |mut v: Mut<Visibility>, i: KmpSection| {
+        *v = visibilities[i as usize].to_visibility();
     };
-    macro_rules! set_visibility {
-        ($query:expr, $i:expr) => {
-            for mut visibility in $query.iter_mut() {
-                set_visibility(&mut visibility, visibilities[$i]);
+    macro_rules! set_visibility_iter {
+        ($q:expr, $i:ident) => {
+            for v in $q.iter_mut() {
+                set_visibility(v, $i);
             }
         };
     }
 
-    set_visibility!(q.p0().p0(), KmpSections::StartPoints as usize);
-    set_visibility!(q.p0().p1(), KmpSections::EnemyPaths as usize);
-    set_visibility!(q.p0().p2(), KmpSections::ItemPaths as usize);
-    set_visibility!(q.p0().p3(), KmpSections::Checkpoints as usize);
-    set_visibility!(q.p0().p4(), KmpSections::Objects as usize);
-    set_visibility!(q.p0().p5(), KmpSections::Areas as usize);
-    set_visibility!(q.p1().p0(), KmpSections::Cameras as usize);
-    set_visibility!(q.p1().p1(), KmpSections::RespawnPoints as usize);
-    set_visibility!(q.p1().p2(), KmpSections::CannonPoints as usize);
-    set_visibility!(q.p1().p3(), KmpSections::BattleFinishPoints as usize);
+    set_visibility_iter!(q.p0().p0(), StartPoints);
+    set_visibility_iter!(q.p0().p1(), EnemyPaths);
+    set_visibility_iter!(q.p0().p2(), ItemPaths);
+    set_visibility_iter!(q.p0().p3(), Checkpoints);
+    set_visibility_iter!(q.p0().p4(), Objects);
+    set_visibility_iter!(q.p0().p5(), Areas);
+    set_visibility_iter!(q.p1().p0(), Cameras);
+    set_visibility_iter!(q.p1().p1(), RespawnPoints);
+    set_visibility_iter!(q.p1().p2(), CannonPoints);
+    set_visibility_iter!(q.p1().p3(), BattleFinishPoints);
 
-    for (mut visibility, node_link) in q.p1().p4().iter_mut() {
+    for (v, node_link) in q.p1().p4().iter_mut() {
         match node_link.kind {
-            PathType::Enemy => set_visibility(&mut visibility, visibilities[KmpSections::EnemyPaths as usize]),
-            PathType::Item => set_visibility(&mut visibility, visibilities[KmpSections::ItemPaths as usize]),
-            PathType::Checkpoint { .. } => {
-                set_visibility(&mut visibility, visibilities[KmpSections::Checkpoints as usize])
-            }
+            PathType::Enemy => set_visibility(v, EnemyPaths),
+            PathType::Item => set_visibility(v, ItemPaths),
+            PathType::Checkpoint { .. } => set_visibility(v, Checkpoints),
         }
     }
 }

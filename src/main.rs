@@ -3,8 +3,8 @@ mod util;
 mod viewer;
 
 use bevy::{prelude::*, winit::WinitSettings};
-use ui::UIPlugin;
-use viewer::ViewerPlugin;
+use ui::ui_plugin;
+use viewer::viewer_plugin;
 
 fn main() {
     App::new()
@@ -17,6 +17,6 @@ fn main() {
             ..default()
         }))
         .insert_resource(WinitSettings::desktop_app())
-        .add_plugins((ViewerPlugin, UIPlugin))
+        .add_plugins((viewer_plugin, ui_plugin))
         .run();
 }

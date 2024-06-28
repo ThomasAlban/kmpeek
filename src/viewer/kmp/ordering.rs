@@ -1,6 +1,6 @@
 use super::{
-    AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint, KmpCamera, Object,
-    RespawnPoint, StartPoint,
+    sections::add_for_all_components, AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint,
+    ItemPathPoint, KmpCamera, Object, RespawnPoint, StartPoint,
 };
 use bevy::prelude::*;
 use std::{
@@ -8,31 +8,14 @@ use std::{
     sync::atomic::{AtomicU32, Ordering},
 };
 
-pub struct OrderingPlugin;
-impl Plugin for OrderingPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_event::<RefreshOrdering>()
-            .ordering_setup::<StartPoint>()
-            .ordering_setup::<EnemyPathPoint>()
-            .ordering_setup::<ItemPathPoint>()
-            .ordering_setup::<Checkpoint>()
-            .ordering_setup::<RespawnPoint>()
-            .ordering_setup::<Object>()
-            .ordering_setup::<AreaPoint>()
-            .ordering_setup::<KmpCamera>()
-            .ordering_setup::<CannonPoint>()
-            .ordering_setup::<BattleFinishPoint>();
-    }
+pub fn ordering_plugin(app: &mut App) {
+    app.add_event::<RefreshOrdering>()
+        .add_plugins(add_for_all_components!(setup_ordering));
 }
 
-trait OrderingSetup {
-    fn ordering_setup<T: Component>(&mut self) -> &mut Self;
-}
-impl OrderingSetup for App {
-    fn ordering_setup<T: Component>(&mut self) -> &mut Self {
-        self.init_resource::<NextOrderID<T>>()
-            .add_systems(Update, refresh_order::<T>.run_if(on_event::<RefreshOrdering>()))
-    }
+fn setup_ordering<T: Component>(app: &mut App) {
+    app.init_resource::<NextOrderID<T>>()
+        .add_systems(Update, refresh_order::<T>.run_if(on_event::<RefreshOrdering>()));
 }
 
 #[derive(Component, Default, PartialEq, Eq, PartialOrd, Ord, Deref, DerefMut)]
@@ -66,10 +49,10 @@ pub struct RefreshOrdering;
 pub fn refresh_order<T: Component>(mut q: Query<&mut OrderID, With<T>>, next_id: Res<NextOrderID<T>>) {
     let mut order_ids = q.iter_mut().collect::<Vec<_>>();
     order_ids.sort_by(|x, y| x.0.cmp(&y.0));
-    let mut id = -1;
+    let mut id = 0u32;
     for (i, order_id) in order_ids.iter_mut().enumerate() {
         order_id.0 = i as u32;
-        id = i as i32;
+        id = i as u32 + 1;
     }
-    next_id.set((id + 1) as u32);
+    next_id.set(id);
 }

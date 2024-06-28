@@ -7,7 +7,7 @@ use crate::ui::viewport::ViewportInfo;
 use crate::util::{ui_viewport_to_ndc, world_to_ui_viewport, RaycastFromCam};
 use crate::viewer::camera::Gizmo2dCam;
 use crate::viewer::kmp::components::KmpSelectablePoint;
-use crate::viewer::kmp::sections::KmpEditMode;
+use crate::viewer::kmp::sections::KmpEditModeChange;
 use bevy::prelude::*;
 use bevy_mod_outline::*;
 use bevy_mod_raycast::prelude::*;
@@ -16,20 +16,17 @@ use transform_gizmo_bevy::GizmoTarget;
 #[derive(SystemSet, Debug, PartialEq, Eq, Hash, Clone)]
 pub struct SelectSet;
 
-pub struct SelectPlugin;
-impl Plugin for SelectPlugin {
-    fn build(&self, app: &mut App) {
-        app.init_resource::<SelectBox>()
-            .add_systems(Update, (select, select_box, select_all).in_set(SelectSet))
-            .add_systems(Update, update_outlines.after(SelectSet))
-            .add_systems(
-                Update,
-                (
-                    deselect_if_not_visible.run_if(resource_changed::<KmpVisibility>),
-                    deselect_on_mode_change.after(UpdateUiSet),
-                ),
-            );
-    }
+pub fn select_plugin(app: &mut App) {
+    app.init_resource::<SelectBox>()
+        .add_systems(Update, (select, select_box, select_all).in_set(SelectSet))
+        .add_systems(Update, update_outlines.after(SelectSet))
+        .add_systems(
+            Update,
+            (
+                deselect_if_not_visible.run_if(resource_changed::<KmpVisibility>),
+                deselect_on_mode_change.after(UpdateUiSet),
+            ),
+        );
 }
 
 #[derive(Component, Default)]
@@ -125,11 +122,11 @@ fn deselect_if_not_visible(mut commands: Commands, q_selected: Query<(Entity, &V
 }
 
 fn deselect_on_mode_change(
-    edit_mode: Res<KmpEditMode>,
+    ev_mode_change: EventReader<KmpEditModeChange>,
     mut commands: Commands,
     q_selected: Query<Entity, With<Selected>>,
 ) {
-    if !edit_mode.is_changed() {
+    if ev_mode_change.is_empty() {
         return;
     }
     for e in q_selected.iter() {

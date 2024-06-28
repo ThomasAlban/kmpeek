@@ -6,18 +6,16 @@ use crate::{
         kmp::{
             components::{
                 AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint,
-                KmpCamera, Object, RespawnPoint, StartPoint,
+                KmpCamera, Object, RespawnPoint, StartPoint, TrackInfo,
             },
             ordering::OrderID,
-            sections::{KmpEditMode, KmpSections},
+            sections::{KmpEditMode, KmpEditModeOptions, ToKmpSection},
         },
     },
 };
 use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::egui::{self, emath::Numeric, Checkbox, Direction, DragValue, Layout, Response, Ui};
 use egui_extras::{Column, TableBuilder, TableRow};
-
-type KmpTableItem<'a, 'w, 's, C> = (Mut<'a, C>, Mut<'a, Transform>, Entity, bool, &'a OrderID);
 
 type KmpTableQuery<'w, 's, C> = Query<
     'w,
@@ -33,9 +31,9 @@ type KmpTableQuery<'w, 's, C> = Query<
 
 #[derive(SystemParam)]
 pub struct ShowTableTab<'w, 's> {
-    commands: Commands<'w, 's>,
-    edit_mode: Res<'w, KmpEditMode>,
     ev_create_pt: EventWriter<'w, CreatePoint>,
+    track_info_mode: Option<Res<'w, KmpEditMode<TrackInfo>>>,
+    mode_options: KmpEditModeOptions<'w, 's>,
     q: ParamSet<
         'w,
         's,
@@ -44,22 +42,22 @@ pub struct ShowTableTab<'w, 's> {
                 'w,
                 's,
                 (
-                    KmpTableQuery<'w, 's, StartPoint>,
-                    KmpTableQuery<'w, 's, EnemyPathPoint>,
-                    KmpTableQuery<'w, 's, ItemPathPoint>,
-                    KmpTableQuery<'w, 's, Checkpoint>,
-                    KmpTableQuery<'w, 's, RespawnPoint>,
+                    ShowKmpTable<'w, 's, StartPoint>,
+                    ShowKmpTable<'w, 's, EnemyPathPoint>,
+                    ShowKmpTable<'w, 's, ItemPathPoint>,
+                    ShowKmpTable<'w, 's, Checkpoint>,
+                    ShowKmpTable<'w, 's, RespawnPoint>,
                 ),
             >,
             ParamSet<
                 'w,
                 's,
                 (
-                    KmpTableQuery<'w, 's, Object>,
-                    KmpTableQuery<'w, 's, AreaPoint>,
-                    KmpTableQuery<'w, 's, KmpCamera>,
-                    KmpTableQuery<'w, 's, CannonPoint>,
-                    KmpTableQuery<'w, 's, BattleFinishPoint>,
+                    ShowKmpTable<'w, 's, Object>,
+                    ShowKmpTable<'w, 's, AreaPoint>,
+                    ShowKmpTable<'w, 's, KmpCamera>,
+                    ShowKmpTable<'w, 's, CannonPoint>,
+                    ShowKmpTable<'w, 's, BattleFinishPoint>,
                 ),
             >,
         ),
@@ -67,227 +65,216 @@ pub struct ShowTableTab<'w, 's> {
 }
 impl UiSubSection for ShowTableTab<'_, '_> {
     fn show(&mut self, ui: &mut Ui) {
-        use DragSpeed::*;
-        use KmpSections::*;
-        // top section
-        if self.edit_mode.0 != TrackInfo {
+        if self.track_info_mode.is_none() {
             ui.horizontal(|ui| {
-                ui.heading(self.edit_mode.0.to_string());
+                ui.heading(self.mode_options.get_kmp_section().to_string());
                 ui.add_space(10.);
                 if ui.button("+").clicked() {
                     self.ev_create_pt.send_default();
                 }
             });
         }
-        match self.edit_mode.0 {
-            StartPoints => KmpTable::new(ui, &mut self.commands, self.q.p0().p0().iter_mut())
-                .columns(["Player Index"])
-                .show(|row, item| {
-                    drag_value_column(row, Slow, &mut item.player_index);
-                }),
-            EnemyPaths => KmpTable::new(ui, &mut self.commands, self.q.p0().p1().iter_mut())
-                .columns(["Leniency", "Setting 1", "Setting 2", "Setting 3", "Always Path Start"])
-                .no_rotation()
-                .show(|row, item| {
-                    drag_value_column(row, Slow, &mut item.leniency);
-                    combobox_column(row, &mut item.setting_1);
-                    combobox_column(row, &mut item.setting_2);
-                    drag_value_column(row, Slow, &mut item.setting_3);
-                    //checkbox_column(row, &mut item.path_start);
-                }),
-            ItemPaths => KmpTable::new(ui, &mut self.commands, self.q.p0().p2().iter_mut())
-                .columns([
-                    "Bullet Control",
-                    "Bullet Height",
-                    "Bullet Can't Drop",
-                    "Low Shell Priority",
-                    "Always Path Start",
-                ])
-                .no_rotation()
-                .show(|row, item| {
-                    drag_value_column(row, Slow, &mut item.bullet_control);
-                    combobox_column(row, &mut item.bullet_height);
-                    checkbox_column(row, &mut item.bullet_cant_drop);
-                    checkbox_column(row, &mut item.low_shell_priority);
-                    //checkbox_column(row, &mut item.path_start);
-                }),
-            Checkpoints => KmpTable::new(ui, &mut self.commands, self.q.p0().p3().iter_mut())
-                .columns(["Type", "Always Path Start"])
-                .no_rotation()
-                .no_y_translation()
-                .show(|row, item| {
-                    combobox_column(row, &mut item.kind);
-                    //checkbox_column(row, &mut item.path_start_override);
-                }),
-            RespawnPoints => KmpTable::new(ui, &mut self.commands, self.q.p0().p4().iter_mut())
-                .columns(["Sound Trigger"])
-                .show(|row, item| {
-                    drag_value_column(row, Slow, &mut item.sound_trigger);
-                }),
-            Objects => KmpTable::new(ui, &mut self.commands, self.q.p1().p0().iter_mut())
-                .columns([
-                    "Scale",
-                    "Object ID",
-                    "Setting 1",
-                    "Setting 2",
-                    "Setting 3",
-                    "Setting 4",
-                    "Setting 5",
-                    "Setting 6",
-                    "Setting 7",
-                    "Setting 8",
-                    "Presence",
-                ])
-                .show(|row, item| {
-                    drag_vec3_column(row, Slow, &mut item.scale);
-                    drag_value_column(row, Slow, &mut item.object_id);
-                    for setting in item.settings.iter_mut() {
-                        drag_value_column(row, Slow, setting);
-                    }
-                    drag_value_column(row, Slow, &mut item.presence);
-                }),
-            Areas => KmpTable::new(ui, &mut self.commands, self.q.p1().p1().iter_mut())
-                .columns(["Scale", "Shape", "Priority", "Type", "Setting"])
-                .show(|row, item| {
-                    drag_vec3_column(row, Slow, &mut item.scale);
-                    combobox_column(row, &mut item.shape);
-                    drag_value_column(row, Slow, &mut item.priority);
-                    combobox_column(row, &mut item.kind);
-                    match &mut item.kind {
-                        AreaKind::Camera(cam_index) => {
-                            labelled_drag_value_column(row, &mut cam_index.0, Slow, "Camera Index");
-                        }
-                        AreaKind::EnvEffect(env_effect_obj) => {
-                            combobox_column(row, env_effect_obj);
-                        }
-                        AreaKind::FogEffect { bfg_entry, setting_2 } => {
-                            two_labelled_drag_values_column(
-                                row,
-                                (bfg_entry, Slow, "BFG Entry"),
-                                (setting_2, Slow, "BFG Entry"),
-                            );
-                        }
-                        AreaKind::MovingRoad { route_id } => {
-                            labelled_drag_value_column(row, route_id, Slow, "Route ID");
-                        }
-                        AreaKind::MinimapControl { setting_1, setting_2 } => {
-                            two_labelled_drag_values_column(
-                                row,
-                                (setting_1, Slow, "Setting 1"),
-                                (setting_2, Slow, "Setting 2"),
-                            );
-                        }
-                        AreaKind::BloomEffect { bblm_file, fade_time } => {
-                            two_labelled_drag_values_column(
-                                row,
-                                (bblm_file, Slow, "BBLM File"),
-                                (fade_time, Slow, "Fade Time"),
-                            );
-                        }
-                        // enable boos has no setting
-                        AreaKind::ObjectGroup { group_id } | AreaKind::ObjectUnload { group_id } => {
-                            labelled_drag_value_column(row, group_id, Slow, "Group ID");
-                        }
-                        _ => (),
-                    };
-                }),
 
-            Cameras => KmpTable::new(ui, &mut self.commands, self.q.p1().p2().iter_mut())
-                .columns([
-                    "Type",
-                    "Next Index",
-                    "Route Index",
-                    "Time",
-                    "Point Speed",
-                    "Zoom Speed",
-                    "View Speed",
-                    "Zoom Start",
-                    "Zoom End",
-                    "View Start",
-                    "View End",
-                    "Shake (?)",
-                    "Start (?)",
-                    "Movie (?)",
-                ])
-                .show(|row, item| {
-                    combobox_column(row, &mut item.kind);
-                    drag_value_column(row, Slow, &mut item.next_index);
-                    drag_value_column(row, Slow, &mut item.route);
-                    drag_value_column(row, Slow, &mut item.time);
-                    drag_value_column(row, Slow, &mut item.point_velocity);
-                    drag_value_column(row, Slow, &mut item.zoom_velocity);
-                    drag_value_column(row, Slow, &mut item.view_velocity);
-                    drag_value_column(row, Slow, &mut item.zoom_start);
-                    drag_value_column(row, Slow, &mut item.zoom_end);
-                    drag_vec3_column(row, Slow, &mut item.view_start);
-                    drag_vec3_column(row, Slow, &mut item.view_end);
-                    drag_value_column(row, Slow, &mut item.shake);
-                    drag_value_column(row, Slow, &mut item.start);
-                    drag_value_column(row, Slow, &mut item.movie);
-                }),
-            CannonPoints => KmpTable::new(ui, &mut self.commands, self.q.p1().p3().iter_mut())
-                .columns(["Shoot Effect"])
-                .show(|row, item| {
-                    combobox_column(row, &mut item.shoot_effect);
-                }),
-            BattleFinishPoints => KmpTable::new(ui, &mut self.commands, self.q.p1().p4().iter_mut())
-                .columns([])
-                .show(|_, _| {}),
+        self.q.p0().p0().show(ui);
+        self.q.p0().p1().show(ui);
+        self.q.p0().p2().show(ui);
+        self.q.p0().p3().show(ui);
+        self.q.p0().p4().show(ui);
+        self.q.p1().p0().show(ui);
+        self.q.p1().p1().show(ui);
+        self.q.p1().p2().show(ui);
+        self.q.p1().p3().show(ui);
+        self.q.p1().p4().show(ui);
+    }
+}
+
+trait ShowKmpTableTrait {
+    const ROTATION: bool = true;
+    const Y_TRANSLATION: bool = true;
+    const COLUMNS: &'static [&'static str];
+    fn show_row(row: &mut TableRow, item: &mut Self);
+}
+
+use DragSpeed::*;
+
+impl ShowKmpTableTrait for StartPoint {
+    const COLUMNS: &'static [&'static str] = &["Player Index"];
+    fn show_row(row: &mut TableRow, item: &mut Self) {
+        drag_value_column(row, Slow, &mut item.player_index);
+    }
+}
+
+impl ShowKmpTableTrait for EnemyPathPoint {
+    const ROTATION: bool = false;
+    const COLUMNS: &'static [&'static str] = &["Leniency", "Setting 1", "Setting 2", "Setting 3"];
+    fn show_row(row: &mut TableRow, item: &mut Self) {
+        drag_value_column(row, Slow, &mut item.leniency);
+        combobox_column(row, &mut item.setting_1);
+        combobox_column(row, &mut item.setting_2);
+        drag_value_column(row, Slow, &mut item.setting_3);
+    }
+}
+
+impl ShowKmpTableTrait for ItemPathPoint {
+    const ROTATION: bool = false;
+    const COLUMNS: &'static [&'static str] = &[
+        "Bullet Control",
+        "Bullet Height",
+        "Bullet Can't Drop",
+        "Low Shell Priority",
+    ];
+    fn show_row(row: &mut TableRow, item: &mut Self) {
+        drag_value_column(row, Slow, &mut item.bullet_control);
+        combobox_column(row, &mut item.bullet_height);
+        checkbox_column(row, &mut item.bullet_cant_drop);
+        checkbox_column(row, &mut item.low_shell_priority);
+    }
+}
+
+impl ShowKmpTableTrait for Checkpoint {
+    const ROTATION: bool = false;
+    const Y_TRANSLATION: bool = false;
+    const COLUMNS: &'static [&'static str] = &["Type"];
+    fn show_row(row: &mut TableRow, item: &mut Self) {
+        combobox_column(row, &mut item.kind);
+    }
+}
+
+impl ShowKmpTableTrait for RespawnPoint {
+    const COLUMNS: &'static [&'static str] = &["Sound Trigger"];
+    fn show_row(row: &mut TableRow, item: &mut Self) {
+        drag_value_column(row, Slow, &mut item.sound_trigger);
+    }
+}
+
+impl ShowKmpTableTrait for Object {
+    const COLUMNS: &'static [&'static str] = &[
+        "Scale",
+        "Object ID",
+        "Setting 1",
+        "Setting 2",
+        "Setting 3",
+        "Setting 4",
+        "Setting 5",
+        "Setting 6",
+        "Setting 7",
+        "Setting 8",
+        "Presence",
+    ];
+    fn show_row(row: &mut TableRow, item: &mut Self) {
+        drag_vec3_column(row, Slow, &mut item.scale);
+        drag_value_column(row, Slow, &mut item.object_id);
+        for setting in item.settings.iter_mut() {
+            drag_value_column(row, Slow, setting);
+        }
+        drag_value_column(row, Slow, &mut item.presence);
+    }
+}
+
+impl ShowKmpTableTrait for AreaPoint {
+    const COLUMNS: &'static [&'static str] = &["Scale", "Shape", "Priority", "Type", "Setting"];
+    fn show_row(row: &mut TableRow, item: &mut Self) {
+        drag_vec3_column(row, Slow, &mut item.scale);
+        combobox_column(row, &mut item.shape);
+        drag_value_column(row, Slow, &mut item.priority);
+        combobox_column(row, &mut item.kind);
+        match &mut item.kind {
+            AreaKind::Camera { cam_index } => {
+                labelled_drag_value_column(row, cam_index, Slow, "Camera Index");
+            }
+            AreaKind::EnvEffect(env_effect_obj) => {
+                combobox_column(row, env_effect_obj);
+            }
+            AreaKind::FogEffect { bfg_entry, setting_2 } => {
+                two_labelled_drag_values_column(row, (bfg_entry, Slow, "BFG Entry"), (setting_2, Slow, "BFG Entry"));
+            }
+            AreaKind::MovingRoad { route_id } => {
+                labelled_drag_value_column(row, route_id, Slow, "Route ID");
+            }
+            AreaKind::MinimapControl { setting_1, setting_2 } => {
+                two_labelled_drag_values_column(row, (setting_1, Slow, "Setting 1"), (setting_2, Slow, "Setting 2"));
+            }
+            AreaKind::BloomEffect { bblm_file, fade_time } => {
+                two_labelled_drag_values_column(row, (bblm_file, Slow, "BBLM File"), (fade_time, Slow, "Fade Time"));
+            }
+            // enable boos has no setting
+            AreaKind::ObjectGroup { group_id } | AreaKind::ObjectUnload { group_id } => {
+                labelled_drag_value_column(row, group_id, Slow, "Group ID");
+            }
             _ => (),
-        }
+        };
     }
 }
 
-struct KmpTable<'a, 'w, 's, T: Component + PartialEq + Clone> {
-    ui: &'a mut Ui,
-    commands: &'a mut Commands<'w, 's>,
-    columns: Vec<&'static str>,
-    items: Vec<KmpTableItem<'a, 'w, 's, T>>,
-    show_rotation: bool,
-    show_y_translation: bool,
+impl ShowKmpTableTrait for KmpCamera {
+    const COLUMNS: &'static [&'static str] = &[
+        "Type",
+        "Next Index",
+        "Route Index",
+        "Time",
+        "Point Speed",
+        "Zoom Speed",
+        "View Speed",
+        "Zoom Start",
+        "Zoom End",
+        "View Start",
+        "View End",
+        "Shake (?)",
+        "Start (?)",
+        "Movie (?)",
+    ];
+    fn show_row(row: &mut TableRow, item: &mut Self) {
+        combobox_column(row, &mut item.kind);
+        drag_value_column(row, Slow, &mut item.next_index);
+        drag_value_column(row, Slow, &mut item.route);
+        drag_value_column(row, Slow, &mut item.time);
+        drag_value_column(row, Slow, &mut item.point_velocity);
+        drag_value_column(row, Slow, &mut item.zoom_velocity);
+        drag_value_column(row, Slow, &mut item.view_velocity);
+        drag_value_column(row, Slow, &mut item.zoom_start);
+        drag_value_column(row, Slow, &mut item.zoom_end);
+        drag_vec3_column(row, Slow, &mut item.view_start);
+        drag_vec3_column(row, Slow, &mut item.view_end);
+        drag_value_column(row, Slow, &mut item.shake);
+        drag_value_column(row, Slow, &mut item.start);
+        drag_value_column(row, Slow, &mut item.movie);
+    }
 }
-impl<'a, 'w, 's, T: Component + PartialEq + Clone> KmpTable<'a, 'w, 's, T> {
-    fn new(
-        ui: &'a mut Ui,
-        commands: &'a mut Commands<'w, 's>,
-        items: impl Iterator<Item = KmpTableItem<'a, 'w, 's, T>>,
-    ) -> Self {
-        let mut items: Vec<_> = items.collect();
-        items.sort_by(|x, y| x.4.cmp(y.4));
-        Self {
-            ui,
-            commands,
-            columns: vec![],
-            items,
-            show_rotation: true,
-            show_y_translation: true,
+
+impl ShowKmpTableTrait for CannonPoint {
+    const COLUMNS: &'static [&'static str] = &["Shoot Effect"];
+    fn show_row(row: &mut TableRow, item: &mut Self) {
+        combobox_column(row, &mut item.shoot_effect);
+    }
+}
+
+impl ShowKmpTableTrait for BattleFinishPoint {
+    const COLUMNS: &'static [&'static str] = &[];
+    fn show_row(_: &mut TableRow, _: &mut Self) {}
+}
+
+#[derive(SystemParam)]
+struct ShowKmpTable<'w, 's, T: Component + ToKmpSection> {
+    mode: Option<Res<'w, KmpEditMode<T>>>,
+    q: KmpTableQuery<'w, 's, T>,
+    commands: Commands<'w, 's>,
+}
+impl<T: Component + ToKmpSection + PartialEq + Clone + ShowKmpTableTrait> ShowKmpTable<'_, '_, T> {
+    fn show(&mut self, ui: &mut Ui) {
+        if self.mode.is_none() {
+            return;
         }
-    }
-    fn columns(mut self, cols: impl IntoIterator<Item = &'static str>) -> Self {
-        self.columns = cols.into_iter().collect();
-        self
-    }
-    fn no_rotation(mut self) -> Self {
-        self.show_rotation = false;
-        self
-    }
-    fn no_y_translation(mut self) -> Self {
-        self.show_y_translation = false;
-        self
-    }
-    fn show(self, mut rows: impl FnMut(&mut TableRow, &mut T)) {
-        let mut table_builder = TableBuilder::new(self.ui)
+        let mut table_builder = TableBuilder::new(ui)
             .striped(true)
             .vscroll(false)
-            // .sense(Sense::click())
             .cell_layout(Layout::centered_and_justified(egui::Direction::TopDown))
             .column(Column::exact(25.)) // id
             .column(Column::exact(50.)) // selected
             .column(Column::auto().resizable(true)); // translation
-        if self.show_rotation {
+        if T::ROTATION {
             table_builder = table_builder.column(Column::auto().resizable(true));
         }
-        for _ in self.columns.iter() {
+        for _ in T::COLUMNS.iter() {
             table_builder = table_builder.column(Column::auto().resizable(true));
         }
         // empty row filling remaining space
@@ -303,12 +290,12 @@ impl<'a, 'w, 's, T: Component + PartialEq + Clone> KmpTable<'a, 'w, 's, T> {
             header.col(|ui| {
                 ui.label("Translation");
             });
-            if self.show_rotation {
+            if T::ROTATION {
                 header.col(|ui| {
                     ui.label("Rotation");
                 });
             }
-            for name in self.columns.iter() {
+            for name in T::COLUMNS.iter() {
                 header.col(|ui| {
                     ui.label(*name);
                 });
@@ -317,7 +304,9 @@ impl<'a, 'w, 's, T: Component + PartialEq + Clone> KmpTable<'a, 'w, 's, T> {
             header.col(|_| {});
         });
         table.body(|mut body| {
-            for (mut t, mut transform, e, is_selected, order_id) in self.items {
+            let mut items: Vec<_> = self.q.iter_mut().collect();
+            items.sort_by(|x, y| x.4.cmp(y.4));
+            for (mut t, mut transform, e, is_selected, order_id) in items {
                 body.row(20., |mut row| {
                     row.set_selected(is_selected);
 
@@ -336,7 +325,7 @@ impl<'a, 'w, 's, T: Component + PartialEq + Clone> KmpTable<'a, 'w, 's, T> {
 
                     row.col(|ui| {
                         let value: &mut Vec3 = &mut transform_cp.translation;
-                        let (num_cols, z_ix) = if self.show_y_translation { (3, 2) } else { (2, 1) };
+                        let (num_cols, z_ix) = if T::Y_TRANSLATION { (3, 2) } else { (2, 1) };
                         ui.columns(num_cols, |ui| {
                             ui[0].centered_and_justified(|ui| {
                                 ui.add(
@@ -346,7 +335,7 @@ impl<'a, 'w, 's, T: Component + PartialEq + Clone> KmpTable<'a, 'w, 's, T> {
                                         .fixed_decimals(1),
                                 )
                             });
-                            if self.show_y_translation {
+                            if T::Y_TRANSLATION {
                                 ui[1].centered_and_justified(|ui| {
                                     ui.add(
                                         egui::DragValue::new(&mut value.y)
@@ -366,7 +355,7 @@ impl<'a, 'w, 's, T: Component + PartialEq + Clone> KmpTable<'a, 'w, 's, T> {
                             });
                         });
                     });
-                    if self.show_rotation {
+                    if T::ROTATION {
                         let mut rot = quat_to_euler(&transform_cp);
                         row.col(|ui| {
                             let res = drag_vec3(ui, &mut rot, DragSpeed::Slow);
@@ -374,7 +363,7 @@ impl<'a, 'w, 's, T: Component + PartialEq + Clone> KmpTable<'a, 'w, 's, T> {
                         });
                     }
 
-                    rows(&mut row, &mut t_cp);
+                    T::show_row(&mut row, &mut t_cp);
 
                     t.set_if_neq(t_cp);
                     transform.set_if_neq(transform_cp);

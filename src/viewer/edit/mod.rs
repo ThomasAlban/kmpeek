@@ -6,29 +6,26 @@ pub mod transform_gizmo;
 pub mod tweak;
 
 use self::{
-    area_gizmo::AreaGizmoPlugin, create_delete::CreateDeletePlugin, link_unlink::LinkUnlinkPlugin,
-    select::SelectPlugin, transform_gizmo::TransformGizmoPlugin, tweak::TweakPlugin,
+    area_gizmo::area_gizmo_plugin, create_delete::create_delete_plugin, link_unlink::link_unlink_plugin,
+    select::select_plugin, transform_gizmo::transform_gizmo_plugin, tweak::tweak_plugin,
 };
 use bevy::prelude::*;
 use bevy_mod_outline::OutlinePlugin;
 use bevy_mod_raycast::DefaultRaycastingPlugin;
 use strum_macros::EnumIter;
 
-pub struct MousePickingPlugin;
-impl Plugin for MousePickingPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_plugins((
-            DefaultRaycastingPlugin,
-            OutlinePlugin,
-            TransformGizmoPlugin,
-            AreaGizmoPlugin,
-            SelectPlugin,
-            CreateDeletePlugin,
-            LinkUnlinkPlugin,
-            TweakPlugin,
-        ))
-        .init_resource::<EditMode>();
-    }
+pub fn mouse_picking_plugin(app: &mut App) {
+    app.add_plugins((
+        DefaultRaycastingPlugin,
+        OutlinePlugin,
+        transform_gizmo_plugin,
+        area_gizmo_plugin,
+        select_plugin,
+        create_delete_plugin,
+        link_unlink_plugin,
+        tweak_plugin,
+    ))
+    .init_resource::<EditMode>();
 }
 
 #[derive(Resource, Default, PartialEq, EnumIter, Debug)]

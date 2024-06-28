@@ -1,4 +1,5 @@
 use crate::ui::{
+    keybinds::ModifiersPressed,
     settings::AppSettings,
     viewport::{SetupViewportSet, ViewportImage, ViewportInfo},
 };
@@ -14,12 +15,9 @@ use transform_gizmo_bevy::GizmoCamera;
 
 use super::{CameraMode, UpdateCameraSet};
 
-pub struct FlyCamPlugin;
-impl Plugin for FlyCamPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Startup, camera_setup.after(SetupViewportSet))
-            .add_systems(Update, (fly_cam_look, fly_cam_move).in_set(UpdateCameraSet));
-    }
+pub fn fly_cam_plugin(app: &mut App) {
+    app.add_systems(Startup, camera_setup.after(SetupViewportSet))
+        .add_systems(Update, (fly_cam_look, fly_cam_move).in_set(UpdateCameraSet));
 }
 
 #[derive(Component)]
@@ -103,10 +101,7 @@ fn fly_cam_move(
     if !viewport_info.mouse_in_viewport || settings.camera.mode != CameraMode::Fly {
         return;
     }
-    // if we are pressing the control / cmd key, return
-    if (!cfg!(target_os = "macos") && (keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight)))
-        || (cfg!(target_os = "macos") && (keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight)))
-    {
+    if keys.control_or_super_pressed() {
         return;
     }
 

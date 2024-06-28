@@ -3,11 +3,8 @@ use bevy::prelude::*;
 
 use super::camera::Gizmo2dCam;
 
-pub struct NormalizePlugin;
-impl Plugin for NormalizePlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Last, update_normalize);
-    }
+pub fn normalize_plugin(app: &mut App) {
+    app.add_systems(Last, update_normalize);
 }
 
 /// Marker struct that marks entities with meshes that should be scaled relative to the camera.

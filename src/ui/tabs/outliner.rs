@@ -9,104 +9,107 @@ use crate::{
         kmp::{
             components::{
                 AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint, KmpCamera,
-                Object, RespawnPoint, StartPoint,
+                Object, RespawnPoint, StartPoint, TrackInfo,
             },
-            path::{CheckPathGroups, EnemyPathGroups, ItemPathGroups, PathGroup},
-            sections::{KmpEditMode, KmpSections},
+            path::{PathGroup, PathGroups},
+            sections::{KmpEditMode, KmpEditModeOptions, KmpSection, ToKmpSection},
         },
     },
 };
 use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::egui::{self, collapsing_header::CollapsingState, Align, Color32, Layout, Ui};
 
-/// collects an iterator into a vector in a concise way
-macro_rules! to_vec {
-    ($x:expr) => {
-        $x.iter().collect::<Vec<_>>()
-    };
-}
-
 #[derive(SystemParam)]
 pub struct ShowOutlinerTab<'w, 's> {
-    edit_mode: ResMut<'w, KmpEditMode>,
-    commands: Commands<'w, 's>,
-
-    start_points: Query<'w, 's, Entity, With<StartPoint>>,
-    enemy_paths: Query<'w, 's, Entity, With<EnemyPathPoint>>,
-    item_paths: Query<'w, 's, Entity, With<ItemPathPoint>>,
-    checkpoints: Query<'w, 's, Entity, With<Checkpoint>>,
-    respawn_points: Query<'w, 's, Entity, With<RespawnPoint>>,
-    objects: Query<'w, 's, Entity, With<Object>>,
-    areas: Query<'w, 's, Entity, With<AreaPoint>>,
-    cameras: Query<'w, 's, Entity, With<KmpCamera>>,
-    cannon_points: Query<'w, 's, Entity, With<CannonPoint>>,
-    battle_finish_points: Query<'w, 's, Entity, With<BattleFinishPoint>>,
-
-    enemy_groups: Option<ResMut<'w, EnemyPathGroups>>,
-    item_groups: Option<ResMut<'w, ItemPathGroups>>,
-    check_groups: Option<ResMut<'w, CheckPathGroups>>,
-
-    q_visibility: Query<'w, 's, &'static mut Visibility>,
-    q_selected: Query<'w, 's, Entity, With<Selected>>,
-    link_visibilities: Local<'s, bool>,
-    keys: Res<'w, ButtonInput<KeyCode>>,
-    kmp_visibility: ResMut<'w, KmpVisibility>,
+    p: ParamSet<
+        'w,
+        's,
+        (
+            ParamSet<
+                'w,
+                's,
+                (
+                    KmpOutliner<'w, 's, TrackInfo>,
+                    KmpOutliner<'w, 's, StartPoint>,
+                    KmpOutliner<'w, 's, EnemyPathPoint>,
+                    KmpOutliner<'w, 's, ItemPathPoint>,
+                    KmpOutliner<'w, 's, Checkpoint>,
+                ),
+            >,
+            ParamSet<
+                'w,
+                's,
+                (
+                    KmpOutliner<'w, 's, RespawnPoint>,
+                    KmpOutliner<'w, 's, Object>,
+                    KmpOutliner<'w, 's, AreaPoint>,
+                    KmpOutliner<'w, 's, KmpCamera>,
+                    KmpOutliner<'w, 's, CannonPoint>,
+                    KmpOutliner<'w, 's, BattleFinishPoint>,
+                ),
+            >,
+        ),
+    >,
 }
 impl UiSubSection for ShowOutlinerTab<'_, '_> {
     fn show(&mut self, ui: &mut Ui) {
-        *self.link_visibilities = true;
-        let enemy_pathgroups = &self.enemy_groups.as_ref().map(|e| e.0.clone());
-        let item_pathgroups = &self.item_groups.as_ref().map(|e| e.0.clone());
-        let check_pathgroups = &self.check_groups.as_ref().map(|e| e.0.clone());
-
-        use KmpSections::*;
-
-        self.show_track_info_header(ui);
-        self.show_point_outliner(ui, StartPoints, to_vec!(self.start_points));
-        self.show_path_outliner(ui, EnemyPaths, to_vec!(self.enemy_paths), enemy_pathgroups);
-        self.show_path_outliner(ui, ItemPaths, to_vec!(self.item_paths), item_pathgroups);
-        self.show_path_outliner(ui, Checkpoints, to_vec!(self.checkpoints), check_pathgroups);
-        self.show_point_outliner(ui, RespawnPoints, to_vec!(self.respawn_points));
-        self.show_point_outliner(ui, Objects, to_vec!(self.objects));
-        self.show_point_outliner(ui, Areas, to_vec!(self.areas));
-        self.show_point_outliner(ui, Cameras, to_vec!(self.cameras));
-        self.show_point_outliner(ui, CannonPoints, to_vec!(self.cannon_points));
-        self.show_point_outliner(ui, BattleFinishPoints, to_vec!(self.battle_finish_points));
+        self.p.p0().p0().show_track_info_header(ui);
+        self.p.p0().p1().show_point_outliner(ui);
+        self.p.p0().p2().show_path_outliner(ui);
+        self.p.p0().p3().show_path_outliner(ui);
+        self.p.p0().p4().show_path_outliner(ui);
+        self.p.p1().p0().show_point_outliner(ui);
+        self.p.p1().p1().show_point_outliner(ui);
+        self.p.p1().p2().show_point_outliner(ui);
+        self.p.p1().p3().show_point_outliner(ui);
+        self.p.p1().p4().show_point_outliner(ui);
+        self.p.p1().p5().show_point_outliner(ui);
     }
 }
-impl ShowOutlinerTab<'_, '_> {
+
+#[derive(SystemParam)]
+pub struct KmpOutliner<'w, 's, T: Component + ToKmpSection> {
+    q: Query<'w, 's, Entity, With<StartPoint>>,
+    path_groups: Option<Res<'w, PathGroups<T>>>,
+    mode: Option<Res<'w, KmpEditMode<T>>>,
+    kmp_visibility: ResMut<'w, KmpVisibility>,
+    mode_opts: KmpEditModeOptions<'w, 's>,
+    q_visibility: Query<'w, 's, &'static mut Visibility>,
+    keys: Res<'w, ButtonInput<KeyCode>>,
+    q_selected: Query<'w, 's, Entity, With<Selected>>,
+    commands: Commands<'w, 's>,
+}
+impl<T: Component + ToKmpSection> KmpOutliner<'_, '_, T> {
     const ICON_SIZE: f32 = 14.;
-    fn show_point_outliner(&mut self, ui: &mut Ui, selected: KmpSections, entities: impl IntoIterator<Item = Entity>) {
-        self.show_header(ui, selected, entities, false);
+
+    fn show_point_outliner(&mut self, ui: &mut Ui) {
+        self.show_header(ui, false);
     }
-    fn show_path_outliner(
-        &mut self,
-        ui: &mut Ui,
-        selected: KmpSections,
-        entities: impl IntoIterator<Item = Entity>,
-        group_info: &Option<Vec<PathGroup>>,
-    ) {
+    fn show_path_outliner(&mut self, ui: &mut Ui) {
         CollapsingState::load_with_default_open(ui.ctx(), ui.next_auto_id(), false)
             .show_header(ui, |ui| {
-                self.show_header(ui, selected, entities, true);
+                self.show_header(ui, true);
             })
             .body(|ui| {
-                if let Some(groups) = group_info {
-                    for (i, pathgroup) in groups.iter().enumerate() {
-                        self.show_path(ui, i, pathgroup, Icons::SECTION_COLORS[selected as usize]);
+                let mut paths_to_show = Vec::new();
+                if let Some(groups) = &self.path_groups {
+                    for (i, pathgroup) in groups.groups.iter().enumerate() {
+                        paths_to_show.push((i, pathgroup.clone()));
                     }
+                }
+                for (i, pathgroup) in paths_to_show {
+                    self.show_path(
+                        ui,
+                        i,
+                        pathgroup.clone(),
+                        Icons::SECTION_COLORS[T::to_kmp_section() as usize],
+                    );
                 }
             });
     }
-    fn show_header(
-        &mut self,
-        ui: &mut Ui,
-        selected: KmpSections,
-        entities: impl IntoIterator<Item = Entity>,
-        path: bool,
-    ) {
-        let entities: Vec<_> = entities.into_iter().collect();
-        let mut current = self.edit_mode.clone();
+    fn show_header(&mut self, ui: &mut Ui, path: bool) {
+        let entities: Vec<_> = self.q.iter().collect();
+        let cur_mode = self.mode.is_some();
         let mut visibilities = self.kmp_visibility.clone();
         ui.horizontal(|ui| {
             if !path {
@@ -119,15 +122,12 @@ impl ShowOutlinerTab<'_, '_> {
                 } else {
                     Icons::cube_group(ui.ctx(), Self::ICON_SIZE)
                 }
-                .tint(Icons::SECTION_COLORS[selected as usize]),
+                .tint(Icons::SECTION_COLORS[T::to_kmp_section() as usize]),
             );
-            if ui
-                .selectable_value(&mut current.0, selected, selected.to_string())
-                .clicked()
-                && *self.link_visibilities
-            {
+            if ui.selectable_label(cur_mode, T::to_kmp_section().to_string()).clicked() {
                 visibilities.0 = [false; 10];
-                visibilities.0[selected as usize] = true;
+                visibilities.0[T::to_kmp_section() as usize] = true;
+                self.mode_opts.change_mode::<T>();
             }
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -139,36 +139,13 @@ impl ShowOutlinerTab<'_, '_> {
                     false
                 };
                 if view_icon_btn(ui, &mut all_visible).changed() {
-                    visibilities.0[selected as usize] = all_visible;
+                    visibilities.0[T::to_kmp_section() as usize] = all_visible;
                 }
             });
         });
-        self.edit_mode.set_if_neq(current);
         self.kmp_visibility.set_if_neq(visibilities);
     }
-    fn show_track_info_header(&mut self, ui: &mut Ui) {
-        let mut current = self.edit_mode.clone();
-        let mut visibilities = self.kmp_visibility.clone();
-        ui.horizontal(|ui| {
-            ui.add_space(18.);
-
-            ui.add_sized(
-                [Self::ICON_SIZE, Self::ICON_SIZE],
-                Icons::track_info(ui.ctx(), Self::ICON_SIZE)
-                    .tint(Icons::SECTION_COLORS[KmpSections::TrackInfo as usize]),
-            );
-            if ui
-                .selectable_value(&mut current.0, KmpSections::TrackInfo, "Track Info")
-                .clicked()
-                && *self.link_visibilities
-            {
-                visibilities.0 = [false; 10];
-            }
-        });
-        self.edit_mode.set_if_neq(current);
-        self.kmp_visibility.set_if_neq(visibilities);
-    }
-    fn show_path(&mut self, ui: &mut Ui, i: usize, pathgroup: &PathGroup, color: Color32) {
+    fn show_path(&mut self, ui: &mut Ui, i: usize, pathgroup: PathGroup, color: Color32) {
         let mut all_visible = if !pathgroup.path.is_empty() {
             pathgroup
                 .path
@@ -218,5 +195,21 @@ impl ShowOutlinerTab<'_, '_> {
                 }
             }
         });
+    }
+    fn show_track_info_header(&mut self, ui: &mut Ui) {
+        let mut visibilities = self.kmp_visibility.clone();
+        ui.horizontal(|ui| {
+            ui.add_space(18.);
+            ui.add_sized(
+                [Self::ICON_SIZE, Self::ICON_SIZE],
+                Icons::track_info(ui.ctx(), Self::ICON_SIZE)
+                    .tint(Icons::SECTION_COLORS[KmpSection::TrackInfo as usize]),
+            );
+            if ui.selectable_label(self.mode.is_some(), "Track Info").clicked() {
+                visibilities.0 = [false; 10];
+                self.mode_opts.change_mode::<TrackInfo>();
+            }
+        });
+        self.kmp_visibility.set_if_neq(visibilities);
     }
 }

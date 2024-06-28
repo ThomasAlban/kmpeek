@@ -10,15 +10,11 @@ use bevy::{
 use serde::{Deserialize, Serialize};
 use std::{ffi::OsStr, fs::File};
 
-pub struct KclPlugin;
-
-impl Plugin for KclPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_event::<KclModelUpdated>().add_systems(
-            Update,
-            (spawn_model.run_if(on_event::<KclFileSelected>()), update_kcl_model),
-        );
-    }
+pub fn kcl_plugin(app: &mut App) {
+    app.add_event::<KclModelUpdated>().add_systems(
+        Update,
+        (spawn_model.run_if(on_event::<KclFileSelected>()), update_kcl_model),
+    );
 }
 
 #[derive(Event, Default)]

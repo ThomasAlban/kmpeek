@@ -12,12 +12,9 @@ use bevy::{
 use serde::{Deserialize, Serialize};
 use transform_gizmo_bevy::GizmoCamera;
 
-pub struct TopDownCamPlugin;
-impl Plugin for TopDownCamPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Startup, camera_setup.after(SetupViewportSet))
-            .add_systems(Update, topdown_cam.in_set(UpdateCameraSet));
-    }
+pub fn topdown_cam_plugin(app: &mut App) {
+    app.add_systems(Startup, camera_setup.after(SetupViewportSet))
+        .add_systems(Update, topdown_cam.in_set(UpdateCameraSet));
 }
 
 #[derive(Component)]

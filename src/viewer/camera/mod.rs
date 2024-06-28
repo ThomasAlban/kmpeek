@@ -1,4 +1,4 @@
-use self::{fly::FlyCamPlugin, gizmo_2d::Gizmo2dCamPlugin, orbit::OrbitCamPlugin, topdown::TopDownCamPlugin};
+use self::{fly::fly_cam_plugin, gizmo_2d::gizmo_2d_cam_plugin, orbit::orbit_cam_plugin, topdown::topdown_cam_plugin};
 pub use self::{
     fly::{FlyCam, FlySettings},
     gizmo_2d::Gizmo2dCam,
@@ -15,15 +15,17 @@ mod gizmo_2d;
 mod orbit;
 mod topdown;
 
-pub struct CameraPlugin;
-impl Plugin for CameraPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_plugins((FlyCamPlugin, OrbitCamPlugin, TopDownCamPlugin, Gizmo2dCamPlugin))
-            .configure_sets(Update, UpdateCameraSet.before(UpdateUiSet))
-            .add_event::<CameraModeChanged>()
-            .add_systems(Startup, add_ambient_light)
-            .add_systems(Update, (cursor_grab, update_active_camera));
-    }
+pub fn camera_plugin(app: &mut App) {
+    app.add_plugins((
+        fly_cam_plugin,
+        orbit_cam_plugin,
+        topdown_cam_plugin,
+        gizmo_2d_cam_plugin,
+    ))
+    .configure_sets(Update, UpdateCameraSet.before(UpdateUiSet))
+    .add_event::<CameraModeChanged>()
+    .add_systems(Startup, add_ambient_light)
+    .add_systems(Update, (cursor_grab, update_active_camera));
 }
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]

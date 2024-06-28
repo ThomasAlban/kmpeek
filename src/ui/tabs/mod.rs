@@ -16,12 +16,10 @@ use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumIter};
 
-pub struct DockTreePlugin;
-impl Plugin for DockTreePlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_docktree);
-    }
+pub fn docktree_plugin(app: &mut App) {
+    app.add_systems(Startup, setup_docktree);
 }
+
 fn setup_docktree(mut commands: Commands, mut pkv: ResMut<PkvStore>) {
     // get the docktree if it exists, if not, set it to default
     let tree = match pkv.get::<DockTree>("tree") {

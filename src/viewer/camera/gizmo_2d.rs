@@ -5,11 +5,8 @@ use bevy::{
 
 use crate::ui::viewport::{SetupViewportSet, ViewportImage};
 
-pub struct Gizmo2dCamPlugin;
-impl Plugin for Gizmo2dCamPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Startup, camera_setup.after(SetupViewportSet));
-    }
+pub fn gizmo_2d_cam_plugin(app: &mut App) {
+    app.add_systems(Startup, camera_setup.after(SetupViewportSet));
 }
 
 // this is a camera for rendering gizmos on top of the 3d scene

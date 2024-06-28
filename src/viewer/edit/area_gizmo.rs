@@ -21,21 +21,18 @@ use bevy_vector_shapes::{
 use std::f32::consts::{PI, TAU};
 use transform_gizmo_bevy::GizmoTarget;
 
-pub struct AreaGizmoPlugin;
-impl Plugin for AreaGizmoPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_plugins(Shape2dPlugin {
-            base_config: ShapeConfig {
-                // render shapes to the 2d gizmo camera
-                render_layers: Some(RenderLayers::layer(1)),
-                ..ShapeConfig::default_2d()
-            },
-        })
-        .init_resource::<AreaGizmoOptions>()
-        .add_systems(Update, draw_area_bounds)
-        // drawing handles after TransformPropagate fixes an issue where they would lag behind the camera position for 1 frame
-        .add_systems(PostUpdate, draw_area_handles.after(TransformSystem::TransformPropagate));
-    }
+pub fn area_gizmo_plugin(app: &mut App) {
+    app.add_plugins(Shape2dPlugin {
+        base_config: ShapeConfig {
+            // render shapes to the 2d gizmo camera
+            render_layers: Some(RenderLayers::layer(1)),
+            ..ShapeConfig::default_2d()
+        },
+    })
+    .init_resource::<AreaGizmoOptions>()
+    .add_systems(Update, draw_area_bounds)
+    // drawing handles after TransformPropagate fixes an issue where they would lag behind the camera position for 1 frame
+    .add_systems(PostUpdate, draw_area_handles.after(TransformSystem::TransformPropagate));
 }
 
 #[derive(Resource, Default)]

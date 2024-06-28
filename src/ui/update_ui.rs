@@ -6,14 +6,11 @@ use std::path::PathBuf;
 #[derive(SystemSet, Hash, PartialEq, Eq, Clone, Debug)]
 pub struct UpdateUiSet;
 
-pub struct UpdateUIPlugin;
-impl Plugin for UpdateUIPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_event::<KmpFileSelected>()
-            .add_event::<KclFileSelected>()
-            .add_systems(Startup, setup_ui_images)
-            .add_systems(Update, update_ui.in_set(UpdateUiSet).run_if(egui_has_primary_context));
-    }
+pub fn update_ui_plugin(app: &mut App) {
+    app.add_event::<KmpFileSelected>()
+        .add_event::<KclFileSelected>()
+        .add_systems(Startup, setup_ui_images)
+        .add_systems(Update, update_ui.in_set(UpdateUiSet).run_if(egui_has_primary_context));
 }
 
 fn egui_has_primary_context(query: Query<(), (With<EguiContext>, With<PrimaryWindow>)>) -> bool {

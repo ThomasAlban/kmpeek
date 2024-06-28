@@ -15,22 +15,19 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub struct UiStatePlugin;
-impl Plugin for UiStatePlugin {
-    fn build(&self, app: &mut App) {
-        app.insert_resource(PkvStore::new("ThomasAlban", "kmpeek"))
-            .init_resource::<CustomiseKclOpen>()
-            .init_resource::<CameraSettingsOpen>()
-            .init_resource::<FileDialogRes>()
-            .init_resource::<KmpFilePath>()
-            .init_resource::<ShowModesCollapsed>()
-            .init_resource::<KmpVisibility>()
-            .add_event::<SaveDockTree>()
-            .add_systems(Update, save_docktree.run_if(on_event::<SaveDockTree>()))
-            .add_systems(Update, reset_docktree.run_if(on_event::<ResetDockTree>()))
-            .add_event::<ResetDockTree>()
-            .add_systems(Startup, check_cmd_args.after(SetupAppSettingsSet));
-    }
+pub fn ui_state_plugin(app: &mut App) {
+    app.insert_resource(PkvStore::new("ThomasAlban", "kmpeek"))
+        .init_resource::<CustomiseKclOpen>()
+        .init_resource::<CameraSettingsOpen>()
+        .init_resource::<FileDialogRes>()
+        .init_resource::<KmpFilePath>()
+        .init_resource::<ShowModesCollapsed>()
+        .init_resource::<KmpVisibility>()
+        .add_event::<SaveDockTree>()
+        .add_systems(Update, save_docktree.run_if(on_event::<SaveDockTree>()))
+        .add_systems(Update, reset_docktree.run_if(on_event::<ResetDockTree>()))
+        .add_event::<ResetDockTree>()
+        .add_systems(Startup, check_cmd_args.after(SetupAppSettingsSet));
 }
 
 #[derive(Event, Default)]

@@ -7,16 +7,13 @@ use bevy_egui::{egui::TextureId, EguiUserTextures};
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 pub struct SetupViewportSet;
 
-pub struct ViewportPlugin;
-impl Plugin for ViewportPlugin {
-    fn build(&self, app: &mut App) {
-        app.init_resource::<ViewportInfo>().add_systems(
-            Startup,
-            // this makes sure all the 'Commands' are completed before moving onto other startup systems
-            // so that other startup systems can make use of the Viewport image handle
-            (setup_viewport, apply_deferred).chain().in_set(SetupViewportSet),
-        );
-    }
+pub fn viewport_plugin(app: &mut App) {
+    app.init_resource::<ViewportInfo>().add_systems(
+        Startup,
+        // this makes sure all the 'Commands' are completed before moving onto other startup systems
+        // so that other startup systems can make use of the Viewport image handle
+        (setup_viewport, apply_deferred).chain().in_set(SetupViewportSet),
+    );
 }
 
 // stores the image which the camera renders to, so that we can display a viewport inside a tab
