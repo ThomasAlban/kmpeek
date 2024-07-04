@@ -1,6 +1,10 @@
 use super::UiSubSection;
 use crate::{
-    ui::util::{combobox_enum, drag_vec3, euler_to_quat, quat_to_euler, DragSpeed},
+    ui::{
+        keybinds::ModifiersPressed,
+        util::{combobox_enum, drag_vec3, euler_to_quat, quat_to_euler, DragSpeed},
+        viewport::ViewportInfo,
+    },
     viewer::{
         edit::{create_delete::CreatePoint, select::Selected},
         kmp::{
@@ -14,7 +18,7 @@ use crate::{
     },
 };
 use bevy::{ecs::system::SystemParam, prelude::*};
-use bevy_egui::egui::{self, emath::Numeric, Checkbox, Direction, DragValue, Layout, Response, Ui};
+use bevy_egui::egui::{self, emath::Numeric, Checkbox, Direction, DragValue, Layout, Response, Sense, Ui};
 use egui_extras::{Column, TableBuilder, TableRow};
 
 type KmpTableQuery<'w, 's, C> = Query<
@@ -32,8 +36,10 @@ type KmpTableQuery<'w, 's, C> = Query<
 #[derive(SystemParam)]
 pub struct ShowTableTab<'w, 's> {
     ev_create_pt: EventWriter<'w, CreatePoint>,
+    // file_dialog_manager: FileDialogManager<'w>,
     track_info_mode: Option<Res<'w, KmpEditMode<TrackInfo>>>,
     mode_options: KmpEditModeOptions<'w, 's>,
+    viewport_info: ResMut<'w, ViewportInfo>,
     q: ParamSet<
         'w,
         's,
@@ -72,6 +78,13 @@ impl UiSubSection for ShowTableTab<'_, '_> {
                 if ui.button("+").clicked() {
                     self.ev_create_pt.send_default();
                 }
+                // if ui.button("Export CSV").clicked() {
+                //     let file_name = format!("{}.csv", self.mode_options.get_kmp_section());
+                //     self.file_dialog_manager.export_csv(file_name);
+                // }
+                // if ui.button("Import CSV (will overwrite data)").clicked() {
+                //     self.file_dialog_manager.import_csv();
+                // }
             });
         }
 
@@ -85,6 +98,8 @@ impl UiSubSection for ShowTableTab<'_, '_> {
         self.q.p1().p2().show(ui);
         self.q.p1().p3().show(ui);
         self.q.p1().p4().show(ui);
+
+        self.viewport_info.mouse_in_table = ui.ui_contains_pointer();
     }
 }
 
@@ -257,7 +272,9 @@ impl ShowKmpTableTrait for BattleFinishPoint {
 struct ShowKmpTable<'w, 's, T: Component + ToKmpSection> {
     mode: Option<Res<'w, KmpEditMode<T>>>,
     q: KmpTableQuery<'w, 's, T>,
+    q_entities: Query<'w, 's, Entity, With<T>>,
     commands: Commands<'w, 's>,
+    keys: Res<'w, ButtonInput<KeyCode>>,
 }
 impl<T: Component + ToKmpSection + PartialEq + Clone + ShowKmpTableTrait> ShowKmpTable<'_, '_, T> {
     fn show(&mut self, ui: &mut Ui) {
@@ -268,6 +285,7 @@ impl<T: Component + ToKmpSection + PartialEq + Clone + ShowKmpTableTrait> ShowKm
             .striped(true)
             .vscroll(false)
             .cell_layout(Layout::centered_and_justified(egui::Direction::TopDown))
+            .sense(Sense::click())
             .column(Column::exact(25.)) // id
             .column(Column::exact(50.)) // selected
             .column(Column::auto().resizable(true)); // translation
@@ -306,6 +324,7 @@ impl<T: Component + ToKmpSection + PartialEq + Clone + ShowKmpTableTrait> ShowKm
         table.body(|mut body| {
             let mut items: Vec<_> = self.q.iter_mut().collect();
             items.sort_by(|x, y| x.4.cmp(y.4));
+
             for (mut t, mut transform, e, is_selected, order_id) in items {
                 body.row(20., |mut row| {
                     row.set_selected(is_selected);
@@ -314,10 +333,10 @@ impl<T: Component + ToKmpSection + PartialEq + Clone + ShowKmpTableTrait> ShowKm
                     let mut select_checkbox = is_selected;
                     let mut select_checkbox_changed = false;
                     row.col(|ui| {
-                        ui.label(order_id.to_string());
+                        ui.add(egui::Label::new(order_id.to_string()).selectable(false));
                     });
                     row.col(|ui| {
-                        select_checkbox_changed = ui.checkbox(&mut select_checkbox, "").changed();
+                        select_checkbox_changed = ui.add(Checkbox::without_text(&mut select_checkbox)).changed();
                     });
 
                     let mut t_cp = t.clone();
@@ -377,6 +396,14 @@ impl<T: Component + ToKmpSection + PartialEq + Clone + ShowKmpTableTrait> ShowKm
                         } else {
                             self.commands.entity(e).remove::<Selected>();
                         }
+                    }
+                    if row.response().clicked() {
+                        if !self.keys.shift_pressed() {
+                            for e in self.q_entities.iter() {
+                                self.commands.entity(e).remove::<Selected>();
+                            }
+                        }
+                        self.commands.entity(e).insert(Selected);
                     }
                 });
             }

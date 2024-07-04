@@ -1,6 +1,6 @@
 use super::{file_dialog::ShowFileDialog, menu_bar::ShowMenuBar, tabs::ShowDockArea};
 use bevy::{prelude::*, window::PrimaryWindow};
-use bevy_egui::{egui::TextureId, EguiContext, EguiContexts};
+use bevy_egui::{EguiContext, EguiContexts};
 use std::path::PathBuf;
 
 #[derive(SystemSet, Hash, PartialEq, Eq, Clone, Debug)]
@@ -26,11 +26,6 @@ pub struct KmpFileSelected(pub PathBuf);
 
 #[derive(Event)]
 pub struct KclFileSelected(pub PathBuf);
-
-#[derive(Resource)]
-pub struct UiImages {
-    pub translate: TextureId,
-}
 
 fn setup_ui_images(mut contexts: EguiContexts) {
     egui_extras::install_image_loaders(contexts.ctx_mut());

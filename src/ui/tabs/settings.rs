@@ -1,6 +1,6 @@
 use super::UiSubSection;
 use crate::{
-    ui::{file_dialog::ShowFileDialog, settings::AppSettings, ui_state::FileDialogRes},
+    ui::{file_dialog::FileDialogManager, settings::AppSettings},
     util::kcl_file::KclFlag,
     viewer::{
         camera::{CameraSettings, FlyCam, FlySettings, OrbitCam, OrbitSettings, TopDownCam, TopDownSettings},
@@ -30,7 +30,7 @@ pub struct ShowSettingsTab<'w, 's> {
         >,
     ),
     pkv: ResMut<'w, PkvStore>,
-    file_dialog_res: ResMut<'w, FileDialogRes>,
+    file_dialog: FileDialogManager<'w>,
 }
 impl UiSubSection for ShowSettingsTab<'_, '_> {
     fn show(&mut self, ui: &mut egui::Ui) {
@@ -274,11 +274,11 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
 
         ui.horizontal(|ui| {
             if ui.button("Export Settings").clicked() {
-                ShowFileDialog::export_settings(&mut self.file_dialog_res);
+                self.file_dialog.export_settings();
             }
 
             if ui.button("Import Settings").clicked() {
-                ShowFileDialog::import_settings(&mut self.file_dialog_res);
+                self.file_dialog.import_settings();
             }
         });
         ui.horizontal(|ui| {

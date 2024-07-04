@@ -1,13 +1,13 @@
 use crate::viewer::edit::EditMode;
 
-use super::{file_dialog::ShowFileDialog, ui_state::FileDialogRes};
+use super::file_dialog::FileDialogManager;
 use bevy::prelude::*;
 
 pub fn keybinds_plugin(app: &mut App) {
     app.add_systems(Update, keybinds);
 }
 
-fn keybinds(keys: Res<ButtonInput<KeyCode>>, mut file_dialog: ResMut<FileDialogRes>, mut edit_mode: ResMut<EditMode>) {
+fn keybinds(keys: Res<ButtonInput<KeyCode>>, mut file_dialog: FileDialogManager, mut edit_mode: ResMut<EditMode>) {
     if keys.keybind_pressed([Modifier::Ctrl], [KeyCode::KeyZ]) {
         // undo
     }
@@ -19,10 +19,10 @@ fn keybinds(keys: Res<ButtonInput<KeyCode>>, mut file_dialog: ResMut<FileDialogR
 
     if keys.keybind_pressed([Modifier::Ctrl], [KeyCode::KeyO]) {
         // open or close file dialog
-        if file_dialog.0.is_none() {
-            ShowFileDialog::open_kmp_kcl(&mut file_dialog);
+        if file_dialog.is_open() {
+            file_dialog.close();
         } else {
-            ShowFileDialog::close(&mut file_dialog);
+            file_dialog.open_kmp_kcl();
         }
     }
 

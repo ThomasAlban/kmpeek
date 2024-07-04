@@ -1,7 +1,7 @@
 use super::{
-    file_dialog::ShowFileDialog,
+    file_dialog::FileDialogManager,
     tabs::{DockTree, Tab},
-    ui_state::{FileDialogRes, ResetDockTree, SaveDockTree},
+    ui_state::{ResetDockTree, SaveDockTree},
     update_ui::UiSection,
 };
 use bevy::ecs::system::SystemParam;
@@ -16,7 +16,7 @@ use strum::IntoEnumIterator;
 pub struct ShowMenuBar<'w, 's> {
     contexts: EguiContexts<'w, 's>,
     tree: ResMut<'w, DockTree>,
-    file_dialog: ResMut<'w, FileDialogRes>,
+    file_dialog: FileDialogManager<'w>,
     ev_save_docktree: EventWriter<'w, SaveDockTree>,
     ev_reset_docktree: EventWriter<'w, ResetDockTree>,
 }
@@ -35,7 +35,7 @@ impl UiSection for ShowMenuBar<'_, '_> {
                         .add(egui::Button::new("Open KMP/KCL").shortcut_text(format!("{sc_btn}+O")))
                         .clicked()
                     {
-                        ShowFileDialog::open_kmp_kcl(&mut self.file_dialog);
+                        self.file_dialog.open_kmp_kcl();
                         ui.close_menu();
                     }
                     if ui

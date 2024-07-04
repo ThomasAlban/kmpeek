@@ -203,6 +203,22 @@ pub struct KmpDataGroup<T> {
     pub next_groups: Vec<u8>,
 }
 
+pub fn is_enemy_point<T: 'static>() -> bool {
+    TypeId::of::<T>() == TypeId::of::<EnemyPathPoint>()
+}
+pub fn is_item_point<T: 'static>() -> bool {
+    TypeId::of::<T>() == TypeId::of::<ItemPathPoint>()
+}
+pub fn is_checkpoint<T: 'static>() -> bool {
+    TypeId::of::<T>() == TypeId::of::<Checkpoint>()
+}
+pub fn is_checkpoint_right<T: 'static>() -> bool {
+    TypeId::of::<T>() == TypeId::of::<CheckpointRight>()
+}
+pub fn is_path<T: 'static>() -> bool {
+    is_enemy_point::<T>() || is_item_point::<T>() || is_checkpoint::<T>()
+}
+
 pub struct PathPointSpawner<T> {
     position: Vec3,
     rotation: Quat,
@@ -448,14 +464,13 @@ fn spawn_node_link<T: Component + ToPathType + Clone>(
     visible: bool,
 ) {
     let meshes = world.resource::<KmpMeshes>().clone();
-    let (line, arrow) =
-        if TypeId::of::<T>() == TypeId::of::<Checkpoint>() || TypeId::of::<T>() == TypeId::of::<CheckpointRight>() {
-            let materials = world.resource::<CheckpointMaterials>().clone();
-            (materials.line, materials.arrow)
-        } else {
-            let materials = world.resource::<PathMaterials<T>>().clone();
-            (materials.line, materials.arrow)
-        };
+    let (line, arrow) = if is_checkpoint::<T>() || is_checkpoint_right::<T>() {
+        let materials = world.resource::<CheckpointMaterials>().clone();
+        (materials.line, materials.arrow)
+    } else {
+        let materials = world.resource::<PathMaterials<T>>().clone();
+        (materials.line, materials.arrow)
+    };
 
     let prev_pos = world.get::<Transform>(prev_node).unwrap().translation;
     let next_pos = world.get::<Transform>(next_node).unwrap().translation;
@@ -520,7 +535,7 @@ pub fn update_node_links<T: Component + ToPathType + Clone>(
     q_line: Query<&KmpPathNodeLinkLine>,
     mut commands: Commands,
 ) {
-    if mode.is_none() && !(TypeId::of::<T>() == TypeId::of::<CheckpointRight>() && cp_mode.is_some()) {
+    if mode.is_none() && !(is_checkpoint_right::<T>() && cp_mode.is_some()) {
         return;
     }
 

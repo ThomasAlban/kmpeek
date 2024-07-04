@@ -16,35 +16,62 @@ use self::{
     point::{spawn_point_section, AddRespawnPointPreview},
 };
 use crate::{
-    ui::{settings::SetupAppSettingsSet, ui_state::KmpVisibility, update_ui::KmpFileSelected},
+    ui::{
+        file_dialog::{DialogType, FileDialogResult},
+        settings::{AppSettings, SetupAppSettingsSet},
+        ui_state::{KmpFilePath, KmpVisibility},
+        update_ui::{KclFileSelected, KmpFileSelected},
+    },
     util::{kmp_file::*, BoolToVisibility},
     viewer::kmp::path::PathType,
 };
 use bevy::prelude::*;
 use binrw::BinRead;
-use csv::csv_plugin;
 use ordering::ordering_plugin;
 use path::path_plugin;
 use sections::{section_plugin, KmpSection};
 use std::{ffi::OsStr, fs::File, sync::Arc};
 
 pub fn kmp_plugin(app: &mut App) {
-    app.add_plugins((
-        checkpoint_plugin,
-        path_plugin,
-        ordering_plugin,
-        csv_plugin,
-        section_plugin,
-    ))
-    .add_event::<RecalcPaths>()
-    .add_systems(Startup, setup_kmp_meshes_materials.after(SetupAppSettingsSet))
-    .add_systems(
-        Update,
-        (
-            spawn_model.run_if(on_event::<KmpFileSelected>()),
-            update_visible.run_if(resource_changed::<KmpVisibility>),
-        ),
-    );
+    app.add_plugins((checkpoint_plugin, path_plugin, ordering_plugin, section_plugin))
+        .add_event::<RecalcPaths>()
+        .add_systems(Startup, setup_kmp_meshes_materials.after(SetupAppSettingsSet))
+        .add_systems(
+            Update,
+            (
+                spawn_model.run_if(on_event::<KmpFileSelected>()),
+                update_visible.run_if(resource_changed::<KmpVisibility>),
+                open_kmp_kcl,
+            ),
+        );
+}
+
+pub fn open_kmp_kcl(
+    mut ev_file_dialog: EventReader<FileDialogResult>,
+    mut kmp_file_path: ResMut<KmpFilePath>,
+    mut ev_kmp_file_selected: EventWriter<KmpFileSelected>,
+    mut ev_kcl_file_selected: EventWriter<KclFileSelected>,
+    settings: ResMut<AppSettings>,
+) {
+    for FileDialogResult { path, dialog_type } in ev_file_dialog.read() {
+        if let DialogType::OpenKmpKcl = dialog_type {
+            if let Some(file_ext) = path.extension() {
+                if file_ext == "kmp" {
+                    kmp_file_path.0 = Some(path.into());
+                    ev_kmp_file_selected.send(KmpFileSelected(path.into()));
+                    if settings.open_course_kcl_in_dir {
+                        let mut course_kcl_path = path.to_owned();
+                        course_kcl_path.set_file_name("course.kcl");
+                        if course_kcl_path.exists() {
+                            ev_kcl_file_selected.send(KclFileSelected(course_kcl_path));
+                        }
+                    }
+                } else if file_ext == "kcl" {
+                    ev_kcl_file_selected.send(KclFileSelected(path.into()));
+                }
+            }
+        }
+    }
 }
 
 pub fn spawn_model(

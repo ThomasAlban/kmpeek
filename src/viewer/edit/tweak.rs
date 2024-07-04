@@ -20,12 +20,6 @@ pub enum SnapTo {
     CheckpointPlane,
 }
 
-#[derive(Component)]
-pub struct SnapToKcl;
-
-#[derive(Component)]
-pub struct SnapToCheckpointPlane;
-
 pub fn tweak_plugin(app: &mut App) {
     app.add_systems(Update, tweak_interaction.after(SelectSet));
 }

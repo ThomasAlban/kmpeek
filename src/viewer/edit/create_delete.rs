@@ -1,5 +1,3 @@
-use std::{any::TypeId, collections::HashSet};
-
 use super::select::{SelectSet, Selected};
 use crate::{
     ui::viewport::ViewportInfo,
@@ -11,16 +9,16 @@ use crate::{
             checkpoints::{CheckpointHeight, GetSelectedCheckpoints},
             components::{
                 AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, CheckpointLeft, CheckpointRight, EnemyPathPoint,
-                ItemPathPoint, KmpCamera, KmpSelectablePoint, Object, RespawnPoint, SpawnNewPath, SpawnNewPoint,
-                StartPoint, TrackInfo,
+                ItemPathPoint, KmpCamera, KmpSelectablePoint, Object, RespawnPoint, Spawn, Spawner, StartPoint,
+                TrackInfo,
             },
             ordering::RefreshOrdering,
-            path::{KmpPathNode, RecalcPaths},
+            path::{is_checkpoint, KmpPathNode, RecalcPaths},
             sections::{KmpEditMode, ToKmpSection},
         },
     },
 };
-use bevy::prelude::*;
+use bevy::{prelude::*, utils::HashSet};
 use bevy_mod_raycast::prelude::*;
 
 pub fn create_delete_plugin(app: &mut App) {
@@ -58,7 +56,7 @@ pub struct CreatePoint {
 pub struct JustCreatedPoint(pub Entity);
 
 // responsible for consuming 'create point' events and creating the relevant point depending on what edit mode we are in
-fn create_point<T: Component + SpawnNewPoint + ToKmpSection>(
+fn create_point<T: Component + ToKmpSection + Spawn + Default + Clone>(
     mut commands: Commands,
     mode: Option<Res<KmpEditMode<T>>>,
     mut ev_create_point: EventReader<CreatePoint>,
@@ -71,7 +69,7 @@ fn create_point<T: Component + SpawnNewPoint + ToKmpSection>(
         return;
     };
     let pos = create_pt.position;
-    let entity = T::spawn(&mut commands, pos);
+    let entity = Spawner::<T>::default().pos(pos).spawn_command(&mut commands);
     // we send this event which is recieved by the Select system, so it knows to add the Selected component
     // we can't add it now, because then in the select system it will just be deselected again
     // the select system has to run after this so that we know which previous points we have to link to this one
@@ -79,7 +77,7 @@ fn create_point<T: Component + SpawnNewPoint + ToKmpSection>(
     ev_just_created_point.send(JustCreatedPoint(entity));
 }
 
-fn create_path<T: Component + ToKmpSection + SpawnNewPath>(
+fn create_path<T: Component + ToKmpSection + Spawn + Default + Clone>(
     mut commands: Commands,
     mode: Option<Res<KmpEditMode<T>>>,
     q_selected_pt: Query<Entity, (With<T>, With<Selected>)>,
@@ -95,13 +93,16 @@ fn create_path<T: Component + ToKmpSection + SpawnNewPath>(
         return;
     };
     let pos = create_pt.position;
-    let prev_nodes: HashSet<_> = if TypeId::of::<T>() == TypeId::of::<Checkpoint>() {
+    let prev_nodes: HashSet<_> = if is_checkpoint::<T>() {
         q_cp.get().map(|x| x.0).collect()
     } else {
         q_selected_pt.iter().collect()
     };
     ev_recalc_paths.send(RecalcPaths::all());
-    let entity = T::spawn(&mut commands, pos, prev_nodes);
+    let entity = Spawner::<T>::default()
+        .pos(pos)
+        .prev_nodes(prev_nodes)
+        .spawn_command(&mut commands);
     ev_just_created_point.send(JustCreatedPoint(entity));
 }
 
@@ -170,9 +171,10 @@ fn delete_point(
     mut ev_recalc_paths: EventWriter<RecalcPaths>,
     mut ev_refresh_ordering: EventWriter<RefreshOrdering>,
 ) {
-    if !viewport_info.mouse_in_viewport
-        || (!keys.just_pressed(KeyCode::Backspace) && !keys.just_pressed(KeyCode::Delete))
-    {
+    if !viewport_info.mouse_in_viewport && !viewport_info.mouse_in_table {
+        return;
+    }
+    if !keys.just_pressed(KeyCode::Backspace) && !keys.just_pressed(KeyCode::Delete) {
         return;
     }
     // keep track of which entities we have despawned so we don't despawn any twice

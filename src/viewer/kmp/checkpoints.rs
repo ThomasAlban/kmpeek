@@ -91,12 +91,12 @@ impl CheckpointSpawner {
             right_e: None,
         }
     }
-    pub fn single_3d_pos(mut self, pos: Vec3) -> Self {
-        self.left_pos = pos.xz();
-        self.right_pos = pos.xz();
-        self.height = pos.y;
-        self
-    }
+    // pub fn single_3d_pos(mut self, pos: Vec3) -> Self {
+    //     self.left_pos = pos.xz();
+    //     self.right_pos = pos.xz();
+    //     self.height = pos.y;
+    //     self
+    // }
     pub fn pos(mut self, left: Vec2, right: Vec2) -> Self {
         self.left_pos = left;
         self.right_pos = right;
@@ -215,17 +215,17 @@ impl CheckpointSpawner {
         ));
     }
 
-    pub fn spawn_command(mut self, commands: &mut Commands) -> (Entity, Entity) {
-        let left = self.left_e.unwrap_or_else(|| commands.spawn_empty().id());
-        let right = self.right_e.unwrap_or_else(|| commands.spawn_empty().id());
-        self.left_e = Some(left);
-        self.right_e = Some(right);
+    // pub fn spawn_command(mut self, commands: &mut Commands) -> (Entity, Entity) {
+    //     let left = self.left_e.unwrap_or_else(|| commands.spawn_empty().id());
+    //     let right = self.right_e.unwrap_or_else(|| commands.spawn_empty().id());
+    //     self.left_e = Some(left);
+    //     self.right_e = Some(right);
 
-        commands.add(move |world: &mut World| {
-            self.spawn(world);
-        });
-        (left, right)
-    }
+    //     commands.add(move |world: &mut World| {
+    //         self.spawn(world);
+    //     });
+    //     (left, right)
+    // }
 
     pub fn spawn(mut self, world: &mut World) -> (Entity, Entity) {
         let mesh = world.resource::<KmpMeshes>().sphere.clone();

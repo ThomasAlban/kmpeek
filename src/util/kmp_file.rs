@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
     io::{Cursor, Read, Seek, SeekFrom},
+    marker::PhantomData,
 };
 
 /// stores all the data of the KMP file
@@ -14,11 +15,11 @@ pub struct KmpFile {
     pub header: Header,
     pub ktpt: Section<Ktpt>,
     pub enpt: Section<Enpt>,
-    pub enph: Section<PathGroup>,
+    pub enph: Section<PathGroup<Enpt>>,
     pub itpt: Section<Itpt>,
-    pub itph: Section<PathGroup>,
+    pub itph: Section<PathGroup<Itpt>>,
     pub ckpt: Section<Ckpt>,
-    pub ckph: Section<PathGroup>,
+    pub ckph: Section<PathGroup<Ckpt>>,
     pub gobj: Section<Gobj>,
     pub poti: Section<Poti>,
     pub area: Section<Area>,
@@ -44,9 +45,9 @@ pub struct Header {
 }
 
 /// Each section has a header containing its info (like the name and number of entries)
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[binrw]
-struct SectionHeader {
+pub struct SectionHeader {
     pub section_name: [u8; 4],
     pub num_entries: u16,
     /// The POTI section stores the total number of points of all routes here. The CAME section stores different values. For all other sections, the value is 0 (padding).
@@ -54,14 +55,14 @@ struct SectionHeader {
 }
 
 /// A generic type for a section of a KMP - each section contains a header, and a number of entries.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[binrw]
 pub struct Section<T>
 where
     for<'a> T: BinRead<Args<'a> = ()> + 'a,
     for<'a> T: BinWrite<Args<'a> = ()> + 'a,
 {
-    section_header: SectionHeader,
+    pub section_header: SectionHeader,
     #[br(count = usize::from(section_header.num_entries))]
     pub entries: Vec<T>,
 }
@@ -93,12 +94,14 @@ pub struct Enpt {
 /// * The CKPH (checkpoint path) section describes checkpoint grouping; how the routes of checkpoints link together.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[binrw]
-pub struct PathGroup {
+pub struct PathGroup<T: 'static> {
     pub start: u8,
     pub group_length: u8,
     pub prev_group: [u8; 6],
     pub next_group: [u8; 6],
     pub group_link: u16,
+    #[serde(skip_serializing)]
+    _p: PhantomData<T>,
 }
 
 /// The ITPT (item point) section describes item points; the Red Shell and Bullet Bill routes. The items attempt to follow the path described by each group of points (as determined by ITPH). More than 0xFF (255) entries will force a console freeze while loading the track.
@@ -129,7 +132,7 @@ pub struct Ckpt {
 pub struct Gobj {
     pub object_id: u16,
     /// * this is part of the extended presence flags, but the value must be 0 if the object does not use this extension
-    padding: u16,
+    pub padding: u16,
     pub position: [f32; 3],
     pub rotation: [f32; 3],
     pub scale: [f32; 3],
@@ -223,10 +226,10 @@ pub struct Cnpt {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[binrw]
 pub struct Mspt {
-    position: [f32; 3],
-    rotation: [f32; 3],
+    pub position: [f32; 3],
+    pub rotation: [f32; 3],
     #[brw(pad_before = 2)] // this is the id field which is irrelevant as it is just the index
-    unknown: u16,
+    pub unknown: u16,
 }
 
 /// The STGI (stage info) section describes stage information; information about a track.
@@ -245,6 +248,33 @@ pub struct Stgi {
     // pub speed_mod: f32,
 }
 
+pub trait KmpSectionName {
+    const SECTION_NAME: [u8; 4];
+}
+macro_rules! impl_kmp_sect_name {
+    ($ty:ty, $name:expr) => {
+        impl KmpSectionName for $ty {
+            const SECTION_NAME: [u8; 4] = *$name;
+        }
+    };
+}
+
+impl_kmp_sect_name!(Ktpt, b"ktpt");
+impl_kmp_sect_name!(Enpt, b"enpt");
+impl_kmp_sect_name!(PathGroup<Enpt>, b"enph");
+impl_kmp_sect_name!(Itpt, b"itpt");
+impl_kmp_sect_name!(PathGroup<Itpt>, b"itpt");
+impl_kmp_sect_name!(Ckpt, b"ckpt");
+impl_kmp_sect_name!(PathGroup<Ckpt>, b"ckpt");
+impl_kmp_sect_name!(Gobj, b"gobj");
+impl_kmp_sect_name!(Poti, b"poti");
+impl_kmp_sect_name!(Area, b"area");
+impl_kmp_sect_name!(Came, b"came");
+impl_kmp_sect_name!(Jgpt, b"jgpt");
+impl_kmp_sect_name!(Cnpt, b"cnpt");
+impl_kmp_sect_name!(Mspt, b"mspt");
+impl_kmp_sect_name!(Stgi, b"stgi");
+
 pub trait KmpGetSection
 where
     for<'a> Self: BinRead<Args<'a> = ()> + 'a,
@@ -253,9 +283,12 @@ where
     fn get_section(kmp: &KmpFile) -> &Section<Self>;
     fn get_section_mut(kmp: &mut KmpFile) -> &mut Section<Self>;
 }
-pub trait KmpGetPathSection {
-    fn get_path_section(kmp: &KmpFile) -> &Section<PathGroup>;
-    fn get_path_section_mut(kmp: &mut KmpFile) -> &mut Section<PathGroup>;
+pub trait KmpGetPathSection
+where
+    Self: Sized,
+{
+    fn get_path_section(kmp: &KmpFile) -> &Section<PathGroup<Self>>;
+    fn get_path_section_mut(kmp: &mut KmpFile) -> &mut Section<PathGroup<Self>>;
 }
 macro_rules! impl_kmp_get_section {
     ($kmp_section:ty, $sect:ident) => {
@@ -270,12 +303,12 @@ macro_rules! impl_kmp_get_section {
     };
 }
 macro_rules! impl_kmp_path_section {
-    ($kmp_section:ty, $sect:ident) => {
-        impl KmpGetPathSection for $kmp_section {
-            fn get_path_section(kmp: &KmpFile) -> &Section<PathGroup> {
+    ($kmp_sect:ty, $sect:ident) => {
+        impl KmpGetPathSection for $kmp_sect {
+            fn get_path_section(kmp: &KmpFile) -> &Section<PathGroup<$kmp_sect>> {
                 &kmp.$sect
             }
-            fn get_path_section_mut(kmp: &mut KmpFile) -> &mut Section<PathGroup> {
+            fn get_path_section_mut(kmp: &mut KmpFile) -> &mut Section<PathGroup<$kmp_sect>> {
                 &mut kmp.$sect
             }
         }

@@ -26,6 +26,7 @@ pub struct ViewportImage {
 #[derive(Resource, Default)]
 pub struct ViewportInfo {
     pub mouse_in_viewport: bool,
+    pub mouse_in_table: bool,
     pub viewport_rect: Rect,
     pub mouse_on_overlayed_ui: bool,
 }

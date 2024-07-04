@@ -2,13 +2,9 @@ use super::{
     settings::{AppSettings, SetupAppSettingsSet},
     tabs::DockTree,
 };
-use crate::{
-    ui::file_dialog::DialogType,
-    ui::update_ui::{KclFileSelected, KmpFileSelected},
-};
+use crate::ui::update_ui::{KclFileSelected, KmpFileSelected};
 use bevy::prelude::*;
 use bevy_pkv::PkvStore;
-use egui_file::*;
 use serde::{Deserialize, Serialize};
 use std::{
     env,
@@ -17,11 +13,10 @@ use std::{
 
 pub fn ui_state_plugin(app: &mut App) {
     app.insert_resource(PkvStore::new("ThomasAlban", "kmpeek"))
-        .init_resource::<CustomiseKclOpen>()
-        .init_resource::<CameraSettingsOpen>()
-        .init_resource::<FileDialogRes>()
+        // .init_resource::<CustomiseKclOpen>()
+        // .init_resource::<CameraSettingsOpen>()
         .init_resource::<KmpFilePath>()
-        .init_resource::<ShowModesCollapsed>()
+        // .init_resource::<ShowModesCollapsed>()
         .init_resource::<KmpVisibility>()
         .add_event::<SaveDockTree>()
         .add_systems(Update, save_docktree.run_if(on_event::<SaveDockTree>()))
@@ -42,16 +37,15 @@ pub fn reset_docktree(mut pkv: ResMut<PkvStore>, mut tree: ResMut<DockTree>) {
     pkv.set("tree", tree.as_ref()).unwrap();
 }
 
-#[derive(Resource, Default)]
-pub struct CustomiseKclOpen(pub bool);
-#[derive(Resource, Default)]
-pub struct CameraSettingsOpen(pub bool);
-#[derive(Resource, Default)]
-pub struct FileDialogRes(pub Option<(FileDialog, DialogType)>);
+// #[derive(Resource, Default)]
+// pub struct CustomiseKclOpen(pub bool);
+// #[derive(Resource, Default)]
+// pub struct CameraSettingsOpen(pub bool);
+
 #[derive(Resource, Default)]
 pub struct KmpFilePath(pub Option<PathBuf>);
-#[derive(Resource, Default)]
-pub struct ShowModesCollapsed(pub Option<f32>);
+// #[derive(Resource, Default)]
+// pub struct ShowModesCollapsed(pub Option<f32>);
 #[derive(Resource, Default, Clone, PartialEq)]
 pub struct KmpVisibility(pub [bool; 10]);
 

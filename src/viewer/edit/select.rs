@@ -1,6 +1,7 @@
 use super::area_gizmo::AreaGizmoOptions;
 use super::create_delete::JustCreatedPoint;
 use super::EditMode;
+use crate::ui::keybinds::{Modifier, ModifiersPressed};
 use crate::ui::ui_state::KmpVisibility;
 use crate::ui::update_ui::UpdateUiSet;
 use crate::ui::viewport::ViewportInfo;
@@ -97,12 +98,7 @@ fn select_all(
     q_selectable: Query<(Entity, &Visibility), With<KmpSelectablePoint>>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
-    if !((keys.pressed(KeyCode::SuperLeft)
-        || keys.pressed(KeyCode::SuperRight)
-        || keys.pressed(KeyCode::ControlLeft)
-        || keys.pressed(KeyCode::ControlRight))
-        && keys.just_pressed(KeyCode::KeyA))
-    {
+    if !keys.keybind_pressed([Modifier::Ctrl], [KeyCode::KeyA]) {
         return;
     }
 
@@ -137,7 +133,7 @@ fn deselect_on_mode_change(
 #[derive(Resource, Default)]
 pub struct SelectBox(pub Option<Rect>);
 impl SelectBox {
-    // how much we have to move the mouse before we actually start making a select box
+    /// How much we have to move the mouse before we actually start making a select box
     const LENIENCY_BEFORE_SELECT: f32 = 3.;
 }
 

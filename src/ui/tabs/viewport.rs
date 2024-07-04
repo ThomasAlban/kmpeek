@@ -5,13 +5,14 @@ use crate::{
         util::{button_triggered_popup, image_selectable_value, Icons},
         viewport::{ViewportImage, ViewportInfo},
     },
+    util::ToEguiRect,
     viewer::{
         camera::{CameraMode, CameraModeChanged},
         edit::{select::SelectBox, EditMode},
     },
 };
 use bevy::{ecs::system::SystemParam, math::vec2, prelude::*, render::render_resource::Extent3d};
-use bevy_egui::egui::{self, Color32, Margin, Pos2, Response, Rounding, Sense, Stroke, Ui};
+use bevy_egui::egui::{self, Color32, Margin, Response, Rounding, Sense, Stroke, Ui};
 use transform_gizmo_bevy::{config::TransformPivotPoint, GizmoOptions, GizmoOrientation};
 
 #[derive(SystemParam)]
@@ -37,8 +38,6 @@ impl UiSubSection for ShowViewportTab<'_, '_> {
         let window_sf = window.scale_factor();
 
         let viewport_image = self.p.image_assets.get_mut(self.p.viewport.handle.id()).unwrap();
-        // let viewport_tex_id = p.contexts.image_id(&p.viewport).unwrap();
-        // let window = p.q_window.get_single().unwrap();
 
         let viewport_top_left = vec2(ui.next_widget_position().x, ui.next_widget_position().y);
         // make sure we don't go above 2000 because otherwise igpus may run out of memory especially when multiplying by a window scale factor above 1
@@ -46,17 +45,7 @@ impl UiSubSection for ShowViewportTab<'_, '_> {
         let viewport_bottom_right = vec2(ui.max_rect().max.x, ui.max_rect().max.y).min(Vec2::splat(2000.));
 
         let viewport_rect = Rect::from_corners(viewport_top_left, viewport_bottom_right);
-        // exact same thing as above but in egui's format
-        let egui_viewport_rect = egui::Rect::from_min_max(
-            Pos2 {
-                x: viewport_rect.min.x,
-                y: viewport_rect.min.y,
-            },
-            Pos2 {
-                x: viewport_rect.max.x,
-                y: viewport_rect.max.y,
-            },
-        );
+        let egui_viewport_rect = viewport_rect.to_egui_rect();
 
         // resize the viewport if needed
         if viewport_image.size() != (viewport_rect.size().as_uvec2() * window_sf as u32) {
