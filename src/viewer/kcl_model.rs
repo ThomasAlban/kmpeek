@@ -31,38 +31,38 @@ impl Default for KclModelSettings {
         Self {
             visible: [true; 32],
             color: [
-                Color::rgba(1.0, 1.0, 1.0, 1.0), // road
-                Color::rgba(1.0, 0.9, 0.8, 1.0), // slippery road (sand/dirt)
-                Color::rgba(0.0, 0.8, 0.0, 1.0), // weak off-road
-                Color::rgba(0.0, 0.6, 0.0, 1.0), // off-road
-                Color::rgba(0.0, 0.4, 0.0, 1.0), // heavy off-road
-                Color::rgba(0.8, 0.9, 1.0, 1.0), // slippery road (ice)
-                Color::rgba(1.0, 0.5, 0.0, 1.0), // boost panel
-                Color::rgba(1.0, 0.6, 0.0, 1.0), // boost ramp
-                Color::rgba(1.0, 0.8, 0.0, 1.0), // slow ramp
-                Color::rgba(0.9, 0.9, 1.0, 0.5), // item road
-                Color::rgba(0.7, 0.1, 0.1, 1.0), // solid fall
-                Color::rgba(0.0, 0.5, 1.0, 1.0), // moving water
-                Color::rgba(0.6, 0.6, 0.6, 1.0), // wall
-                Color::rgba(0.0, 0.0, 0.6, 0.8), // invisible wall
-                Color::rgba(0.6, 0.6, 0.7, 0.5), // item wall
-                Color::rgba(0.6, 0.6, 0.6, 1.0), // wall
-                Color::rgba(0.8, 0.0, 0.0, 0.8), // fall boundary
-                Color::rgba(1.0, 0.0, 0.5, 0.8), // cannon activator
-                Color::rgba(0.5, 0.0, 1.0, 0.5), // force recalculation
-                Color::rgba(0.0, 0.3, 1.0, 1.0), // half-pipe ramp
-                Color::rgba(0.6, 0.6, 0.6, 1.0), // wall (items pass through)
-                Color::rgba(0.9, 0.9, 1.0, 1.0), // moving road
-                Color::rgba(0.9, 0.7, 1.0, 1.0), // sticky road
-                Color::rgba(1.0, 1.0, 1.0, 1.0), // road (alt sfx)
-                Color::rgba(1.0, 0.0, 1.0, 0.8), // sound trigger
-                Color::rgba(1.0, 0.0, 1.0, 0.5), // item state modifier
-                Color::rgba(0.4, 0.6, 0.4, 0.8), // weak wall
-                Color::rgba(0.9, 0.9, 1.0, 1.0), // rotating road
-                Color::rgba(0.8, 0.0, 1.0, 0.8), // effect trigger
-                Color::rgba(0.6, 0.6, 0.6, 1.0), // invisible wall 2
-                Color::rgba(0.0, 0.6, 0.0, 0.8), // half-pipe invis wall
-                Color::rgba(0.8, 0.7, 0.8, 1.0), // special wall
+                Color::srgba(1.0, 1.0, 1.0, 1.0), // road
+                Color::srgba(1.0, 0.9, 0.8, 1.0), // slippery road (sand/dirt)
+                Color::srgba(0.0, 0.8, 0.0, 1.0), // weak off-road
+                Color::srgba(0.0, 0.6, 0.0, 1.0), // off-road
+                Color::srgba(0.0, 0.4, 0.0, 1.0), // heavy off-road
+                Color::srgba(0.8, 0.9, 1.0, 1.0), // slippery road (ice)
+                Color::srgba(1.0, 0.5, 0.0, 1.0), // boost panel
+                Color::srgba(1.0, 0.6, 0.0, 1.0), // boost ramp
+                Color::srgba(1.0, 0.8, 0.0, 1.0), // slow ramp
+                Color::srgba(0.9, 0.9, 1.0, 0.5), // item road
+                Color::srgba(0.7, 0.1, 0.1, 1.0), // solid fall
+                Color::srgba(0.0, 0.5, 1.0, 1.0), // moving water
+                Color::srgba(0.6, 0.6, 0.6, 1.0), // wall
+                Color::srgba(0.0, 0.0, 0.6, 0.8), // invisible wall
+                Color::srgba(0.6, 0.6, 0.7, 0.5), // item wall
+                Color::srgba(0.6, 0.6, 0.6, 1.0), // wall
+                Color::srgba(0.8, 0.0, 0.0, 0.8), // fall boundary
+                Color::srgba(1.0, 0.0, 0.5, 0.8), // cannon activator
+                Color::srgba(0.5, 0.0, 1.0, 0.5), // force recalculation
+                Color::srgba(0.0, 0.3, 1.0, 1.0), // half-pipe ramp
+                Color::srgba(0.6, 0.6, 0.6, 1.0), // wall (items pass through)
+                Color::srgba(0.9, 0.9, 1.0, 1.0), // moving road
+                Color::srgba(0.9, 0.7, 1.0, 1.0), // sticky road
+                Color::srgba(1.0, 1.0, 1.0, 1.0), // road (alt sfx)
+                Color::srgba(1.0, 0.0, 1.0, 0.8), // sound trigger
+                Color::srgba(1.0, 0.0, 1.0, 0.5), // item state modifier
+                Color::srgba(0.4, 0.6, 0.4, 0.8), // weak wall
+                Color::srgba(0.9, 0.9, 1.0, 1.0), // rotating road
+                Color::srgba(0.8, 0.0, 1.0, 0.8), // effect trigger
+                Color::srgba(0.6, 0.6, 0.6, 1.0), // invisible wall 2
+                Color::srgba(0.0, 0.6, 0.0, 0.8), // half-pipe invis wall
+                Color::srgba(0.8, 0.7, 0.8, 1.0), // special wall
             ],
             backface_culling: false,
         }
@@ -118,7 +118,7 @@ pub fn spawn_model(
                         None
                     },
                     double_sided: !settings.kcl_model.backface_culling,
-                    alpha_mode: if color.a() < 1. {
+                    alpha_mode: if color.alpha() < 1. {
                         AlphaMode::Blend
                     } else {
                         AlphaMode::Opaque
@@ -160,7 +160,7 @@ pub fn update_kcl_model(
         };
         let material = materials.get_mut(standard_material.id()).unwrap();
         material.base_color = settings.kcl_model.color[i];
-        material.alpha_mode = if material.base_color.a() < 1. {
+        material.alpha_mode = if material.base_color.alpha() < 1. {
             AlphaMode::Blend
         } else {
             AlphaMode::Opaque

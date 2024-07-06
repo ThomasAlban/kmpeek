@@ -1,5 +1,8 @@
 use super::{select::Selected, EditMode};
-use crate::ui::viewport::ViewportInfo;
+use crate::{
+    ui::viewport::ViewportInfo,
+    viewer::kmp::components::{CheckpointLeft, CheckpointRight},
+};
 use bevy::prelude::*;
 use transform_gizmo_bevy::{enum_set, GizmoMode, GizmoOptions, GizmoTarget, GizmoVisuals};
 
@@ -9,7 +12,7 @@ pub struct GizmoTransformable;
 pub fn transform_gizmo_plugin(app: &mut App) {
     app.add_plugins(transform_gizmo_bevy::prelude::TransformGizmoPlugin)
         .insert_resource(GizmoOptions {
-            gizmo_modes: enum_set!(GizmoMode::Translate),
+            gizmo_modes: GizmoMode::all_translate(),
             visuals: GizmoVisuals {
                 gizmo_size: 125.,
                 stroke_width: 8.,
@@ -23,6 +26,7 @@ pub fn transform_gizmo_plugin(app: &mut App) {
 fn update_gizmo(
     mut commands: Commands,
     edit_mode: Res<EditMode>,
+    q_selected_cp: Query<(), (With<Selected>, Or<(With<CheckpointLeft>, With<CheckpointRight>)>)>,
     q_selectable: Query<(Entity, Has<Selected>, Has<GizmoTarget>), With<GizmoTransformable>>,
     mut gizmo_options: ResMut<GizmoOptions>,
     viewport_info: Res<ViewportInfo>,
@@ -34,9 +38,20 @@ fn update_gizmo(
     // update gizmo mode
     if edit_mode.is_changed() {
         match *edit_mode {
-            EditMode::Translate => gizmo_options.gizmo_modes = enum_set!(GizmoMode::Translate),
-            EditMode::Rotate => gizmo_options.gizmo_modes = enum_set!(GizmoMode::Rotate),
+            EditMode::Translate => gizmo_options.gizmo_modes = GizmoMode::all_translate(),
+            EditMode::Rotate => gizmo_options.gizmo_modes = GizmoMode::all_rotate(),
             _ => (),
+        };
+        // if we have checkpoints selected
+        if !q_selected_cp.is_empty() {
+            match *edit_mode {
+                EditMode::Translate => {
+                    gizmo_options.gizmo_modes =
+                        enum_set!(GizmoMode::TranslateX | GizmoMode::TranslateZ | GizmoMode::TranslateXZ)
+                }
+                EditMode::Rotate => gizmo_options.gizmo_modes = enum_set!(GizmoMode::RotateY),
+                _ => (),
+            };
         }
     }
     // update gizmo targets

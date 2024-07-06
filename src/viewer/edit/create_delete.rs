@@ -8,18 +8,20 @@ use crate::{
         kmp::{
             checkpoints::{CheckpointHeight, GetSelectedCheckpoints},
             components::{
-                AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, CheckpointLeft, CheckpointRight, EnemyPathPoint,
-                ItemPathPoint, KmpCamera, KmpSelectablePoint, Object, RespawnPoint, Spawn, Spawner, StartPoint,
-                TrackInfo,
+                AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint, KmpCamera,
+                KmpSelectablePoint, Object, RespawnPoint, Spawn, Spawner, StartPoint, TrackInfo,
             },
             ordering::RefreshOrdering,
-            path::{is_checkpoint, KmpPathNode, RecalcPaths},
+            path::{is_checkpoint, RecalcPaths},
             sections::{KmpEditMode, ToKmpSection},
         },
     },
 };
 use bevy::{prelude::*, utils::HashSet};
 use bevy_mod_raycast::prelude::*;
+
+#[derive(SystemSet, Debug, PartialEq, Eq, Hash, Clone)]
+pub struct DeleteSet;
 
 pub fn create_delete_plugin(app: &mut App) {
     app.add_event::<CreatePoint>()
@@ -44,7 +46,7 @@ pub fn create_delete_plugin(app: &mut App) {
                 .chain()
                 .before(SelectSet),
         )
-        .add_systems(Update, delete_point.after(SelectSet));
+        .add_systems(Update, delete_point.in_set(DeleteSet).after(SelectSet));
 }
 
 #[derive(Event, Default)]
@@ -148,7 +150,7 @@ fn alt_click_create_point(
         let Some(ray) = get_ray_from_cam(cam, ndc_mouse_pos) else {
             return;
         };
-        let Some(dist) = ray.intersect_plane(Vec3::Y * cp_height.0, Plane3d::default()) else {
+        let Some(dist) = ray.intersect_plane(Vec3::Y * cp_height.0, InfinitePlane3d::default()) else {
             return;
         };
         ray.get_point(dist)
@@ -164,11 +166,9 @@ fn alt_click_create_point(
 
 fn delete_point(
     keys: Res<ButtonInput<KeyCode>>,
-    mut q_selected: Query<(Entity, Option<&CheckpointLeft>, Option<&CheckpointRight>), With<Selected>>,
-    mut q_kmp_path_node: Query<&mut KmpPathNode>,
+    mut q_selected: Query<Entity, With<Selected>>,
     mut commands: Commands,
     viewport_info: Res<ViewportInfo>,
-    mut ev_recalc_paths: EventWriter<RecalcPaths>,
     mut ev_refresh_ordering: EventWriter<RefreshOrdering>,
 ) {
     if !viewport_info.mouse_in_viewport && !viewport_info.mouse_in_table {
@@ -177,37 +177,10 @@ fn delete_point(
     if !keys.just_pressed(KeyCode::Backspace) && !keys.just_pressed(KeyCode::Delete) {
         return;
     }
-    // keep track of which entities we have despawned so we don't despawn any twice
-    let mut despawned_entities = HashSet::new();
-    let mut deleted_a_path = false;
-    for (entity, cp_left, cp_right) in q_selected.iter_mut() {
-        // unlink ourselves if we are a kmp path node so we don't have any stale references before we delete
-        if let Ok(kmp_path_node) = q_kmp_path_node.get(entity) {
-            kmp_path_node.clone().delete(entity, q_kmp_path_node.as_query_lens());
-        }
-        // if we are a checkpoint, get the other checkpoint entity
-        if let Some(other_cp) = cp_left.map(|x| x.right).or_else(|| cp_right.map(|x| x.left)) {
-            // unlink that checkpoint first
-            if let Ok(kmp_path_node) = q_kmp_path_node.get(other_cp) {
-                kmp_path_node.clone().delete(other_cp, q_kmp_path_node.as_query_lens());
-            }
-            // then delete it
-            if !despawned_entities.contains(&other_cp) {
-                commands.entity(other_cp).despawn_recursive();
-                despawned_entities.insert(other_cp);
-            }
-        }
-        if !despawned_entities.contains(&entity) {
-            commands.entity(entity).despawn_recursive();
-            despawned_entities.insert(entity);
-        }
-        if q_kmp_path_node.contains(entity) {
-            deleted_a_path = true;
-        };
+
+    for e in q_selected.iter_mut() {
+        commands.entity(e).despawn_recursive();
     }
-    if deleted_a_path {
-        // do all because we don't know what type of path it is
-        ev_recalc_paths.send(RecalcPaths::all());
-    }
+
     ev_refresh_ordering.send_default();
 }

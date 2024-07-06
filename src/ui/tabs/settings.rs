@@ -118,9 +118,9 @@ impl UiSubSection for ShowSettingsTab<'_, '_> {
                     // show colour edit and visibility toggle for each kcl flag variant
                     for (i, kcl_flag) in KclFlag::iter().enumerate() {
                         ui.horizontal(|ui| {
-                            let mut color = self.settings.kcl_model.color[i].as_rgba_f32();
+                            let mut color = self.settings.kcl_model.color[i].to_srgba().to_f32_array();
                             ui.color_edit_button_rgba_unmultiplied(&mut color);
-                            self.settings.kcl_model.color[i] = Color::rgba_from_array(color);
+                            self.settings.kcl_model.color[i] = Srgba::from_f32_array(color).into();
                             ui.checkbox(&mut self.settings.kcl_model.visible[i], kcl_flag.to_string());
                         });
                     }

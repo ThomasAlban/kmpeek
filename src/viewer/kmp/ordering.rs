@@ -47,10 +47,8 @@ impl<T: Component> NextOrderID<T> {
 pub struct RefreshOrdering;
 
 pub fn refresh_order<T: Component>(mut q: Query<&mut OrderID, With<T>>, next_id: Res<NextOrderID<T>>) {
-    let mut order_ids = q.iter_mut().collect::<Vec<_>>();
-    order_ids.sort_by(|x, y| x.0.cmp(&y.0));
     let mut id = 0u32;
-    for (i, order_id) in order_ids.iter_mut().enumerate() {
+    for (i, mut order_id) in q.iter_mut().sort_by_key::<&OrderID, _>(|x| *x).enumerate() {
         order_id.0 = i as u32;
         id = i as u32 + 1;
     }

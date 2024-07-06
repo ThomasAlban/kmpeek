@@ -8,6 +8,7 @@ use crate::{
     },
 };
 use bevy::{
+    color::palettes::css,
     math::{vec2, vec3, DVec3},
     prelude::*,
     render::view::RenderLayers,
@@ -59,9 +60,9 @@ fn draw_area_bounds(mut gizmos: Gizmos, q_areas: Query<(&mut Transform, &mut Are
         // draw the box for the area
         let area_transform = get_area_transform(transform, area.scale);
         let gizmo_color = if area.scale.min_element() < 0. {
-            Color::RED
+            css::RED
         } else {
-            Color::WHITE
+            css::WHITE
         };
 
         match area.shape {
@@ -75,11 +76,11 @@ fn draw_area_bounds(mut gizmos: Gizmos, q_areas: Query<(&mut Transform, &mut Are
                 // draw the top ellipse
                 gizmos
                     .ellipse(top_pos, ellipse_rot, ellipse_h_size, gizmo_color)
-                    .segments(segments);
+                    .resolution(segments);
                 // draw the bottom ellipse
                 gizmos
                     .ellipse(bottom_pos, ellipse_rot, ellipse_h_size, gizmo_color)
-                    .segments(segments);
+                    .resolution(segments);
                 // draw the lines going between the top and bottom ellipses
                 ellipse_inner(ellipse_h_size, segments)
                     .map(|vec2| ellipse_rot * vec2.extend(0.))
@@ -265,7 +266,7 @@ fn draw_area_handles(
         }
 
         // actually render the 5 handles
-        painter.color = Color::RED;
+        painter.color = css::RED.into();
         let gizmo_cam = q_gizmo_cam.single();
         for i in 0..5 {
             if is_topdown && i == 2 {

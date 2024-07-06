@@ -69,7 +69,7 @@ impl UiSubSection for ShowOutlinerTab<'_, '_> {
 
 #[derive(SystemParam)]
 pub struct KmpOutliner<'w, 's, T: Component + ToKmpSection> {
-    q: Query<'w, 's, Entity, With<StartPoint>>,
+    q: Query<'w, 's, Entity, With<T>>,
     path_groups: Option<Res<'w, PathGroups<T>>>,
     mode: Option<Res<'w, KmpEditMode<T>>>,
     kmp_visibility: ResMut<'w, KmpVisibility>,

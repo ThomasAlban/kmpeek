@@ -75,7 +75,7 @@ impl MaterialsFromColors<CheckpointColor> for CheckpointMaterials {
     fn from_colors(materials: &mut Assets<StandardMaterial>, colors: &CheckpointColor) -> Self {
         let plane_color = |materials: &mut Assets<StandardMaterial>, color: Color| {
             materials.add(StandardMaterial {
-                base_color: color.with_a(0.2),
+                base_color: color.with_alpha(0.2),
                 alpha_mode: AlphaMode::Blend,
                 unlit: true,
                 cull_mode: None,
@@ -98,7 +98,7 @@ impl MaterialsFromColors<CheckpointColor> for CheckpointMaterials {
 pub fn unlit_material(materials: &mut Assets<StandardMaterial>, color: Color) -> Handle<StandardMaterial> {
     materials.add(StandardMaterial {
         base_color: color,
-        alpha_mode: if color.a() < 1. {
+        alpha_mode: if color.alpha() < 1. {
             AlphaMode::Blend
         } else {
             AlphaMode::Opaque

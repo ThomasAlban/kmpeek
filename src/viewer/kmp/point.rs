@@ -14,7 +14,7 @@ use crate::{
         normalize::{Normalize, NormalizeInheritParent},
     },
 };
-use bevy::{ecs::system::Command, math::vec3, prelude::*};
+use bevy::{ecs::world::Command, math::vec3, prelude::*};
 use bevy_mod_outline::{OutlineBundle, OutlineVolume};
 use std::sync::Arc;
 

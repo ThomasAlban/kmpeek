@@ -322,10 +322,7 @@ impl<T: Component + ToKmpSection + PartialEq + Clone + ShowKmpTableTrait> ShowKm
             header.col(|_| {});
         });
         table.body(|mut body| {
-            let mut items: Vec<_> = self.q.iter_mut().collect();
-            items.sort_by(|x, y| x.4.cmp(y.4));
-
-            for (mut t, mut transform, e, is_selected, order_id) in items {
+            for (mut t, mut transform, e, is_selected, order_id) in self.q.iter_mut().sort::<&OrderID>() {
                 body.row(20., |mut row| {
                     row.set_selected(is_selected);
 

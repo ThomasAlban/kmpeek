@@ -54,7 +54,7 @@ fn calc_cp_plane_transform(left: Vec2, right: Vec2, height: f32) -> Transform {
 
     Transform::from_translation(pos)
         .looking_to(dir, Vec3::Y)
-        .with_scale(vec3(left.distance(right) / 2., 1., pos.y))
+        .with_scale(vec3(left.distance(right), 1., pos.y * 2.))
 }
 
 const DEFAULT_CP_HEIGHT: f32 = 15000.;
@@ -420,21 +420,13 @@ fn update_checkpoint_colors(
 }
 
 fn update_checkpoint_lines(
-    mut commands: Commands,
-    mut q_cp_line: Query<(&CheckpointLine, &mut Transform, Entity, &mut Visibility)>,
+    mut q_cp_line: Query<(&CheckpointLine, &mut Transform, &mut Visibility)>,
     mut q_cp_part: Query<(&mut Transform, &mut Visibility), Without<CheckpointLine>>,
 ) {
-    for (line, mut line_trans, line_e, mut line_vis) in q_cp_line.iter_mut() {
+    for (line, mut line_trans, mut line_vis) in q_cp_line.iter_mut() {
         let Ok([(l_trans, l_vis), (r_trans, _), (mut a_trans, mut a_vis)]) =
             q_cp_part.get_many_mut([line.left, line.right, line.arrow])
         else {
-            // despawn the line and the arrow if either of the nodes doesn't exist
-            if let Some(line) = commands.get_entity(line_e) {
-                line.despawn_recursive();
-            }
-            if let Some(arrow) = commands.get_entity(line.arrow) {
-                arrow.despawn_recursive();
-            }
             continue;
         };
         // set the visibility
@@ -449,14 +441,12 @@ fn update_checkpoint_lines(
 }
 // the same as above but for checkpoint planes instead of lines
 fn update_checkpoint_planes(
-    mut commands: Commands,
-    mut q_cp_plane: Query<(&CheckpointPlane, &mut Transform, Entity, &mut Visibility)>,
+    mut q_cp_plane: Query<(&CheckpointPlane, &mut Transform, &mut Visibility)>,
     q_cp_node: Query<(Ref<Transform>, &Visibility), Without<CheckpointPlane>>,
     cp_height: Res<CheckpointHeight>,
 ) {
-    for (plane, mut plane_trans, plane_e, mut plane_vis) in q_cp_plane.iter_mut() {
+    for (plane, mut plane_trans, mut plane_vis) in q_cp_plane.iter_mut() {
         let Ok([(l_trans, l_vis), (r_trans, _)]) = q_cp_node.get_many([plane.left, plane.right]) else {
-            commands.entity(plane_e).despawn();
             continue;
         };
         plane_vis.set_if_neq(*l_vis);

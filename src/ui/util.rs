@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use bevy::math::{vec3, EulerRot, Quat};
+use bevy::math::{vec3, Dir3, EulerRot, Quat};
 use bevy::{math::Vec3, transform::components::Transform};
 use bevy_egui::egui::{self, Response, Ui, WidgetText};
 use bevy_egui::egui::{
@@ -290,7 +290,7 @@ pub fn quat_to_euler(transform: &Transform) -> Vec3 {
 pub fn euler_to_quat(rot: Vec3, res: (Response, Response, Response), transform: &mut Transform) {
     let changed = res.0.changed() || res.1.changed() || res.2.changed();
 
-    let mut update_rotation = |res: Response, axis: Vec3| {
+    let mut update_rotation = |res: Response, axis: Dir3| {
         if res.changed() {
             // get the drag delta
             let delta = res.drag_delta().x / 100.;
@@ -310,9 +310,9 @@ pub fn euler_to_quat(rot: Vec3, res: (Response, Response, Response), transform: 
             }
         }
     };
-    update_rotation(res.0, Vec3::X);
-    update_rotation(res.1, Vec3::Y);
-    update_rotation(res.2, Vec3::Z);
+    update_rotation(res.0, Dir3::X);
+    update_rotation(res.1, Dir3::Y);
+    update_rotation(res.2, Dir3::Z);
 
     if changed {
         transform.rotation = transform.rotation.normalize();

@@ -21,7 +21,12 @@ use crate::{
         normalize::{Normalize, NormalizeInheritParent},
     },
 };
-use bevy::{math::vec3, prelude::*, utils::HashSet};
+use bevy::{
+    ecs::component::{ComponentHooks, StorageType},
+    math::vec3,
+    prelude::*,
+    utils::HashSet,
+};
 use bevy_mod_outline::{OutlineBundle, OutlineVolume};
 use binrw::{BinRead, BinWrite};
 use serde::{Deserialize, Serialize};
@@ -145,12 +150,30 @@ pub struct Checkpoint {
     pub kind: CheckpointKind,
     // will contain link to respawn entity
 }
-#[derive(Component, Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct CheckpointLeft {
     pub right: Entity,
     pub line: Entity,
     pub plane: Entity,
     pub arrow: Entity,
+}
+impl Component for CheckpointLeft {
+    const STORAGE_TYPE: StorageType = StorageType::Table;
+    fn register_component_hooks(hooks: &mut ComponentHooks) {
+        hooks.on_remove(|mut world, e, _| {
+            let cp = world.get::<CheckpointLeft>(e).unwrap().clone();
+
+            // if we didn't already delete the right checkpoint (which could have happened as we
+            // could have deleted the right hand one first which then deletes the left hand one)
+            if world.get_entity(cp.right).is_some() {
+                world.commands().entity(cp.right).despawn();
+            }
+
+            world.commands().entity(cp.line).despawn();
+            world.commands().entity(cp.plane).despawn();
+            world.commands().entity(cp.arrow).despawn();
+        });
+    }
 }
 impl Default for CheckpointLeft {
     fn default() -> Self {
@@ -162,11 +185,24 @@ impl Default for CheckpointLeft {
         }
     }
 }
-#[derive(Component, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct CheckpointRight {
     pub left: Entity,
     pub line: Entity,
     pub plane: Entity,
+}
+impl Component for CheckpointRight {
+    const STORAGE_TYPE: StorageType = StorageType::Table;
+    fn register_component_hooks(hooks: &mut ComponentHooks) {
+        hooks.on_remove(|mut world, e, _| {
+            let cp_right = world.get::<CheckpointRight>(e).unwrap();
+            let left_e = cp_right.left;
+            // despawn the left entity, which will in turn delete the line and plane
+            if world.get_entity(left_e).is_some() {
+                world.commands().entity(left_e).despawn();
+            }
+        });
+    }
 }
 impl Default for CheckpointRight {
     fn default() -> Self {
@@ -937,7 +973,7 @@ where
     for<'a> T: BinWrite<Args<'a> = ()> + 'a,
 {
     fn get_kmp_section(world: &mut World) -> Self {
-        let mut q = world.query::<(&C, &Transform, &OrderID)>();
+        let mut q = world.query::<(&C, &Transform)>();
 
         let mut section = Section {
             section_header: SectionHeader {
@@ -948,13 +984,10 @@ where
             entries: Vec::new(),
         };
 
-        // sort items by order id
-        let mut items: Vec<_> = q.iter(world).collect();
-        items.sort_by(|x, y| x.2.cmp(y.2));
+        let items: Vec<_> = q.iter(world).sort::<&OrderID>().collect();
         let num_entries = items.len();
-
         let mut kmp_items = Vec::with_capacity(num_entries);
-        for (item, transform, _) in items {
+        for (item, transform) in items {
             let rot = quat_to_euler(transform);
             kmp_items.push(item.to_kmp(transform.translation, rot))
         }

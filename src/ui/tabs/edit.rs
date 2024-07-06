@@ -284,7 +284,9 @@ fn path_start_btn<T>(
     path_type: PathType,
 ) {
     ui.with_layout(Layout::top_down(Align::Center), |ui| {
-        ui.set_enabled(items.len() == 1);
+        if items.len() != 1 {
+            ui.disable();
+        }
         if ui.button("Set As Path Start").clicked() && items.len() == 1 {
             for e in q_path_start
                 .iter()
@@ -409,7 +411,7 @@ pub fn edit_row<R>(
     ui.horizontal(|ui| {
         ui.columns(2, |ui| {
             ui[0].with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.add(egui::Label::new(label).truncate(true));
+                ui.add(egui::Label::new(label).truncate());
             });
             if justified {
                 ui[1].centered_and_justified(add_contents)

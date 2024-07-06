@@ -1,10 +1,7 @@
-#![allow(dead_code)]
-
 use super::{
     components::FromKmp,
     meshes_materials::{CheckpointMaterials, KmpMeshes, PathMaterials},
     ordering::{NextOrderID, OrderID},
-    sections::KmpEditMode,
     Checkpoint, CheckpointRight, EnemyPathPoint, ItemPathPoint, KmpError, KmpSelectablePoint, PathOverallStart,
     TransformEditOptions,
 };
@@ -16,6 +13,7 @@ use crate::{
     },
     viewer::{
         edit::{
+            create_delete::DeleteSet,
             transform_gizmo::GizmoTransformable,
             tweak::{SnapTo, Tweakable},
         },
@@ -24,8 +22,9 @@ use crate::{
 };
 use bevy::{
     ecs::{
+        component::{ComponentHooks, StorageType},
         entity::EntityHashMap,
-        system::{QueryLens, SystemParam},
+        system::SystemParam,
     },
     prelude::*,
     utils::{HashMap, HashSet},
@@ -43,7 +42,8 @@ pub fn path_plugin(app: &mut App) {
             update_node_links::<Checkpoint>,
             update_node_links::<CheckpointRight>,
             traverse_paths,
-        ),
+        )
+            .after(DeleteSet),
     );
 }
 
@@ -89,14 +89,53 @@ impl ToPathType for CheckpointRight {
 #[derive(Component)]
 pub struct KmpPathNodeLinkLine;
 
-#[derive(Debug)]
-pub struct KmpPathNodeError;
-
 // component attached to kmp entities which are linked to other kmp entities
-#[derive(Component, Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct KmpPathNode {
     pub prev_nodes: HashSet<Entity>,
     pub next_nodes: HashSet<Entity>,
+}
+impl Component for KmpPathNode {
+    const STORAGE_TYPE: StorageType = StorageType::Table;
+    fn register_component_hooks(hooks: &mut ComponentHooks) {
+        hooks.on_add(|mut world, e, _| {
+            // on adding this component, ensure that the next/prev nodes also all hold references to the current node
+            let cur_node = world.get::<KmpPathNode>(e).unwrap();
+            let next_nodes = cur_node.get_next();
+            let prev_nodes = cur_node.get_previous();
+
+            for next_entity in next_nodes {
+                let mut next_node = world.get_mut::<KmpPathNode>(next_entity).unwrap();
+                next_node.prev_nodes.insert(e);
+            }
+            for prev_entity in prev_nodes {
+                let mut prev_node = world.get_mut::<KmpPathNode>(prev_entity).unwrap();
+                prev_node.next_nodes.insert(e);
+            }
+        });
+        hooks.on_remove(|mut world, e, _| {
+            let cur_node = world.get::<KmpPathNode>(e).unwrap();
+            let next_nodes = cur_node.get_next();
+            let prev_nodes = cur_node.get_previous();
+
+            for next_entity in next_nodes {
+                let mut next_node = world.get_mut::<KmpPathNode>(next_entity).unwrap();
+                next_node.prev_nodes.remove(&e);
+            }
+            for prev_entity in prev_nodes {
+                let mut prev_node = world.get_mut::<KmpPathNode>(prev_entity).unwrap();
+                prev_node.next_nodes.remove(&e);
+            }
+            if world.get::<EnemyPathPoint>(e).is_some() {
+                world.send_event(RecalcPaths::enemy());
+            } else if world.get::<ItemPathPoint>(e).is_some() {
+                world.send_event(RecalcPaths::item());
+            } else if world.get::<Checkpoint>(e).is_some() {
+                // don't need to check for cp right as we'll be despawning that one anyway in the same swoop
+                world.send_event(RecalcPaths::cp());
+            }
+        });
+    }
 }
 impl KmpPathNode {
     pub fn new() -> Self {
@@ -104,6 +143,19 @@ impl KmpPathNode {
             prev_nodes: HashSet::with_capacity(6),
             next_nodes: HashSet::with_capacity(6),
         }
+    }
+    #[allow(dead_code)]
+    pub fn with_next(mut self, next: impl IntoIterator<Item = Entity>) -> Self {
+        for next_e in next.into_iter() {
+            self.next_nodes.insert(next_e);
+        }
+        self
+    }
+    pub fn with_prev(mut self, prev: impl IntoIterator<Item = Entity>) -> Self {
+        for prev_e in prev.into_iter() {
+            self.prev_nodes.insert(prev_e);
+        }
+        self
     }
     pub fn get_next(&self) -> HashSet<Entity> {
         self.next_nodes.clone()
@@ -126,38 +178,19 @@ impl KmpPathNode {
     pub fn is_linked_with(&self, self_e: Entity, other: &KmpPathNode, other_e: Entity) -> bool {
         self.is_next_node_of(self_e, other, other_e) || self.is_prev_node_of(self_e, other, other_e)
     }
-    pub fn delete(self, self_entity: Entity, mut q_kmp_path_node: QueryLens<&mut KmpPathNode>) {
-        let mut q_kmp_path_node = q_kmp_path_node.query();
-        // for all next nodes
-        for e in self.next_nodes.iter() {
-            // delete all references to self
-            let Ok(mut next_node) = q_kmp_path_node.get_mut(*e) else {
-                continue;
-            };
-            next_node.prev_nodes.retain(|x| *x != self_entity);
-        }
-        // for all previous nodes
-        for e in self.prev_nodes.iter() {
-            // delete all references to self
-            let Ok(mut prev_node) = q_kmp_path_node.get_mut(*e) else {
-                continue;
-            };
-            prev_node.next_nodes.retain(|x| *x != self_entity);
-        }
-    }
 
-    pub fn link_nodes(prev_node_entity: Entity, next_node_entity: Entity, world: &mut World) -> bool {
-        if prev_node_entity == next_node_entity {
+    pub fn link_nodes(prev_node_e: Entity, next_e: Entity, world: &mut World) -> bool {
+        if prev_node_e == next_e {
             return false;
         }
         // get next and prev nodes immutably first so we can check if they are linked
-        let Some(next_node) = world.get::<KmpPathNode>(next_node_entity) else {
+        let Some(next_node) = world.get::<KmpPathNode>(next_e) else {
             return false;
         };
-        let Some(prev_node) = world.get::<KmpPathNode>(prev_node_entity) else {
+        let Some(prev_node) = world.get::<KmpPathNode>(prev_node_e) else {
             return false;
         };
-        if prev_node.is_linked_with(prev_node_entity, next_node, next_node_entity) {
+        if prev_node.is_linked_with(prev_node_e, next_node, next_e) {
             return false;
         }
         if next_node.prev_nodes.len() >= 6 || prev_node.next_nodes.len() >= 6 {
@@ -165,10 +198,10 @@ impl KmpPathNode {
         }
 
         // now get them mutably one at a time to link them
-        let mut next_node = world.get_mut::<KmpPathNode>(next_node_entity).unwrap();
-        next_node.prev_nodes.insert(prev_node_entity);
-        let mut prev_node = world.get_mut::<KmpPathNode>(prev_node_entity).unwrap();
-        prev_node.next_nodes.insert(next_node_entity);
+        let mut next_node = world.get_mut::<KmpPathNode>(next_e).unwrap();
+        next_node.prev_nodes.insert(prev_node_e);
+        let mut prev_node = world.get_mut::<KmpPathNode>(prev_node_e).unwrap();
+        prev_node.next_nodes.insert(next_e);
 
         true
     }
@@ -203,25 +236,24 @@ pub struct KmpDataGroup<T> {
     pub next_groups: Vec<u8>,
 }
 
-pub fn is_enemy_point<T: 'static>() -> bool {
-    TypeId::of::<T>() == TypeId::of::<EnemyPathPoint>()
-}
-pub fn is_item_point<T: 'static>() -> bool {
-    TypeId::of::<T>() == TypeId::of::<ItemPathPoint>()
-}
+// pub fn is_enemy_point<T: 'static>() -> bool {
+//     TypeId::of::<T>() == TypeId::of::<EnemyPathPoint>()
+// }
+// pub fn is_item_point<T: 'static>() -> bool {
+//     TypeId::of::<T>() == TypeId::of::<ItemPathPoint>()
+// }
 pub fn is_checkpoint<T: 'static>() -> bool {
     TypeId::of::<T>() == TypeId::of::<Checkpoint>()
 }
 pub fn is_checkpoint_right<T: 'static>() -> bool {
     TypeId::of::<T>() == TypeId::of::<CheckpointRight>()
 }
-pub fn is_path<T: 'static>() -> bool {
-    is_enemy_point::<T>() || is_item_point::<T>() || is_checkpoint::<T>()
-}
+// pub fn is_path<T: 'static>() -> bool {
+//     is_enemy_point::<T>() || is_item_point::<T>() || is_checkpoint::<T>()
+// }
 
 pub struct PathPointSpawner<T> {
     position: Vec3,
-    rotation: Quat,
     kmp_component: T,
     visible: bool,
     prev_nodes: HashSet<Entity>,
@@ -232,7 +264,6 @@ impl<T: Component + Clone> PathPointSpawner<T> {
     pub fn new(kmp_component: T) -> Self {
         Self {
             position: Vec3::default(),
-            rotation: Quat::default(),
             kmp_component,
             visible: true,
             prev_nodes: HashSet::new(),
@@ -244,31 +275,27 @@ impl<T: Component + Clone> PathPointSpawner<T> {
         self.position = pos;
         self
     }
-    pub fn rot(mut self, rot: Quat) -> Self {
-        self.rotation = rot;
-        self
-    }
     pub fn visible(mut self, visible: bool) -> Self {
         self.visible = visible;
         self
     }
-    pub fn prev_nodes(mut self, prev_nodes: HashSet<Entity>) -> Self {
-        self.prev_nodes = prev_nodes;
-        self
-    }
+    // pub fn prev_nodes(mut self, prev_nodes: HashSet<Entity>) -> Self {
+    //     self.prev_nodes = prev_nodes;
+    //     self
+    // }
     pub fn order_id(mut self, id: u32) -> Self {
         self.order_id = Some(id);
         self
     }
 
-    pub fn spawn_command(mut self, commands: &mut Commands) -> Entity {
-        let e = self.e.unwrap_or_else(|| commands.spawn_empty().id());
-        self.e = Some(e);
-        commands.add(|world: &mut World| {
-            self.spawn(world);
-        });
-        e
-    }
+    // pub fn spawn_command(mut self, commands: &mut Commands) -> Entity {
+    //     let e = self.e.unwrap_or_else(|| commands.spawn_empty().id());
+    //     self.e = Some(e);
+    //     commands.add(|world: &mut World| {
+    //         self.spawn(world);
+    //     });
+    //     e
+    // }
     pub fn spawn(self, world: &mut World) -> Entity {
         let mesh = world.resource::<KmpMeshes>().sphere.clone();
         let material = world.resource::<PathMaterials<T>>().point.clone();
@@ -287,7 +314,7 @@ impl<T: Component + Clone> PathPointSpawner<T> {
             PbrBundle {
                 mesh,
                 material,
-                transform: Transform::from_translation(self.position).with_rotation(self.rotation),
+                transform: Transform::from_translation(self.position),
                 visibility: if self.visible {
                     Visibility::Visible
                 } else {
@@ -295,10 +322,7 @@ impl<T: Component + Clone> PathPointSpawner<T> {
                 },
                 ..default()
             },
-            KmpPathNode {
-                prev_nodes: self.prev_nodes.clone(),
-                next_nodes: HashSet::new(),
-            },
+            KmpPathNode::new().with_prev(self.prev_nodes),
             self.kmp_component.clone(),
             KmpSelectablePoint,
             Tweakable(SnapTo::Kcl),
@@ -419,50 +443,12 @@ pub fn link_entity_groups(world: &mut World, entity_groups: Vec<EntityGroup>) {
     }
 }
 
-pub fn spawn_path_section<
-    // this is the original kmp data from the file
-    T: KmpGetSection + KmpGetPathSection + Send + 'static + Clone,
-    // this is the kmp component which corresponds to the kmp data
-    U: Component + FromKmp<T> + Clone + Debug,
->(
-    commands: &mut Commands,
-    kmp: Arc<KmpFile>,
-    kmp_errors: &mut Vec<KmpError>,
-    spawn: impl Fn(&T, U, &mut World) -> Entity + Send + 'static,
-) {
-    let kmp_groups = get_kmp_data_and_component_groups::<T, U>(kmp, kmp_errors);
-
-    commands.add(move |world: &mut World| {
-        // spawn all the entities, saving the entity IDs into 'entity_groups'
-        let mut entity_groups: Vec<EntityGroup> = Vec::with_capacity(kmp_groups.len());
-        for (i, (data_group, component_group)) in kmp_groups.iter().enumerate() {
-            let mut entity_group = EntityGroup {
-                entities: Vec::with_capacity(data_group.nodes.len()),
-                next_groups: data_group.next_groups.clone(),
-            };
-            for (j, node) in data_group.nodes.iter().enumerate() {
-                let kmp_component = component_group[j].clone();
-                // we don't know how each entity is going to be spawned in this function
-                // this is good because we can use it both for checkpoints and enemy/item paths
-                let spawned_entity = spawn(node, kmp_component, world);
-                // if we are at the start then add the start marker to the point
-                if i == 0 && j == 0 {
-                    world.entity_mut(spawned_entity).insert(PathOverallStart);
-                }
-                entity_group.entities.push(spawned_entity);
-            }
-            entity_groups.push(entity_group);
-        }
-        link_entity_groups(world, entity_groups);
-    });
-}
-
 fn spawn_node_link<T: Component + ToPathType + Clone>(
     world: &mut World,
     prev_node: Entity,
     next_node: Entity,
     visible: bool,
-) {
+) -> Entity {
     let meshes = world.resource::<KmpMeshes>().clone();
     let (line, arrow) = if is_checkpoint::<T>() || is_checkpoint_right::<T>() {
         let materials = world.resource::<CheckpointMaterials>().clone();
@@ -482,7 +468,7 @@ fn spawn_node_link<T: Component + ToPathType + Clone>(
     line_transform.scale.y = prev_pos.distance(next_pos);
 
     // spawn a parent component which contains a transform, and stores the entities of the nodes the node links
-    world
+    let e = world
         .spawn((
             SpatialBundle {
                 transform: parent_transform,
@@ -521,13 +507,15 @@ fn spawn_node_link<T: Component + ToPathType + Clone>(
                 // KmpSection,
                 Normalize::new(200., 30., BVec3::TRUE),
             ));
-        });
+        })
+        .id();
+    e
 }
 
+// TODO: make this more efficient by attaching link lines to the kmp points themselves
 pub fn update_node_links<T: Component + ToPathType + Clone>(
-    mode: Option<Res<KmpEditMode<T>>>,
-    cp_mode: Option<Res<KmpEditMode<Checkpoint>>>,
-
+    // mode: Option<Res<KmpEditMode<T>>>,
+    // cp_mode: Option<Res<KmpEditMode<Checkpoint>>>,
     q_visibility: Query<&Visibility, Without<KmpPathNodeLink>>,
     mut q_kmp_node_link: Query<(Entity, &KmpPathNodeLink, &Children, &mut Visibility)>,
     q_kmp_node: Query<(Entity, &KmpPathNode), With<T>>,
@@ -535,9 +523,9 @@ pub fn update_node_links<T: Component + ToPathType + Clone>(
     q_line: Query<&KmpPathNodeLinkLine>,
     mut commands: Commands,
 ) {
-    if mode.is_none() && !(is_checkpoint_right::<T>() && cp_mode.is_some()) {
-        return;
-    }
+    // if mode.is_none() && !(is_checkpoint_right::<T>() && cp_mode.is_some()) {
+    //     return;
+    // }
 
     let mut nodes_to_be_linked: HashSet<(Entity, Entity)> = HashSet::new();
     for (cur_node, node_data) in q_kmp_node.iter() {
@@ -554,7 +542,6 @@ pub fn update_node_links<T: Component + ToPathType + Clone>(
         if !nodes_to_be_linked.contains(&(kmp_node_link.prev_node, kmp_node_link.next_node))
             && kmp_node_link.kind == T::to_path_type()
         {
-            commands.entity(link_entity).despawn_recursive();
             continue;
         }
         nodes_to_be_linked.remove(&(kmp_node_link.prev_node, kmp_node_link.next_node));

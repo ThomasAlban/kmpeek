@@ -143,7 +143,7 @@ pub fn tweak_interaction(
             intersections.first().map(|x| x.1.position())
         }
         SnapTo::CheckpointPlane => {
-            let dist = cam_ray.intersect_plane(Vec3::Y * checkpoint_height.0, Plane3d::default());
+            let dist = cam_ray.intersect_plane(Vec3::Y * checkpoint_height.0, InfinitePlane3d::default());
             dist.map(|x| cam_ray.get_point(x))
         }
     };
@@ -159,7 +159,7 @@ pub fn tweak_interaction(
         } else {
             // if not possible to snap, move the point in the camera plane based on where we started dragging the point
             let camera_plane =
-                Plane3d::new((-tweak_interaction.initial_interaction_point + cam.1.translation()).normalize());
+                InfinitePlane3d::new((-tweak_interaction.initial_interaction_point + cam.1.translation()).normalize());
             let camera_plane_origin = tweak_interaction.initial_interaction_point;
 
             if let Some(dist) = cam_ray.intersect_plane(camera_plane_origin, camera_plane) {

@@ -11,12 +11,10 @@ use self::{
 };
 use bevy::prelude::*;
 use bevy_mod_outline::OutlinePlugin;
-use bevy_mod_raycast::DefaultRaycastingPlugin;
 use strum_macros::EnumIter;
 
 pub fn mouse_picking_plugin(app: &mut App) {
     app.add_plugins((
-        DefaultRaycastingPlugin,
         OutlinePlugin,
         transform_gizmo_plugin,
         area_gizmo_plugin,
