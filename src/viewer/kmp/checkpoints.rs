@@ -1,10 +1,10 @@
 use super::{
     calc_cp_arrow_transform, calc_line_transform,
     meshes_materials::{CheckpointMaterials, KmpMeshes},
-    ordering::{NextOrderID, OrderID},
+    ordering::{NextOrderID, OrderId},
     path::{get_kmp_data_and_component_groups, link_entity_groups, EntityGroup, KmpPathNode},
-    Checkpoint, CheckpointKind, CheckpointLeft, CheckpointLine, CheckpointPlane, CheckpointRight, Ckpt, KmpError,
-    KmpFile, KmpSelectablePoint, PathOverallStart, TransformEditOptions,
+    Checkpoint, CheckpointKind, CheckpointMarker, Ckpt, KmpError, KmpFile, KmpSelectablePoint, PathOverallStart,
+    TransformEditOptions,
 };
 use crate::{
     ui::settings::AppSettings,
@@ -20,6 +20,7 @@ use crate::{
 };
 use bevy::{
     ecs::{
+        component::{ComponentHooks, StorageType},
         entity::{EntityHashMap, EntityHashSet},
         system::SystemParam,
     },
@@ -45,6 +46,81 @@ pub fn checkpoint_plugin(app: &mut App) {
             PostUpdate,
             set_checkpoint_node_height.after(TransformSystem::TransformPropagate),
         );
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct CheckpointLeft {
+    pub right: Entity,
+    pub line: Entity,
+    pub plane: Entity,
+    pub arrow: Entity,
+}
+impl Component for CheckpointLeft {
+    const STORAGE_TYPE: StorageType = StorageType::Table;
+    fn register_component_hooks(hooks: &mut ComponentHooks) {
+        hooks.on_remove(|mut world, e, _| {
+            let cp = world.get::<CheckpointLeft>(e).unwrap().clone();
+
+            // if we didn't already delete the right checkpoint (which could have happened as we
+            // could have deleted the right hand one first which then deletes the left hand one)
+            if world.get_entity(cp.right).is_some() {
+                world.commands().entity(cp.right).despawn();
+            }
+
+            world.commands().entity(cp.line).despawn();
+            world.commands().entity(cp.plane).despawn();
+            world.commands().entity(cp.arrow).despawn();
+        });
+    }
+}
+impl Default for CheckpointLeft {
+    fn default() -> Self {
+        Self {
+            right: Entity::PLACEHOLDER,
+            line: Entity::PLACEHOLDER,
+            plane: Entity::PLACEHOLDER,
+            arrow: Entity::PLACEHOLDER,
+        }
+    }
+}
+#[derive(Clone, PartialEq)]
+pub struct CheckpointRight {
+    pub left: Entity,
+    pub line: Entity,
+    pub plane: Entity,
+}
+impl Component for CheckpointRight {
+    const STORAGE_TYPE: StorageType = StorageType::Table;
+    fn register_component_hooks(hooks: &mut ComponentHooks) {
+        hooks.on_remove(|mut world, e, _| {
+            let cp_right = world.get::<CheckpointRight>(e).unwrap();
+            let left_e = cp_right.left;
+            // despawn the left entity, which will in turn delete the line and plane
+            if world.get_entity(left_e).is_some() {
+                world.commands().entity(left_e).despawn();
+            }
+        });
+    }
+}
+impl Default for CheckpointRight {
+    fn default() -> Self {
+        Self {
+            left: Entity::PLACEHOLDER,
+            line: Entity::PLACEHOLDER,
+            plane: Entity::PLACEHOLDER,
+        }
+    }
+}
+#[derive(Component)]
+pub struct CheckpointLine {
+    pub left: Entity,
+    pub right: Entity,
+    pub arrow: Entity,
+}
+#[derive(Component)]
+pub struct CheckpointPlane {
+    pub left: Entity,
+    pub right: Entity,
 }
 
 fn calc_cp_plane_transform(left: Vec2, right: Vec2, height: f32) -> Transform {
@@ -91,12 +167,6 @@ impl CheckpointSpawner {
             right_e: None,
         }
     }
-    // pub fn single_3d_pos(mut self, pos: Vec3) -> Self {
-    //     self.left_pos = pos.xz();
-    //     self.right_pos = pos.xz();
-    //     self.height = pos.y;
-    //     self
-    // }
     pub fn pos(mut self, left: Vec2, right: Vec2) -> Self {
         self.left_pos = left;
         self.right_pos = right;
@@ -235,7 +305,7 @@ impl CheckpointSpawner {
             CheckpointKind::Key => cp_materials.key.clone(),
             CheckpointKind::LapCount => cp_materials.lap_count.clone(),
         };
-        let outline = world.resource::<AppSettings>().kmp_model.outline.clone();
+        let outline = world.resource::<AppSettings>().kmp_model.outline;
 
         // either gets the order id, or gets it from the NextOrderID (which will increment it for next time)
         let order_id = self
@@ -270,6 +340,7 @@ impl CheckpointSpawner {
                     ..default()
                 },
                 KmpPathNode::default(),
+                CheckpointMarker,
             )
         };
 
@@ -292,7 +363,7 @@ impl CheckpointSpawner {
                 plane,
                 arrow,
             },
-            OrderID(order_id),
+            OrderId(order_id),
             cp_bundle(),
         ));
 

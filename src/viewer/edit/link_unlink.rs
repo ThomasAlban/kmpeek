@@ -5,8 +5,8 @@ use crate::{
     viewer::{
         camera::Gizmo2dCam,
         kmp::{
-            checkpoints::get_both_cp_nodes,
-            components::{Checkpoint, CheckpointRight, EnemyPathPoint, ItemPathPoint, KmpSelectablePoint},
+            checkpoints::{get_both_cp_nodes, CheckpointRight},
+            components::{Checkpoint, CheckpointMarker, EnemyPathPoint, ItemPathPoint, KmpSelectablePoint, RoutePoint},
             path::{KmpPathNode, RecalcPaths},
         },
     },
@@ -15,80 +15,87 @@ use bevy::prelude::*;
 use bevy_mod_raycast::prelude::*;
 
 pub fn link_unlink_plugin(app: &mut App) {
-    app.add_systems(Update, (link_points, unlink_points).after(SelectSet));
+    app.add_systems(
+        Update,
+        (
+            get_pt_to_link.pipe(link_points::<EnemyPathPoint>),
+            get_pt_to_link.pipe(link_points::<ItemPathPoint>),
+            get_pt_to_link.pipe(link_points::<CheckpointMarker>),
+            get_pt_to_link.pipe(link_points::<RoutePoint>),
+            unlink_points,
+        )
+            .after(SelectSet),
+    );
 }
 
-pub fn link_points(
-    mut commands: Commands,
+pub fn get_pt_to_link(
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_selected: Query<Entity, With<Selected>>,
     q_transform: Query<&Transform, With<KmpSelectablePoint>>,
     q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
     q_window: Query<&Window>,
-    mut ev_recalc_paths: EventWriter<RecalcPaths>,
     mut raycast: Raycast,
     viewport_info: Res<ViewportInfo>,
-
-    q_enemy_paths: Query<(), With<EnemyPathPoint>>,
-    q_item_paths: Query<(), With<ItemPathPoint>>,
-    q_cp_left: Query<(), With<Checkpoint>>,
-    q_cp_right: Query<(), With<CheckpointRight>>,
-) {
+) -> Option<Entity> {
     if !mouse_buttons.just_pressed(MouseButton::Left) {
-        return;
+        return None;
     }
     if !keys.pressed(KeyCode::AltLeft) && !keys.pressed(KeyCode::AltRight) {
-        return;
+        return None;
     }
     if q_selected.is_empty() {
-        return;
+        return None;
     }
-    let Some(mouse_pos) = q_window.single().cursor_position() else {
-        return;
-    };
+    let mouse_pos = q_window.single().cursor_position()?;
+
     let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
     let ndc_mouse_pos = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
     let ray = RaycastFromCam::new(cam, ndc_mouse_pos, &mut raycast)
         .filter(&|e| q_transform.contains(e))
         .cast();
 
-    let Some((alt_clicked_pt, _)) = ray.first() else {
+    let (alt_clicked_pt, _) = ray.first()?;
+
+    Some(*alt_clicked_pt)
+}
+
+fn link_points<T: Component + LinkKmpPoint>(
+    alt_clicked_pt: In<Option<Entity>>,
+    q_pts: Query<(), With<T>>,
+    q_selected: Query<Entity, With<Selected>>,
+    mut commands: Commands,
+    mut ev_recalc_paths: EventWriter<RecalcPaths>,
+) {
+    let Some(alt_clicked_pt) = *alt_clicked_pt else {
         return;
     };
-    let alt_clicked_pt = *alt_clicked_pt;
 
-    if q_enemy_paths.contains(alt_clicked_pt) {
-        for selected in q_selected.iter().filter(|e| q_enemy_paths.contains(*e)) {
+    if q_pts.contains(alt_clicked_pt) {
+        for selected in q_selected.iter().filter(|e| q_pts.contains(*e)) {
             commands.add(move |world: &mut World| {
-                KmpPathNode::link_nodes(selected, alt_clicked_pt, world);
+                T::link(world, selected, alt_clicked_pt);
             });
         }
-        ev_recalc_paths.send(RecalcPaths::enemy());
+        ev_recalc_paths.send(RecalcPaths::all());
     }
-    if q_item_paths.contains(alt_clicked_pt) {
-        for selected in q_selected.iter().filter(|e| q_item_paths.contains(*e)) {
-            commands.add(move |world: &mut World| {
-                KmpPathNode::link_nodes(selected, alt_clicked_pt, world);
-            });
-        }
-        ev_recalc_paths.send(RecalcPaths::item());
+}
+
+trait LinkKmpPoint {
+    fn link(world: &mut World, prev_e: Entity, next_e: Entity) {
+        KmpPathNode::link_nodes(prev_e, next_e, world);
     }
+}
+impl LinkKmpPoint for EnemyPathPoint {}
+impl LinkKmpPoint for ItemPathPoint {}
+impl LinkKmpPoint for RoutePoint {}
+impl LinkKmpPoint for CheckpointMarker {
+    fn link(world: &mut World, prev_e: Entity, next_e: Entity) {
+        let (prev_left, prev_right) = get_both_cp_nodes(world, prev_e);
+        let (next_left, next_right) = get_both_cp_nodes(world, next_e);
 
-    if q_cp_left.contains(alt_clicked_pt) || q_cp_right.contains(alt_clicked_pt) {
-        for selected in q_selected
-            .iter()
-            .filter(|e| q_cp_left.contains(*e) || q_cp_right.contains(*e))
-        {
-            commands.add(move |world: &mut World| {
-                let (prev_left, prev_right) = get_both_cp_nodes(world, selected);
-                let (next_left, next_right) = get_both_cp_nodes(world, alt_clicked_pt);
-
-                KmpPathNode::link_nodes(prev_left, next_left, world);
-                KmpPathNode::link_nodes(prev_right, next_right, world);
-            });
-        }
-        ev_recalc_paths.send(RecalcPaths::cp());
+        KmpPathNode::link_nodes(prev_left, next_left, world);
+        KmpPathNode::link_nodes(prev_right, next_right, world);
     }
 }
 

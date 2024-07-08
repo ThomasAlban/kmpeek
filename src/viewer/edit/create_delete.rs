@@ -127,6 +127,9 @@ fn alt_click_create_point(
     if track_info_mode.is_some() {
         return;
     }
+    if !viewport_info.mouse_in_viewport {
+        return;
+    }
     // only run the function if the alt key is held and the mouse has just been clicked
     if !keys.pressed(KeyCode::AltLeft) || !mouse_buttons.just_pressed(MouseButton::Left) {
         return;

@@ -1,7 +1,7 @@
 use super::{select::Selected, EditMode};
 use crate::{
     ui::viewport::ViewportInfo,
-    viewer::kmp::components::{CheckpointLeft, CheckpointRight},
+    viewer::kmp::checkpoints::{CheckpointLeft, CheckpointRight},
 };
 use bevy::prelude::*;
 use transform_gizmo_bevy::{enum_set, GizmoMode, GizmoOptions, GizmoTarget, GizmoVisuals};

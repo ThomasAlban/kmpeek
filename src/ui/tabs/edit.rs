@@ -16,7 +16,8 @@ use crate::{
             checkpoints::GetSelectedCheckpoints,
             components::{
                 AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint,
-                KmpCamera, Object, PathOverallStart, RespawnPoint, StartPoint, TrackInfo, TransformEditOptions,
+                KmpCamera, Object, PathOverallStart, RespawnPoint, RoutePoint, StartPoint, TrackInfo,
+                TransformEditOptions,
             },
             path::{PathType, RecalcPaths},
             sections::KmpEditMode,
@@ -272,8 +273,18 @@ impl UiSubSection for ShowEditTab<'_, '_> {
     }
 }
 
-type PathStartQuery<'w, 's> =
-    Query<'w, 's, (Entity, Has<EnemyPathPoint>, Has<ItemPathPoint>, Has<Checkpoint>), With<PathOverallStart>>;
+type PathStartQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        Has<EnemyPathPoint>,
+        Has<ItemPathPoint>,
+        Has<Checkpoint>,
+        Has<RoutePoint>,
+    ),
+    With<PathOverallStart>,
+>;
 
 fn path_start_btn<T>(
     ui: &mut Ui,
@@ -294,6 +305,7 @@ fn path_start_btn<T>(
                     PathType::Enemy => x.1,
                     PathType::Item => x.2,
                     PathType::Checkpoint { .. } => x.3,
+                    PathType::Route => x.4,
                 })
                 .map(|x| x.0)
             {
@@ -304,6 +316,7 @@ fn path_start_btn<T>(
                 PathType::Enemy => RecalcPaths::enemy(),
                 PathType::Item => RecalcPaths::item(),
                 PathType::Checkpoint { .. } => RecalcPaths::cp(),
+                PathType::Route => RecalcPaths::route(),
             };
             ev_recalc_paths.send(ev);
         }

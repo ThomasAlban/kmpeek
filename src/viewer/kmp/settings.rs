@@ -130,7 +130,7 @@ pub struct CheckpointColor {
     pub arrow: Color,
 }
 
-#[derive(Serialize, Deserialize, Reflect, Clone)]
+#[derive(Serialize, Deserialize, Reflect, Clone, Copy)]
 pub struct OutlineSettings {
     pub color: Color,
     pub width: f32,

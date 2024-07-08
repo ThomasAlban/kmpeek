@@ -47,7 +47,7 @@ pub struct KmpFilePath(pub Option<PathBuf>);
 // #[derive(Resource, Default)]
 // pub struct ShowModesCollapsed(pub Option<f32>);
 #[derive(Resource, Default, Clone, PartialEq)]
-pub struct KmpVisibility(pub [bool; 10]);
+pub struct KmpVisibility(pub [bool; 11]);
 
 #[derive(Serialize, Deserialize, Resource, Deref, DerefMut)]
 pub struct Increment(pub u32);

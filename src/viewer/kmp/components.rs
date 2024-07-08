@@ -1,33 +1,17 @@
 #![allow(dead_code)]
 
 use super::{
-    checkpoints::{CheckpointHeight, CheckpointSpawner},
-    meshes_materials::{KmpMeshes, PathMaterials, PointMaterials},
-    ordering::{NextOrderID, OrderID},
-    path::KmpPathNode,
+    checkpoints::{CheckpointHeight, CheckpointLeft, CheckpointSpawner},
+    ordering::OrderId,
+    path::{spawn_path, KmpPathNode},
+    point::spawn_point,
     Ckpt, Cnpt, Jgpt, KmpSectionName, Mspt, Section, SectionHeader,
 };
 use crate::{
-    ui::{settings::AppSettings, util::quat_to_euler},
-    util::{
-        kmp_file::{Area, Came, Enpt, Gobj, Itpt, Ktpt, Poti, PotiPoint, Stgi},
-        BoolToVisibility,
-    },
-    viewer::{
-        edit::{
-            transform_gizmo::GizmoTransformable,
-            tweak::{SnapTo, Tweakable},
-        },
-        normalize::{Normalize, NormalizeInheritParent},
-    },
+    ui::util::quat_to_euler,
+    util::kmp_file::{Area, Came, Enpt, Gobj, Itpt, Ktpt, Poti, PotiPoint, Stgi},
 };
-use bevy::{
-    ecs::component::{ComponentHooks, StorageType},
-    math::vec3,
-    prelude::*,
-    utils::HashSet,
-};
-use bevy_mod_outline::{OutlineBundle, OutlineVolume};
+use bevy::{math::vec3, prelude::*, utils::HashSet};
 use binrw::{BinRead, BinWrite};
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
@@ -150,80 +134,6 @@ pub struct Checkpoint {
     pub kind: CheckpointKind,
     // will contain link to respawn entity
 }
-#[derive(Clone, PartialEq, Debug)]
-pub struct CheckpointLeft {
-    pub right: Entity,
-    pub line: Entity,
-    pub plane: Entity,
-    pub arrow: Entity,
-}
-impl Component for CheckpointLeft {
-    const STORAGE_TYPE: StorageType = StorageType::Table;
-    fn register_component_hooks(hooks: &mut ComponentHooks) {
-        hooks.on_remove(|mut world, e, _| {
-            let cp = world.get::<CheckpointLeft>(e).unwrap().clone();
-
-            // if we didn't already delete the right checkpoint (which could have happened as we
-            // could have deleted the right hand one first which then deletes the left hand one)
-            if world.get_entity(cp.right).is_some() {
-                world.commands().entity(cp.right).despawn();
-            }
-
-            world.commands().entity(cp.line).despawn();
-            world.commands().entity(cp.plane).despawn();
-            world.commands().entity(cp.arrow).despawn();
-        });
-    }
-}
-impl Default for CheckpointLeft {
-    fn default() -> Self {
-        Self {
-            right: Entity::PLACEHOLDER,
-            line: Entity::PLACEHOLDER,
-            plane: Entity::PLACEHOLDER,
-            arrow: Entity::PLACEHOLDER,
-        }
-    }
-}
-#[derive(Clone, PartialEq)]
-pub struct CheckpointRight {
-    pub left: Entity,
-    pub line: Entity,
-    pub plane: Entity,
-}
-impl Component for CheckpointRight {
-    const STORAGE_TYPE: StorageType = StorageType::Table;
-    fn register_component_hooks(hooks: &mut ComponentHooks) {
-        hooks.on_remove(|mut world, e, _| {
-            let cp_right = world.get::<CheckpointRight>(e).unwrap();
-            let left_e = cp_right.left;
-            // despawn the left entity, which will in turn delete the line and plane
-            if world.get_entity(left_e).is_some() {
-                world.commands().entity(left_e).despawn();
-            }
-        });
-    }
-}
-impl Default for CheckpointRight {
-    fn default() -> Self {
-        Self {
-            left: Entity::PLACEHOLDER,
-            line: Entity::PLACEHOLDER,
-            plane: Entity::PLACEHOLDER,
-        }
-    }
-}
-#[derive(Component)]
-pub struct CheckpointLine {
-    pub left: Entity,
-    pub right: Entity,
-    pub arrow: Entity,
-}
-#[derive(Component)]
-pub struct CheckpointPlane {
-    pub left: Entity,
-    pub right: Entity,
-}
 
 #[derive(
     Component, PartialEq, Clone, Default, Debug, Display, EnumString, IntoStaticStr, EnumIter, Serialize, Deserialize,
@@ -236,6 +146,9 @@ pub enum CheckpointKind {
     LapCount,
 }
 
+#[derive(Component, Clone, PartialEq, Debug, Serialize, Deserialize, Default)]
+pub struct CheckpointMarker;
+
 // --- OBJECT COMPONENTS ---
 #[derive(Component, Default, Clone, PartialEq, Serialize, Deserialize, Debug)]
 pub struct Object {
@@ -247,18 +160,23 @@ pub struct Object {
 }
 
 // --- ROUTE COMPONENTS ---
-#[derive(Component)]
-pub struct Route {
-    pub setting_1: u8,
-    pub setting_2: u8,
+#[derive(Component, Default, Clone, PartialEq, Serialize, Deserialize, Debug)]
+pub struct RouteSettings {
+    pub smooth_motion: bool,
+    pub loop_style: RouteLoopStyle,
 }
 
-#[derive(Component, Default)]
-pub struct RouteMarker;
-#[derive(Component)]
+#[derive(Default, Clone, PartialEq, Serialize, Deserialize, Debug)]
+pub enum RouteLoopStyle {
+    #[default]
+    Cyclic,
+    Mirror,
+}
+
+#[derive(Component, Default, Clone, PartialEq, Serialize, Deserialize, Debug)]
 pub struct RoutePoint {
-    pub setting_1: u16,
-    pub setting_2: u16,
+    pub settings: u16,
+    pub additional_settings: u16,
 }
 
 // --- AREA COMPONENTS ---
@@ -523,19 +441,33 @@ impl FromKmp<Gobj> for Object {
         }
     }
 }
-impl FromKmp<Poti> for Route {
-    fn from_kmp(data: &Poti, _: &mut Vec<KmpError>) -> Self {
+impl FromKmp<Poti> for RouteSettings {
+    fn from_kmp(data: &Poti, errors: &mut Vec<KmpError>) -> Self {
         Self {
-            setting_1: data.setting_1,
-            setting_2: data.setting_2,
+            smooth_motion: match data.setting_1 {
+                0 => false,
+                1 => true,
+                _ => {
+                    errors.push(KmpError::new("Invalid Route setting found"));
+                    false
+                }
+            },
+            loop_style: match data.setting_2 {
+                0 => RouteLoopStyle::Cyclic,
+                1 => RouteLoopStyle::Mirror,
+                _ => {
+                    errors.push(KmpError::new("Invalid Route setting found"));
+                    RouteLoopStyle::Cyclic
+                }
+            },
         }
     }
 }
 impl FromKmp<PotiPoint> for RoutePoint {
     fn from_kmp(data: &PotiPoint, _: &mut Vec<KmpError>) -> Self {
         Self {
-            setting_1: data.setting_1,
-            setting_2: data.setting_2,
+            settings: data.setting_1,
+            additional_settings: data.setting_2,
         }
     }
 }
@@ -698,143 +630,12 @@ impl_spawn_point!(StartPoint);
 impl_spawn_path!(EnemyPathPoint);
 impl_spawn_path!(ItemPathPoint);
 impl_spawn_point!(Object);
+impl_spawn_path!(RoutePoint);
 impl_spawn_point!(AreaPoint);
 impl_spawn_point!(KmpCamera);
 impl_spawn_point!(RespawnPoint);
 impl_spawn_point!(CannonPoint);
 impl_spawn_point!(BattleFinishPoint);
-
-pub fn spawn_point<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mut World) -> Entity {
-    let meshes = world.resource::<KmpMeshes>().clone();
-    let materials = world.resource::<PointMaterials<T>>().clone();
-    let outline = world.get_resource::<AppSettings>().unwrap().kmp_model.outline.clone();
-
-    // either gets the order id, or gets it from the NextOrderID (which will increment it for next time)
-    let order_id = spawner
-        .order_id
-        .unwrap_or_else(|| world.resource::<NextOrderID<T>>().get());
-
-    let mut entity = match spawner.e {
-        Some(e) => world.entity_mut(e),
-        None => world.spawn_empty(),
-    };
-
-    entity.insert((
-        PbrBundle {
-            mesh: meshes.sphere.clone(),
-            material: materials.point.clone(),
-            transform: spawner.transform,
-            visibility: if spawner.visible {
-                Visibility::Visible
-            } else {
-                Visibility::Hidden
-            },
-            ..default()
-        },
-        spawner.component,
-        KmpSelectablePoint,
-        Tweakable(SnapTo::Kcl),
-        GizmoTransformable,
-        OrderID(order_id),
-        Normalize::new(200., 30., BVec3::TRUE),
-        OutlineBundle {
-            outline: OutlineVolume {
-                visible: false,
-                colour: outline.color,
-                width: outline.width,
-            },
-            ..default()
-        },
-    ));
-    entity.with_children(|parent| {
-        let line_length = 750.;
-        let mut line_transform = Transform::from_scale(vec3(1., line_length, 1.));
-        line_transform.translation.z = line_length / 2.;
-        line_transform.rotate_x(90_f32.to_radians());
-        parent.spawn((
-            PbrBundle {
-                mesh: meshes.cylinder.clone(),
-                material: materials.line.clone(),
-                transform: line_transform,
-                ..default()
-            },
-            NormalizeInheritParent,
-        ));
-
-        let mut arrow_transform = Transform::from_translation(vec3(0., 0., line_length));
-        arrow_transform.rotate_x(90_f32.to_radians());
-        parent.spawn((
-            PbrBundle {
-                mesh: meshes.cone.clone(),
-                material: materials.arrow.clone(),
-                transform: arrow_transform,
-                ..default()
-            },
-            NormalizeInheritParent,
-        ));
-
-        let up_arrow_transform =
-            Transform::from_translation(vec3(0., line_length * 0.75, 0.)).with_scale(vec3(1., 2., 1.));
-        parent.spawn((
-            PbrBundle {
-                mesh: meshes.cone.clone(),
-                material: materials.up_arrow.clone(),
-                transform: up_arrow_transform,
-                ..default()
-            },
-            NormalizeInheritParent,
-        ));
-    });
-    entity.id()
-}
-
-pub fn spawn_path<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mut World) -> Entity {
-    let mesh = world.resource::<KmpMeshes>().sphere.clone();
-    let material = world.resource::<PathMaterials<T>>().point.clone();
-    let outline = world.get_resource::<AppSettings>().unwrap().kmp_model.outline.clone();
-
-    // either gets the order id, or gets it from the NextOrderID (which will increment it for next time)
-    let order_id = spawner
-        .order_id
-        .unwrap_or_else(|| world.resource::<NextOrderID<T>>().get());
-
-    let mut entity = match spawner.e {
-        Some(e) => world.entity_mut(e),
-        None => world.spawn_empty(),
-    };
-    entity.insert((
-        PbrBundle {
-            mesh,
-            material,
-            transform: spawner.transform,
-            visibility: spawner.visible.to_visibility(),
-            ..default()
-        },
-        KmpPathNode {
-            prev_nodes: spawner.prev_nodes.clone().unwrap_or_default(),
-            next_nodes: HashSet::new(),
-        },
-        spawner.component.clone(),
-        KmpSelectablePoint,
-        Tweakable(SnapTo::Kcl),
-        OrderID(order_id),
-        TransformEditOptions {
-            hide_rotation: true,
-            hide_y_translation: false,
-        },
-        GizmoTransformable,
-        Normalize::new(200., 30., BVec3::TRUE),
-        OutlineBundle {
-            outline: OutlineVolume {
-                visible: false,
-                colour: outline.color,
-                width: outline.width,
-            },
-            ..default()
-        },
-    ));
-    entity.id()
-}
 
 impl Spawn for Checkpoint {
     fn spawn(spawner: Spawner<Self>, world: &mut World) -> Entity {
@@ -847,6 +648,7 @@ impl Spawn for Checkpoint {
             cp_spawner = cp_spawner.order_id(order_id);
         }
         let (left, right) = cp_spawner.spawn(world);
+
         if let Some(prev_nodes) = spawner.prev_nodes {
             for prev_left in prev_nodes {
                 KmpPathNode::link_nodes(prev_left, left, world);
@@ -859,12 +661,13 @@ impl Spawn for Checkpoint {
 }
 
 pub struct Spawner<T: Component + Spawn + Clone + Default> {
-    transform: Transform,
-    component: T,
-    prev_nodes: Option<HashSet<Entity>>,
-    order_id: Option<u32>,
-    e: Option<Entity>,
-    visible: bool,
+    pub transform: Transform,
+    pub component: T,
+    pub prev_nodes: Option<HashSet<Entity>>,
+    pub max: u8,
+    pub order_id: Option<u32>,
+    pub e: Option<Entity>,
+    pub visible: bool,
 }
 impl<T: Component + Spawn + Clone + Default> Default for Spawner<T> {
     fn default() -> Self {
@@ -872,12 +675,14 @@ impl<T: Component + Spawn + Clone + Default> Default for Spawner<T> {
             transform: Transform::default(),
             component: T::default(),
             prev_nodes: None,
+            max: 6,
             order_id: None,
             e: None,
             visible: true,
         }
     }
 }
+
 impl<T: Component + Spawn + Clone + Default> Spawner<T> {
     pub fn new(component: T) -> Self {
         Self { component, ..default() }
@@ -886,16 +691,20 @@ impl<T: Component + Spawn + Clone + Default> Spawner<T> {
         self.transform = transform;
         self
     }
-    pub fn pos(mut self, pos: Vec3) -> Self {
-        self.transform.translation = pos;
+    pub fn pos(mut self, pos: impl Into<Vec3>) -> Self {
+        self.transform.translation = pos.into();
         self
     }
     pub fn rot(mut self, rot: Quat) -> Self {
         self.transform.rotation = rot;
         self
     }
-    pub fn prev_nodes(mut self, prev_nodes: HashSet<Entity>) -> Self {
-        self.prev_nodes = Some(prev_nodes);
+    pub fn prev_nodes(mut self, prev_nodes: impl IntoIterator<Item = Entity>) -> Self {
+        self.prev_nodes = Some(prev_nodes.into_iter().collect());
+        self
+    }
+    pub fn max_connected(mut self, max: u8) -> Self {
+        self.max = max;
         self
     }
     pub fn order_id(mut self, id: u32) -> Self {
@@ -984,7 +793,7 @@ where
             entries: Vec::new(),
         };
 
-        let items: Vec<_> = q.iter(world).sort::<&OrderID>().collect();
+        let items: Vec<_> = q.iter(world).sort::<&OrderId>().collect();
         let num_entries = items.len();
         let mut kmp_items = Vec::with_capacity(num_entries);
         for (item, transform) in items {

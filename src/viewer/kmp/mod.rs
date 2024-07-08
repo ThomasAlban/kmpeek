@@ -5,6 +5,7 @@ pub mod meshes_materials;
 pub mod ordering;
 pub mod path;
 pub mod point;
+pub mod routes;
 pub mod sections;
 pub mod settings;
 
@@ -29,21 +30,28 @@ use bevy::prelude::*;
 use binrw::BinRead;
 use ordering::ordering_plugin;
 use path::path_plugin;
+use routes::{routes_plugin, spawn_route_section};
 use sections::{section_plugin, KmpSection};
 use std::{ffi::OsStr, fs::File, sync::Arc};
 
 pub fn kmp_plugin(app: &mut App) {
-    app.add_plugins((checkpoint_plugin, path_plugin, ordering_plugin, section_plugin))
-        .add_event::<RecalcPaths>()
-        .add_systems(Startup, setup_kmp_meshes_materials.after(SetupAppSettingsSet))
-        .add_systems(
-            Update,
-            (
-                spawn_model.run_if(on_event::<KmpFileSelected>()),
-                update_visible.run_if(resource_changed::<KmpVisibility>),
-                open_kmp_kcl,
-            ),
-        );
+    app.add_plugins((
+        checkpoint_plugin,
+        path_plugin,
+        ordering_plugin,
+        section_plugin,
+        routes_plugin,
+    ))
+    .add_event::<RecalcPaths>()
+    .add_systems(Startup, setup_kmp_meshes_materials.after(SetupAppSettingsSet))
+    .add_systems(
+        Update,
+        (
+            spawn_model.run_if(on_event::<KmpFileSelected>()),
+            update_visible.run_if(resource_changed::<KmpVisibility>),
+            open_kmp_kcl,
+        ),
+    );
 }
 
 pub fn open_kmp_kcl(
@@ -121,7 +129,6 @@ pub fn spawn_model(
     spawn_enemy_item_path_section::<Itpt, ItemPathPoint>(&mut commands, kmp.clone(), &mut kmp_errors);
 
     // --- CHECKPOINTS ---
-    //
     spawn_checkpoint_section(&mut commands, kmp.clone(), &mut kmp_errors, checkpoint_height.0);
 
     // --- OBJECTS ---
@@ -129,6 +136,8 @@ pub fn spawn_model(
     spawn_point_section::<Gobj, Object>(&mut commands, kmp.clone(), &mut kmp_errors);
 
     // --- ROUTES ---
+
+    spawn_route_section(&mut commands, kmp.clone(), &mut kmp_errors);
 
     // --- AREAS ---
 
@@ -167,9 +176,10 @@ fn update_visible(
             Query<&mut Visibility, With<ItemPathPoint>>,
             Query<&mut Visibility, With<Checkpoint>>,
             Query<&mut Visibility, With<Object>>,
-            Query<&mut Visibility, With<AreaPoint>>,
+            Query<&mut Visibility, With<RoutePoint>>,
         )>,
         ParamSet<(
+            Query<&mut Visibility, With<AreaPoint>>,
             Query<&mut Visibility, With<KmpCamera>>,
             Query<&mut Visibility, With<RespawnPoint>>,
             Query<&mut Visibility, With<CannonPoint>>,
@@ -197,17 +207,19 @@ fn update_visible(
     set_visibility_iter!(q.p0().p2(), ItemPaths);
     set_visibility_iter!(q.p0().p3(), Checkpoints);
     set_visibility_iter!(q.p0().p4(), Objects);
-    set_visibility_iter!(q.p0().p5(), Areas);
-    set_visibility_iter!(q.p1().p0(), Cameras);
-    set_visibility_iter!(q.p1().p1(), RespawnPoints);
-    set_visibility_iter!(q.p1().p2(), CannonPoints);
-    set_visibility_iter!(q.p1().p3(), BattleFinishPoints);
+    set_visibility_iter!(q.p0().p5(), Routes);
+    set_visibility_iter!(q.p1().p0(), Areas);
+    set_visibility_iter!(q.p1().p2(), Cameras);
+    set_visibility_iter!(q.p1().p2(), RespawnPoints);
+    set_visibility_iter!(q.p1().p3(), CannonPoints);
+    set_visibility_iter!(q.p1().p4(), BattleFinishPoints);
 
-    for (v, node_link) in q.p1().p4().iter_mut() {
+    for (v, node_link) in q.p1().p5().iter_mut() {
         match node_link.kind {
             PathType::Enemy => set_visibility(v, EnemyPaths),
             PathType::Item => set_visibility(v, ItemPaths),
             PathType::Checkpoint { .. } => set_visibility(v, Checkpoints),
+            PathType::Route => set_visibility(v, Routes),
         }
     }
 }

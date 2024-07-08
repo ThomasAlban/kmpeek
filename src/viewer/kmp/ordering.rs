@@ -1,6 +1,6 @@
 use super::{
     sections::add_for_all_components, AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint,
-    ItemPathPoint, KmpCamera, Object, RespawnPoint, StartPoint,
+    ItemPathPoint, KmpCamera, Object, RespawnPoint, RoutePoint, StartPoint,
 };
 use bevy::prelude::*;
 use std::{
@@ -19,11 +19,11 @@ fn setup_ordering<T: Component>(app: &mut App) {
 }
 
 #[derive(Component, Default, PartialEq, Eq, PartialOrd, Ord, Deref, DerefMut)]
-pub struct OrderID(pub u32);
+pub struct OrderId(pub u32);
 
 #[derive(Resource)]
 pub struct NextOrderID<T> {
-    pub id: AtomicU32,
+    id: AtomicU32,
     _p: PhantomData<T>,
 }
 impl<T: Component> Default for NextOrderID<T> {
@@ -46,9 +46,9 @@ impl<T: Component> NextOrderID<T> {
 #[derive(Event, Default)]
 pub struct RefreshOrdering;
 
-pub fn refresh_order<T: Component>(mut q: Query<&mut OrderID, With<T>>, next_id: Res<NextOrderID<T>>) {
+pub fn refresh_order<T: Component>(mut q: Query<&mut OrderId, With<T>>, next_id: Res<NextOrderID<T>>) {
     let mut id = 0u32;
-    for (i, mut order_id) in q.iter_mut().sort_by_key::<&OrderID, _>(|x| *x).enumerate() {
+    for (i, mut order_id) in q.iter_mut().sort::<&OrderId>().enumerate() {
         order_id.0 = i as u32;
         id = i as u32 + 1;
     }

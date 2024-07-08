@@ -8,7 +8,7 @@ use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 
 use super::{
     AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint, KmpCamera, Object,
-    RespawnPoint, StartPoint, TrackInfo,
+    RespawnPoint, RoutePoint, StartPoint, TrackInfo,
 };
 
 pub fn section_plugin(app: &mut App) {
@@ -27,6 +27,7 @@ pub enum KmpSection {
     #[strum(serialize = "Respawn Points")]
     RespawnPoints,
     Objects,
+    Routes,
     Areas,
     Cameras,
     #[strum(serialize = "Cannon Points")]
@@ -56,6 +57,7 @@ pub struct KmpEditModeOptions<'w, 's> {
     checkpoint: Option<Res<'w, KmpEditMode<Checkpoint>>>,
     respawn_point: Option<Res<'w, KmpEditMode<RespawnPoint>>>,
     object: Option<Res<'w, KmpEditMode<Object>>>,
+    route: Option<Res<'w, KmpEditMode<RoutePoint>>>,
     area: Option<Res<'w, KmpEditMode<AreaPoint>>>,
     camera: Option<Res<'w, KmpEditMode<KmpCamera>>>,
     cannon_point: Option<Res<'w, KmpEditMode<CannonPoint>>>,
@@ -79,6 +81,8 @@ impl<'w, 's> KmpEditModeOptions<'w, 's> {
             KmpSection::RespawnPoints
         } else if self.object.is_some() {
             KmpSection::Objects
+        } else if self.route.is_some() {
+            KmpSection::Routes
         } else if self.area.is_some() {
             KmpSection::Areas
         } else if self.camera.is_some() {
@@ -98,6 +102,7 @@ impl<'w, 's> KmpEditModeOptions<'w, 's> {
         self.commands.remove_resource::<KmpEditMode<Checkpoint>>();
         self.commands.remove_resource::<KmpEditMode<RespawnPoint>>();
         self.commands.remove_resource::<KmpEditMode<Object>>();
+        self.commands.remove_resource::<KmpEditMode<RoutePoint>>();
         self.commands.remove_resource::<KmpEditMode<AreaPoint>>();
         self.commands.remove_resource::<KmpEditMode<KmpCamera>>();
         self.commands.remove_resource::<KmpEditMode<CannonPoint>>();
@@ -120,6 +125,7 @@ macro_rules! add_for_all_components {
             $sys::<Checkpoint>,
             $sys::<RespawnPoint>,
             $sys::<Object>,
+            $sys::<RoutePoint>,
             $sys::<AreaPoint>,
             $sys::<KmpCamera>,
             $sys::<CannonPoint>,
@@ -128,24 +134,6 @@ macro_rules! add_for_all_components {
     };
 }
 pub(crate) use add_for_all_components;
-
-impl From<KmpSection> for usize {
-    fn from(value: KmpSection) -> Self {
-        match value {
-            KmpSection::StartPoints => 0,
-            KmpSection::EnemyPaths => 1,
-            KmpSection::ItemPaths => 2,
-            KmpSection::Checkpoints => 3,
-            KmpSection::RespawnPoints => 4,
-            KmpSection::Objects => 5,
-            KmpSection::Areas => 6,
-            KmpSection::Cameras => 7,
-            KmpSection::CannonPoints => 8,
-            KmpSection::BattleFinishPoints => 9,
-            KmpSection::TrackInfo => 10,
-        }
-    }
-}
 
 pub trait ToKmpSection {
     fn to_kmp_section() -> KmpSection;
@@ -166,6 +154,7 @@ impl_to_kmp_sect!(ItemPathPoint, KmpSection::ItemPaths);
 impl_to_kmp_sect!(Checkpoint, KmpSection::Checkpoints);
 impl_to_kmp_sect!(RespawnPoint, KmpSection::RespawnPoints);
 impl_to_kmp_sect!(Object, KmpSection::Objects);
+impl_to_kmp_sect!(RoutePoint, KmpSection::Routes);
 impl_to_kmp_sect!(AreaPoint, KmpSection::Areas);
 impl_to_kmp_sect!(KmpCamera, KmpSection::Cameras);
 impl_to_kmp_sect!(CannonPoint, KmpSection::CannonPoints);

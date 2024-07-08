@@ -1,15 +1,16 @@
 use super::{
+    checkpoints::CheckpointRight,
     components::FromKmp,
     meshes_materials::{CheckpointMaterials, KmpMeshes, PathMaterials},
-    ordering::{NextOrderID, OrderID},
-    Checkpoint, CheckpointRight, EnemyPathPoint, ItemPathPoint, KmpError, KmpSelectablePoint, PathOverallStart,
-    TransformEditOptions,
+    ordering::{NextOrderID, OrderId},
+    Checkpoint, EnemyPathPoint, ItemPathPoint, KmpError, KmpSelectablePoint, PathOverallStart, RoutePoint, Spawn,
+    Spawner, TransformEditOptions,
 };
 use crate::{
     ui::settings::AppSettings,
     util::{
         kmp_file::{KmpFile, KmpGetPathSection, KmpGetSection, KmpPositionPoint},
-        VisibilityToBool,
+        BoolToVisibility, VisibilityToBool,
     },
     viewer::{
         edit::{
@@ -41,6 +42,7 @@ pub fn path_plugin(app: &mut App) {
             update_node_links::<ItemPathPoint>,
             update_node_links::<Checkpoint>,
             update_node_links::<CheckpointRight>,
+            update_node_links::<RoutePoint>,
             traverse_paths,
         )
             .after(DeleteSet),
@@ -60,6 +62,7 @@ pub enum PathType {
     Enemy,
     Item,
     Checkpoint { right: bool },
+    Route,
 }
 pub trait ToPathType {
     fn to_path_type() -> PathType;
@@ -84,16 +87,31 @@ impl ToPathType for CheckpointRight {
         PathType::Checkpoint { right: true }
     }
 }
+impl ToPathType for RoutePoint {
+    fn to_path_type() -> PathType {
+        PathType::Route
+    }
+}
 
 // represents the line that links the 2 entities
 #[derive(Component)]
 pub struct KmpPathNodeLinkLine;
 
 // component attached to kmp entities which are linked to other kmp entities
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct KmpPathNode {
+    pub max: u8,
     pub prev_nodes: HashSet<Entity>,
     pub next_nodes: HashSet<Entity>,
+}
+impl Default for KmpPathNode {
+    fn default() -> Self {
+        Self {
+            max: 6,
+            prev_nodes: HashSet::with_capacity(6),
+            next_nodes: HashSet::with_capacity(6),
+        }
+    }
 }
 impl Component for KmpPathNode {
     const STORAGE_TYPE: StorageType = StorageType::Table;
@@ -138,10 +156,11 @@ impl Component for KmpPathNode {
     }
 }
 impl KmpPathNode {
-    pub fn new() -> Self {
+    pub fn new(max: u8) -> Self {
         KmpPathNode {
-            prev_nodes: HashSet::with_capacity(6),
-            next_nodes: HashSet::with_capacity(6),
+            max,
+            prev_nodes: HashSet::with_capacity(max as usize),
+            next_nodes: HashSet::with_capacity(max as usize),
         }
     }
     #[allow(dead_code)]
@@ -193,7 +212,8 @@ impl KmpPathNode {
         if prev_node.is_linked_with(prev_node_e, next_node, next_e) {
             return false;
         }
-        if next_node.prev_nodes.len() >= 6 || prev_node.next_nodes.len() >= 6 {
+        if next_node.prev_nodes.len() >= next_node.max as usize || prev_node.next_nodes.len() >= prev_node.max as usize
+        {
             return false;
         }
 
@@ -252,103 +272,9 @@ pub fn is_checkpoint_right<T: 'static>() -> bool {
 //     is_enemy_point::<T>() || is_item_point::<T>() || is_checkpoint::<T>()
 // }
 
-pub struct PathPointSpawner<T> {
-    position: Vec3,
-    kmp_component: T,
-    visible: bool,
-    prev_nodes: HashSet<Entity>,
-    order_id: Option<u32>,
-    e: Option<Entity>,
-}
-impl<T: Component + Clone> PathPointSpawner<T> {
-    pub fn new(kmp_component: T) -> Self {
-        Self {
-            position: Vec3::default(),
-            kmp_component,
-            visible: true,
-            prev_nodes: HashSet::new(),
-            order_id: None,
-            e: None,
-        }
-    }
-    pub fn pos(mut self, pos: Vec3) -> Self {
-        self.position = pos;
-        self
-    }
-    pub fn visible(mut self, visible: bool) -> Self {
-        self.visible = visible;
-        self
-    }
-    // pub fn prev_nodes(mut self, prev_nodes: HashSet<Entity>) -> Self {
-    //     self.prev_nodes = prev_nodes;
-    //     self
-    // }
-    pub fn order_id(mut self, id: u32) -> Self {
-        self.order_id = Some(id);
-        self
-    }
-
-    // pub fn spawn_command(mut self, commands: &mut Commands) -> Entity {
-    //     let e = self.e.unwrap_or_else(|| commands.spawn_empty().id());
-    //     self.e = Some(e);
-    //     commands.add(|world: &mut World| {
-    //         self.spawn(world);
-    //     });
-    //     e
-    // }
-    pub fn spawn(self, world: &mut World) -> Entity {
-        let mesh = world.resource::<KmpMeshes>().sphere.clone();
-        let material = world.resource::<PathMaterials<T>>().point.clone();
-        let outline = world.get_resource::<AppSettings>().unwrap().kmp_model.outline.clone();
-
-        // either gets the order id, or gets it from the NextOrderID (which will increment it for next time)
-        let order_id = self
-            .order_id
-            .unwrap_or_else(|| world.resource::<NextOrderID<T>>().get());
-
-        let mut entity = match self.e {
-            Some(e) => world.entity_mut(e),
-            None => world.spawn_empty(),
-        };
-        entity.insert((
-            PbrBundle {
-                mesh,
-                material,
-                transform: Transform::from_translation(self.position),
-                visibility: if self.visible {
-                    Visibility::Visible
-                } else {
-                    Visibility::Hidden
-                },
-                ..default()
-            },
-            KmpPathNode::new().with_prev(self.prev_nodes),
-            self.kmp_component.clone(),
-            KmpSelectablePoint,
-            Tweakable(SnapTo::Kcl),
-            OrderID(order_id),
-            TransformEditOptions {
-                hide_rotation: true,
-                hide_y_translation: false,
-            },
-            GizmoTransformable,
-            Normalize::new(200., 30., BVec3::TRUE),
-            OutlineBundle {
-                outline: OutlineVolume {
-                    visible: false,
-                    colour: outline.color,
-                    width: outline.width,
-                },
-                ..default()
-            },
-        ));
-        entity.id()
-    }
-}
-
 pub fn spawn_enemy_item_path_section<
     T: KmpGetSection + KmpGetPathSection + KmpPositionPoint + Send + 'static + Clone,
-    U: Component + FromKmp<T> + Clone + Debug,
+    U: Component + FromKmp<T> + Clone + Debug + Spawn,
 >(
     commands: &mut Commands,
     kmp: Arc<KmpFile>,
@@ -366,11 +292,13 @@ pub fn spawn_enemy_item_path_section<
             };
             for (j, node) in data_group.nodes.iter().enumerate() {
                 let kmp_component = component_group[j].clone();
-                let spawned_entity = PathPointSpawner::<_>::new(kmp_component)
-                    .pos(node.get_position().into())
+
+                let spawned_entity = Spawner::new(kmp_component)
+                    .pos(node.get_position())
                     .visible(false)
                     .order_id(acc)
                     .spawn(world);
+
                 if i == 0 && j == 0 {
                     world.entity_mut(spawned_entity).insert(PathOverallStart);
                 }
@@ -381,6 +309,51 @@ pub fn spawn_enemy_item_path_section<
         }
         link_entity_groups(world, entity_groups);
     });
+}
+
+pub fn spawn_path<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mut World) -> Entity {
+    let mesh = world.resource::<KmpMeshes>().sphere.clone();
+    let material = world.resource::<PathMaterials<T>>().point.clone();
+    let outline = world.get_resource::<AppSettings>().unwrap().kmp_model.outline;
+
+    // either gets the order id, or gets it from the NextOrderID (which will increment it for next time)
+    let order_id = spawner
+        .order_id
+        .unwrap_or_else(|| world.resource::<NextOrderID<T>>().get());
+
+    let mut entity = match spawner.e {
+        Some(e) => world.entity_mut(e),
+        None => world.spawn_empty(),
+    };
+    entity.insert((
+        PbrBundle {
+            mesh,
+            material,
+            transform: spawner.transform,
+            visibility: spawner.visible.to_visibility(),
+            ..default()
+        },
+        KmpPathNode::new(spawner.max).with_prev(spawner.prev_nodes.clone().unwrap_or_default()),
+        spawner.component.clone(),
+        KmpSelectablePoint,
+        Tweakable(SnapTo::Kcl),
+        OrderId(order_id),
+        TransformEditOptions {
+            hide_rotation: true,
+            hide_y_translation: false,
+        },
+        GizmoTransformable,
+        Normalize::new(200., 30., BVec3::TRUE),
+        OutlineBundle {
+            outline: OutlineVolume {
+                visible: false,
+                colour: outline.color,
+                width: outline.width,
+            },
+            ..default()
+        },
+    ));
+    entity.id()
 }
 
 /// converts points and paths in the kmp to a list of groups containing the data, and components that have been converted from that data
@@ -602,32 +575,36 @@ pub fn update_node_links<T: Component + ToPathType + Clone>(
     }
 }
 
-#[derive(Event)]
+#[derive(Event, Default)]
 pub struct RecalcPaths {
     pub do_enemy: bool,
     pub do_item: bool,
     pub do_cp: bool,
+    pub do_route: bool,
 }
 impl RecalcPaths {
     pub fn enemy() -> Self {
         Self {
             do_enemy: true,
-            do_item: false,
-            do_cp: false,
+            ..default()
         }
     }
     pub fn item() -> Self {
         Self {
-            do_enemy: false,
             do_item: true,
-            do_cp: false,
+            ..default()
         }
     }
     pub fn cp() -> Self {
         Self {
-            do_enemy: false,
-            do_item: false,
             do_cp: true,
+            ..default()
+        }
+    }
+    pub fn route() -> Self {
+        Self {
+            do_route: true,
+            ..default()
         }
     }
     pub fn all() -> Self {
@@ -635,6 +612,7 @@ impl RecalcPaths {
             do_enemy: true,
             do_item: true,
             do_cp: true,
+            do_route: true,
         }
     }
 }
@@ -646,6 +624,7 @@ pub fn traverse_paths(
         TraversePath<EnemyPathPoint>,
         TraversePath<ItemPathPoint>,
         TraversePath<Checkpoint>,
+        TraversePath<RoutePoint>,
     )>,
 ) {
     for ev in ev_recalc_paths.read() {
@@ -657,6 +636,9 @@ pub fn traverse_paths(
         }
         if ev.do_cp {
             commands.insert_resource(p.p2().traverse());
+        }
+        if ev.do_route {
+            commands.insert_resource(p.p3().traverse());
         }
     }
 }

@@ -9,7 +9,7 @@ use crate::{
         kmp::{
             components::{
                 AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint, KmpCamera,
-                Object, RespawnPoint, StartPoint, TrackInfo,
+                Object, RespawnPoint, RoutePoint, StartPoint, TrackInfo,
             },
             path::{PathGroup, PathGroups},
             sections::{KmpEditMode, KmpEditModeOptions, KmpSection, ToKmpSection},
@@ -34,14 +34,15 @@ pub struct ShowOutlinerTab<'w, 's> {
                     KmpOutliner<'w, 's, EnemyPathPoint>,
                     KmpOutliner<'w, 's, ItemPathPoint>,
                     KmpOutliner<'w, 's, Checkpoint>,
+                    KmpOutliner<'w, 's, RespawnPoint>,
                 ),
             >,
             ParamSet<
                 'w,
                 's,
                 (
-                    KmpOutliner<'w, 's, RespawnPoint>,
                     KmpOutliner<'w, 's, Object>,
+                    KmpOutliner<'w, 's, RoutePoint>,
                     KmpOutliner<'w, 's, AreaPoint>,
                     KmpOutliner<'w, 's, KmpCamera>,
                     KmpOutliner<'w, 's, CannonPoint>,
@@ -58,8 +59,9 @@ impl UiSubSection for ShowOutlinerTab<'_, '_> {
         self.p.p0().p2().show_path_outliner(ui);
         self.p.p0().p3().show_path_outliner(ui);
         self.p.p0().p4().show_path_outliner(ui);
+        self.p.p0().p5().show_point_outliner(ui);
         self.p.p1().p0().show_point_outliner(ui);
-        self.p.p1().p1().show_point_outliner(ui);
+        self.p.p1().p1().show_path_outliner(ui);
         self.p.p1().p2().show_point_outliner(ui);
         self.p.p1().p3().show_point_outliner(ui);
         self.p.p1().p4().show_point_outliner(ui);
@@ -125,7 +127,7 @@ impl<T: Component + ToKmpSection> KmpOutliner<'_, '_, T> {
                 .tint(Icons::SECTION_COLORS[T::to_kmp_section() as usize]),
             );
             if ui.selectable_label(cur_mode, T::to_kmp_section().to_string()).clicked() {
-                visibilities.0 = [false; 10];
+                visibilities.0 = [false; 11];
                 visibilities.0[T::to_kmp_section() as usize] = true;
                 self.mode_opts.change_mode::<T>();
             }
@@ -206,7 +208,7 @@ impl<T: Component + ToKmpSection> KmpOutliner<'_, '_, T> {
                     .tint(Icons::SECTION_COLORS[KmpSection::TrackInfo as usize]),
             );
             if ui.selectable_label(self.mode.is_some(), "Track Info").clicked() {
-                visibilities.0 = [false; 10];
+                visibilities.0 = [false; 11];
                 self.mode_opts.change_mode::<TrackInfo>();
             }
         });

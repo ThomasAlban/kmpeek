@@ -12,7 +12,7 @@ use crate::{
                 AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint,
                 KmpCamera, Object, RespawnPoint, StartPoint, TrackInfo,
             },
-            ordering::OrderID,
+            ordering::OrderId,
             sections::{KmpEditMode, KmpEditModeOptions, ToKmpSection},
         },
     },
@@ -29,7 +29,7 @@ type KmpTableQuery<'w, 's, C> = Query<
         &'static mut Transform,
         Entity,
         Has<Selected>,
-        &'static OrderID,
+        &'static OrderId,
     ),
 >;
 
@@ -322,7 +322,7 @@ impl<T: Component + ToKmpSection + PartialEq + Clone + ShowKmpTableTrait> ShowKm
             header.col(|_| {});
         });
         table.body(|mut body| {
-            for (mut t, mut transform, e, is_selected, order_id) in self.q.iter_mut().sort::<&OrderID>() {
+            for (mut t, mut transform, e, is_selected, order_id) in self.q.iter_mut().sort::<&OrderId>() {
                 body.row(20., |mut row| {
                     row.set_selected(is_selected);
 

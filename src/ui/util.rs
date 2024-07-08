@@ -455,13 +455,14 @@ impl_img!(view_off);
 impl_img!(view_on);
 
 impl Icons {
-    pub const SECTION_COLORS: [Color32; 11] = [
+    pub const SECTION_COLORS: [Color32; 12] = [
         Color32::from_rgb(80, 80, 255),  // Start Points
         Color32::RED,                    // Enemy Paths
         Color32::GREEN,                  // Item Paths
         Color32::from_rgb(70, 190, 255), // Checkpoints (todo)
         Color32::YELLOW,                 // Respawn Points
         Color32::from_rgb(255, 0, 255),  // Objects
+        Color32::from_rgb(70, 190, 255), // Routes (todo)
         Color32::from_rgb(255, 160, 0),  // Areas
         Color32::from_rgb(160, 0, 255),  // Cameras
         Color32::from_rgb(255, 50, 0),   // Cannon Points

@@ -158,7 +158,7 @@ pub struct Poti {
     pub setting_1: u8,
     pub setting_2: u8,
     #[br(count = usize::from(num_points))]
-    pub routes: Vec<PotiPoint>,
+    pub points: Vec<PotiPoint>,
 }
 
 /// The AREA (area) section describes areas; used to determine which camera to use, for example. The size is 5000 for both the positive and negative sides of the X and Z-axes, and 10000 for only the positive side of the Y-axis.

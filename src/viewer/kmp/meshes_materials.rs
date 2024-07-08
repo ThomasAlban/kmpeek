@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use super::{
     settings::{CheckpointColor, PathColor, PointColor},
     AreaPoint, BattleFinishPoint, CannonPoint, EnemyPathPoint, ItemPathPoint, KmpCamera, Object, RespawnPoint,
-    StartPoint,
+    RoutePoint, StartPoint,
 };
 use crate::{
     ui::settings::AppSettings,
@@ -153,6 +153,8 @@ pub fn setup_kmp_meshes_materials(
     commands.insert_resource(respawn_points);
     let objects = PointMaterials::<Object>::from_colors(&mut materials, &colors.objects);
     commands.insert_resource(objects);
+    let routes = PathMaterials::<RoutePoint>::from_colors(&mut materials, &colors.routes);
+    commands.insert_resource(routes);
     let areas = PointMaterials::<AreaPoint>::from_colors(&mut materials, &colors.areas);
     commands.insert_resource(areas);
     let cameras = PointMaterials::<KmpCamera>::from_colors(&mut materials, &colors.cameras);
