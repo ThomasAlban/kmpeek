@@ -10,7 +10,6 @@ These are the things I still need to do before an alpha release. Some of these a
 
 - [x] Finish checkpoint editor
 - [x] Finish Table viewer
-- [ ] Export/Import CSV from Table
 - [ ] Route editor
 - [ ] Saving back to KMP format
 - [ ] Custom object settings
@@ -24,6 +23,7 @@ If you want to help test KMPeek when these things are done (before the main firs
 
 These are things that I want to get to in subsequent updates, once an initial version is released.
 
+- Export/Import CSV from tables
 - Camera Preview
 - Eline control handling - converting it to a setting on enemy points
 - Copy/paste
