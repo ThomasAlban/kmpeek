@@ -1,4 +1,4 @@
-#KMPeek
+![logo_banner](https://github.com/ThomasAlban/kmpeek/blob/main/assets/logos/logo_banner.svg)
 
 An in-progress 3D KMP editor for Mario Kart Wii. The goal is for it to be the ultimate KMP editor for Mario Kart Wii, taking inspiration from the good parts of others (such as [Lorenzi's](https://github.com/hlorenzi/kmp-editor), [KMP Cloud](https://wiki.tockdom.com/wiki/KMP_Cloud)). It is currently unusable as a KMP editor but hopefully will have its first release soon!
 
