@@ -536,7 +536,10 @@ pub fn update_node_links<T: Component + ToPathType + Clone>(
 
         // see https://github.com/bevyengine/bevy/issues/11517
         let Ok(transforms) = q_transform.get_many_mut([kmp_node_link.prev_node, kmp_node_link.next_node]) else {
-            commands.entity(link_entity).despawn_recursive();
+            if let Some(e) = commands.get_entity(link_entity) {
+                e.despawn_recursive();
+            }
+
             continue;
         };
         let [prev_transform, next_transform] = transforms.map(Ref::from);

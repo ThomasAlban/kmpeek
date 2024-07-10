@@ -96,8 +96,8 @@ impl Component for CheckpointRight {
             let cp_right = world.get::<CheckpointRight>(e).unwrap();
             let left_e = cp_right.left;
             // despawn the left entity, which will in turn delete the line and plane
-            if world.get_entity(left_e).is_some() {
-                world.commands().entity(left_e).despawn();
+            if let Some(e) = world.commands().get_entity(left_e) {
+                e.despawn_recursive();
             }
         });
     }

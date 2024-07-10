@@ -182,8 +182,9 @@ fn delete_point(
     }
 
     for e in q_selected.iter_mut() {
-        commands.entity(e).despawn_recursive();
+        if let Some(e) = commands.get_entity(e) {
+            e.despawn_recursive();
+        }
     }
-
     ev_refresh_ordering.send_default();
 }

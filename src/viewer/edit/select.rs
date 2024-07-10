@@ -38,7 +38,7 @@ fn select(
     q_window: Query<&Window>,
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
-    q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
+    q_camera: Query<(&mut Camera, &GlobalTransform), Without<Gizmo2dCam>>,
     q_gizmos: Query<&GizmoTarget>,
     mut raycast: Raycast,
     q_kmp_section: Query<&KmpSelectablePoint>,
