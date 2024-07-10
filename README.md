@@ -1,4 +1,4 @@
-# kmpeek
+#KMPeek
 
 An in-progress 3D KMP editor for Mario Kart Wii. The goal is for it to be the ultimate KMP editor for Mario Kart Wii, taking inspiration from the good parts of others (such as [Lorenzi's](https://github.com/hlorenzi/kmp-editor), [KMP Cloud](https://wiki.tockdom.com/wiki/KMP_Cloud)). It is currently unusable as a KMP editor but hopefully will have its first release soon!
 
@@ -10,7 +10,6 @@ These are the things I still need to do before an alpha release. Some of these a
 
 - [x] Finish checkpoint editor
 - [x] Finish Table viewer
-- [ ] Export/Import CSV from Table
 - [ ] Route editor
 - [ ] Saving back to KMP format
 - [ ] Custom object settings
@@ -24,6 +23,7 @@ If you want to help test KMPeek when these things are done (before the main firs
 
 These are things that I want to get to in subsequent updates, once an initial version is released.
 
+- Export/Import CSV from tables
 - Camera Preview
 - Eline control handling - converting it to a setting on enemy points
 - Copy/paste
