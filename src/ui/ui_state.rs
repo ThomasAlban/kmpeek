@@ -17,7 +17,7 @@ pub fn ui_state_plugin(app: &mut App) {
         // .init_resource::<CameraSettingsOpen>()
         .init_resource::<KmpFilePath>()
         // .init_resource::<ShowModesCollapsed>()
-        .init_resource::<KmpVisibility>()
+        // .init_resource::<KmpVisibility>()
         .add_event::<SaveDockTree>()
         .add_systems(Update, save_docktree.run_if(on_event::<SaveDockTree>()))
         .add_systems(Update, reset_docktree.run_if(on_event::<ResetDockTree>()))
@@ -46,8 +46,8 @@ pub fn reset_docktree(mut pkv: ResMut<PkvStore>, mut tree: ResMut<DockTree>) {
 pub struct KmpFilePath(pub Option<PathBuf>);
 // #[derive(Resource, Default)]
 // pub struct ShowModesCollapsed(pub Option<f32>);
-#[derive(Resource, Default, Clone, PartialEq)]
-pub struct KmpVisibility(pub [bool; 11]);
+// #[derive(Resource, Default, Clone, PartialEq)]
+// pub struct KmpVisibility(pub [bool; 11]);
 
 #[derive(Serialize, Deserialize, Resource, Deref, DerefMut)]
 pub struct Increment(pub u32);

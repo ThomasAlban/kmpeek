@@ -1,9 +1,6 @@
 use super::UiSubSection;
 use crate::{
-    ui::{
-        ui_state::KmpVisibility,
-        util::{view_icon_btn, Icons},
-    },
+    ui::util::{view_icon_btn, Icons},
     viewer::{
         edit::select::Selected,
         kmp::{
@@ -13,6 +10,7 @@ use crate::{
             },
             path::{PathGroup, PathGroups},
             sections::{KmpEditMode, KmpEditModeOptions, KmpSection, ToKmpSection},
+            SetSectionVisibility,
         },
     },
 };
@@ -74,12 +72,13 @@ pub struct KmpOutliner<'w, 's, T: Component + ToKmpSection> {
     q: Query<'w, 's, Entity, With<T>>,
     path_groups: Option<Res<'w, PathGroups<T>>>,
     mode: Option<Res<'w, KmpEditMode<T>>>,
-    kmp_visibility: ResMut<'w, KmpVisibility>,
+    // kmp_visibility: ResMut<'w, KmpVisibility>,
     mode_opts: KmpEditModeOptions<'w, 's>,
     q_visibility: Query<'w, 's, &'static mut Visibility>,
     keys: Res<'w, ButtonInput<KeyCode>>,
     q_selected: Query<'w, 's, Entity, With<Selected>>,
     commands: Commands<'w, 's>,
+    set_sect_visibility: EventWriter<'w, SetSectionVisibility<T>>,
 }
 impl<T: Component + ToKmpSection> KmpOutliner<'_, '_, T> {
     const ICON_SIZE: f32 = 14.;
@@ -112,7 +111,6 @@ impl<T: Component + ToKmpSection> KmpOutliner<'_, '_, T> {
     fn show_header(&mut self, ui: &mut Ui, path: bool) {
         let entities: Vec<_> = self.q.iter().collect();
         let cur_mode = self.mode.is_some();
-        let mut visibilities = self.kmp_visibility.clone();
         ui.horizontal(|ui| {
             if !path {
                 ui.add_space(18.);
@@ -127,8 +125,6 @@ impl<T: Component + ToKmpSection> KmpOutliner<'_, '_, T> {
                 .tint(Icons::SECTION_COLORS[T::to_kmp_section() as usize]),
             );
             if ui.selectable_label(cur_mode, T::to_kmp_section().to_string()).clicked() {
-                visibilities.0 = [false; 11];
-                visibilities.0[T::to_kmp_section() as usize] = true;
                 self.mode_opts.change_mode::<T>();
             }
 
@@ -141,11 +137,11 @@ impl<T: Component + ToKmpSection> KmpOutliner<'_, '_, T> {
                     false
                 };
                 if view_icon_btn(ui, &mut all_visible).changed() {
-                    visibilities.0[T::to_kmp_section() as usize] = all_visible;
+                    self.set_sect_visibility
+                        .send(SetSectionVisibility::<T>::new(all_visible));
                 }
             });
         });
-        self.kmp_visibility.set_if_neq(visibilities);
     }
     fn show_path(&mut self, ui: &mut Ui, i: usize, pathgroup: PathGroup, color: Color32) {
         let mut all_visible = if !pathgroup.path.is_empty() {
@@ -199,7 +195,6 @@ impl<T: Component + ToKmpSection> KmpOutliner<'_, '_, T> {
         });
     }
     fn show_track_info_header(&mut self, ui: &mut Ui) {
-        let mut visibilities = self.kmp_visibility.clone();
         ui.horizontal(|ui| {
             ui.add_space(18.);
             ui.add_sized(
@@ -208,10 +203,8 @@ impl<T: Component + ToKmpSection> KmpOutliner<'_, '_, T> {
                     .tint(Icons::SECTION_COLORS[KmpSection::TrackInfo as usize]),
             );
             if ui.selectable_label(self.mode.is_some(), "Track Info").clicked() {
-                visibilities.0 = [false; 11];
                 self.mode_opts.change_mode::<TrackInfo>();
             }
         });
-        self.kmp_visibility.set_if_neq(visibilities);
     }
 }

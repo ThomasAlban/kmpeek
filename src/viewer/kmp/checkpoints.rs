@@ -63,8 +63,8 @@ impl Component for CheckpointLeft {
 
             // if we didn't already delete the right checkpoint (which could have happened as we
             // could have deleted the right hand one first which then deletes the left hand one)
-            if world.get_entity(cp.right).is_some() {
-                world.commands().entity(cp.right).despawn();
+            if let Some(mut e) = world.commands().get_entity(cp.right) {
+                e.despawn();
             }
 
             world.commands().entity(cp.line).despawn();

@@ -2,10 +2,9 @@ use super::area_gizmo::AreaGizmoOptions;
 use super::create_delete::JustCreatedPoint;
 use super::EditMode;
 use crate::ui::keybinds::{Modifier, ModifiersPressed};
-use crate::ui::ui_state::KmpVisibility;
 use crate::ui::update_ui::UpdateUiSet;
 use crate::ui::viewport::ViewportInfo;
-use crate::util::{ui_viewport_to_ndc, world_to_ui_viewport, RaycastFromCam};
+use crate::util::{ui_viewport_to_ndc, world_to_ui_viewport, RaycastFromCam, VisibilityToBool};
 use crate::viewer::camera::Gizmo2dCam;
 use crate::viewer::kmp::components::KmpSelectablePoint;
 use crate::viewer::kmp::sections::KmpEditModeChange;
@@ -23,10 +22,7 @@ pub fn select_plugin(app: &mut App) {
         .add_systems(Update, update_outlines.after(SelectSet))
         .add_systems(
             Update,
-            (
-                deselect_if_not_visible.run_if(resource_changed::<KmpVisibility>),
-                deselect_on_mode_change.after(UpdateUiSet),
-            ),
+            (deselect_if_not_visible, deselect_on_mode_change.after(UpdateUiSet)),
         );
 }
 
@@ -110,8 +106,8 @@ fn select_all(
 }
 
 fn deselect_if_not_visible(mut commands: Commands, q_selected: Query<(Entity, &Visibility), With<Selected>>) {
-    for (e, selected) in q_selected.iter() {
-        if selected != Visibility::Visible {
+    for (e, visible) in q_selected.iter() {
+        if !visible.to_bool() {
             commands.entity(e).remove::<Selected>();
         }
     }

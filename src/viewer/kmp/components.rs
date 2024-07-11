@@ -166,7 +166,7 @@ pub struct RouteSettings {
     pub loop_style: RouteLoopStyle,
 }
 
-#[derive(Default, Clone, PartialEq, Serialize, Deserialize, Debug)]
+#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, Clone, PartialEq, Serialize, Deserialize, Debug)]
 pub enum RouteLoopStyle {
     #[default]
     Cyclic,

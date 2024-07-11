@@ -20,6 +20,7 @@ use crate::{
                 TransformEditOptions,
             },
             path::{PathType, RecalcPaths},
+            routes::GetRouteStart,
             sections::KmpEditMode,
         },
     },
@@ -38,12 +39,13 @@ pub struct ShowEditTab<'w, 's> {
     q_transform: Query<'w, 's, (Entity, &'static mut Transform), With<Selected>>,
     q_transform_opts: Query<'w, 's, &'static TransformEditOptions>,
 
-    q_start_point: KmpComponentQuery<'w, 's, StartPoint>,
-    q_enemy_point: KmpComponentQuery<'w, 's, EnemyPathPoint>,
-    q_item_point: KmpComponentQuery<'w, 's, ItemPathPoint>,
+    q_start_pt: KmpComponentQuery<'w, 's, StartPoint>,
+    q_enemy_pt: KmpComponentQuery<'w, 's, EnemyPathPoint>,
+    q_item_pt: KmpComponentQuery<'w, 's, ItemPathPoint>,
     q_cp: GetSelectedCheckpoints<'w, 's>,
     q_respawn_point: KmpComponentQuery<'w, 's, RespawnPoint>,
     q_object: KmpComponentQuery<'w, 's, Object>,
+    q_route_pt: KmpComponentQuery<'w, 's, RoutePoint>,
     q_area: KmpComponentQuery<'w, 's, AreaPoint>,
     q_camera: KmpComponentQuery<'w, 's, KmpCamera>,
     q_cannon_point: KmpComponentQuery<'w, 's, CannonPoint>,
@@ -51,6 +53,7 @@ pub struct ShowEditTab<'w, 's> {
 
     q_path_start: PathStartQuery<'w, 's>,
     ev_recalc_paths: EventWriter<'w, RecalcPaths>,
+    get_route_start: GetRouteStart<'w, 's>,
 }
 impl UiSubSection for ShowEditTab<'_, '_> {
     fn show(&mut self, ui: &mut Ui) {
@@ -105,11 +108,11 @@ impl UiSubSection for ShowEditTab<'_, '_> {
             }
         });
 
-        edit_component(ui, "Start Point", self.q_start_point.iter_mut(), |ui, items| {
+        edit_component(ui, "Start Point", self.q_start_pt.iter_mut(), |ui, items| {
             drag_value_edit_row(ui, "Player Index", DragSpeed::Slow, map!(items, player_index));
         });
 
-        edit_component(ui, "Enemy Point", self.q_enemy_point.iter_mut(), |ui, items| {
+        edit_component(ui, "Enemy Point", self.q_enemy_pt.iter_mut(), |ui, items| {
             drag_value_edit_row(ui, "Leniency", DragSpeed::Slow, map!(items, leniency));
             combobox_edit_row(ui, "Setting 1", map!(items, setting_1));
             combobox_edit_row(ui, "Setting 2", map!(items, setting_2));
@@ -125,7 +128,7 @@ impl UiSubSection for ShowEditTab<'_, '_> {
             );
         });
 
-        edit_component(ui, "Item Point", self.q_item_point.iter_mut(), |ui, items| {
+        edit_component(ui, "Item Point", self.q_item_pt.iter_mut(), |ui, items| {
             drag_value_edit_row(ui, "Bullet Control", DragSpeed::Slow, map!(items, bullet_control));
             edit_spacing(ui);
             combobox_edit_row(ui, "Bullet Height", map!(items, bullet_height));
@@ -171,6 +174,27 @@ impl UiSubSection for ShowEditTab<'_, '_> {
                     items.iter_mut().map(|x| &mut x.1.settings[i]),
                 );
             }
+        });
+
+        edit_component(
+            ui,
+            "Route Settings",
+            self.get_route_start
+                .get_multiple_mut(self.q_route_pt.iter().map(|x| x.0)),
+            |ui, items| {
+                checkbox_edit_row(ui, "Smooth Motion", map!(items, smooth_motion));
+                combobox_edit_row(ui, "Loop Style", map!(items, loop_style));
+            },
+        );
+
+        edit_component(ui, "Route Point", self.q_route_pt.iter_mut(), |ui, items| {
+            drag_value_edit_row(ui, "Settings", DragSpeed::Slow, map!(items, settings));
+            drag_value_edit_row(
+                ui,
+                "Additional Settings",
+                DragSpeed::Slow,
+                map!(items, additional_settings),
+            );
         });
 
         edit_component(ui, "Area", self.q_area.iter_mut(), |ui, items| {

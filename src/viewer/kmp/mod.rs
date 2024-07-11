@@ -13,26 +13,25 @@ use self::{
     checkpoints::{checkpoint_plugin, spawn_checkpoint_section, CheckpointHeight},
     components::*,
     meshes_materials::setup_kmp_meshes_materials,
-    path::{spawn_enemy_item_path_section, KmpPathNodeLink, RecalcPaths},
+    path::{spawn_enemy_item_path_section, RecalcPaths},
     point::{spawn_point_section, AddRespawnPointPreview},
 };
 use crate::{
     ui::{
         file_dialog::{DialogType, FileDialogResult},
         settings::{AppSettings, SetupAppSettingsSet},
-        ui_state::{KmpFilePath, KmpVisibility},
+        ui_state::KmpFilePath,
         update_ui::{KclFileSelected, KmpFileSelected},
     },
     util::{kmp_file::*, BoolToVisibility},
-    viewer::kmp::path::PathType,
 };
 use bevy::prelude::*;
 use binrw::BinRead;
 use ordering::ordering_plugin;
 use path::path_plugin;
 use routes::{routes_plugin, spawn_route_section};
-use sections::{section_plugin, KmpSection};
-use std::{ffi::OsStr, fs::File, sync::Arc};
+use sections::{add_for_all_components, section_plugin, KmpEditMode, KmpEditModeChange};
+use std::{ffi::OsStr, fs::File, marker::PhantomData, sync::Arc};
 
 pub fn kmp_plugin(app: &mut App) {
     app.add_plugins((
@@ -46,12 +45,13 @@ pub fn kmp_plugin(app: &mut App) {
     .add_systems(Startup, setup_kmp_meshes_materials.after(SetupAppSettingsSet))
     .add_systems(
         Update,
-        (
-            spawn_model.run_if(on_event::<KmpFileSelected>()),
-            update_visible.run_if(resource_changed::<KmpVisibility>),
-            open_kmp_kcl,
-        ),
+        (spawn_model.run_if(on_event::<KmpFileSelected>()), open_kmp_kcl),
     );
+
+    add_for_all_components!(@event app, SetSectionVisibility);
+    app.add_event::<SetSectionVisibility<TrackInfo>>();
+    add_for_all_components!(@system app, update_visible_on_mode_change);
+    add_for_all_components!(@system app, set_section_visibility);
 }
 
 pub fn open_kmp_kcl(
@@ -167,62 +167,95 @@ pub fn spawn_model(
     ev_recalc_paths.send(RecalcPaths::all());
 }
 
-fn update_visible(
-    kmp_visibility: Res<KmpVisibility>,
-    mut q: ParamSet<(
-        ParamSet<(
-            Query<&mut Visibility, With<StartPoint>>,
-            Query<&mut Visibility, With<EnemyPathPoint>>,
-            Query<&mut Visibility, With<ItemPathPoint>>,
-            Query<&mut Visibility, With<Checkpoint>>,
-            Query<&mut Visibility, With<Object>>,
-            Query<&mut Visibility, With<RoutePoint>>,
-        )>,
-        ParamSet<(
-            Query<&mut Visibility, With<AreaPoint>>,
-            Query<&mut Visibility, With<KmpCamera>>,
-            Query<&mut Visibility, With<RespawnPoint>>,
-            Query<&mut Visibility, With<CannonPoint>>,
-            Query<&mut Visibility, With<BattleFinishPoint>>,
-            Query<(&mut Visibility, &KmpPathNodeLink)>,
-        )>,
-    )>,
-) {
-    use KmpSection::*;
-
-    let visibilities = kmp_visibility.0;
-    let set_visibility = |mut v: Mut<Visibility>, i: KmpSection| {
-        *v = visibilities[i as usize].to_visibility();
-    };
-    macro_rules! set_visibility_iter {
-        ($q:expr, $i:ident) => {
-            for v in $q.iter_mut() {
-                set_visibility(v, $i);
-            }
-        };
-    }
-
-    set_visibility_iter!(q.p0().p0(), StartPoints);
-    set_visibility_iter!(q.p0().p1(), EnemyPaths);
-    set_visibility_iter!(q.p0().p2(), ItemPaths);
-    set_visibility_iter!(q.p0().p3(), Checkpoints);
-    set_visibility_iter!(q.p0().p4(), Objects);
-    set_visibility_iter!(q.p0().p5(), Routes);
-    set_visibility_iter!(q.p1().p0(), Areas);
-    set_visibility_iter!(q.p1().p2(), Cameras);
-    set_visibility_iter!(q.p1().p2(), RespawnPoints);
-    set_visibility_iter!(q.p1().p3(), CannonPoints);
-    set_visibility_iter!(q.p1().p4(), BattleFinishPoints);
-
-    for (v, node_link) in q.p1().p5().iter_mut() {
-        match node_link.kind {
-            PathType::Enemy => set_visibility(v, EnemyPaths),
-            PathType::Item => set_visibility(v, ItemPaths),
-            PathType::Checkpoint { .. } => set_visibility(v, Checkpoints),
-            PathType::Route => set_visibility(v, Routes),
-        }
+#[derive(Event, Deref)]
+pub struct SetSectionVisibility<T>(#[deref] pub bool, PhantomData<T>);
+impl<T: Component> SetSectionVisibility<T> {
+    pub fn new(visible: bool) -> Self {
+        Self(visible, PhantomData)
     }
 }
+
+fn set_section_visibility<T: Component>(
+    mut ev_set_sect_visibility: EventReader<SetSectionVisibility<T>>,
+    mut q: Query<&mut Visibility, (With<KmpSelectablePoint>, With<T>)>,
+) {
+    let Some(ev) = ev_set_sect_visibility.read().next() else {
+        return;
+    };
+    let visible = **ev;
+
+    for mut visibility in q.iter_mut() {
+        *visibility = visible.to_visibility();
+    }
+}
+
+fn update_visible_on_mode_change<T: Component>(
+    mut mode_change: EventReader<KmpEditModeChange>,
+    cur_mode: Option<Res<KmpEditMode<T>>>,
+    mut ev_set_sect_visibility: EventWriter<SetSectionVisibility<T>>,
+) {
+    if mode_change.read().next().is_none() {
+        return;
+    }
+    ev_set_sect_visibility.send(SetSectionVisibility::new(cur_mode.is_some()));
+}
+
+// fn update_visible(
+//     kmp_visibility: Res<KmpVisibility>,
+//     mut q: ParamSet<(
+//         ParamSet<(
+//             Query<&mut Visibility, With<StartPoint>>,
+//             Query<&mut Visibility, With<EnemyPathPoint>>,
+//             Query<&mut Visibility, With<ItemPathPoint>>,
+//             Query<&mut Visibility, With<Checkpoint>>,
+//             Query<&mut Visibility, With<Object>>,
+//             Query<&mut Visibility, With<RoutePoint>>,
+//         )>,
+//         ParamSet<(
+//             Query<&mut Visibility, With<AreaPoint>>,
+//             Query<&mut Visibility, With<KmpCamera>>,
+//             Query<&mut Visibility, With<RespawnPoint>>,
+//             Query<&mut Visibility, With<CannonPoint>>,
+//             Query<&mut Visibility, With<BattleFinishPoint>>,
+//             Query<(&mut Visibility, &KmpPathNodeLink)>,
+//         )>,
+//     )>,
+// ) {
+//     use KmpSection::*;
+
+//     let visibilities = kmp_visibility.0;
+//     let set_visibility = |mut v: Mut<Visibility>, i: KmpSection| {
+//         *v = visibilities[i as usize].to_visibility();
+//     };
+//     macro_rules! set_visibility_iter {
+//         ($q:expr, $i:ident) => {
+//             for v in $q.iter_mut() {
+//                 set_visibility(v, $i);
+//             }
+//         };
+//     }
+
+//     set_visibility_iter!(q.p0().p0(), StartPoints);
+//     set_visibility_iter!(q.p0().p1(), EnemyPaths);
+//     set_visibility_iter!(q.p0().p2(), ItemPaths);
+//     set_visibility_iter!(q.p0().p3(), Checkpoints);
+//     set_visibility_iter!(q.p0().p4(), Objects);
+//     set_visibility_iter!(q.p0().p5(), Routes);
+//     set_visibility_iter!(q.p1().p0(), Areas);
+//     set_visibility_iter!(q.p1().p2(), Cameras);
+//     set_visibility_iter!(q.p1().p2(), RespawnPoints);
+//     set_visibility_iter!(q.p1().p3(), CannonPoints);
+//     set_visibility_iter!(q.p1().p4(), BattleFinishPoints);
+
+//     for (v, node_link) in q.p1().p5().iter_mut() {
+//         match node_link.kind {
+//             PathType::Enemy => set_visibility(v, EnemyPaths),
+//             PathType::Item => set_visibility(v, ItemPaths),
+//             PathType::Checkpoint { .. } => set_visibility(v, Checkpoints),
+//             PathType::Route => set_visibility(v, Routes),
+//         }
+//     }
+// }
 
 /// Utility function for calculating the transform a cylinder should have in order to join 2 points
 fn calc_line_transform(l_tr: Vec3, r_tr: Vec3) -> Transform {

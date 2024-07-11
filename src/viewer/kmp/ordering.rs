@@ -9,8 +9,8 @@ use std::{
 };
 
 pub fn ordering_plugin(app: &mut App) {
-    app.add_event::<RefreshOrdering>()
-        .add_plugins(add_for_all_components!(setup_ordering));
+    app.add_event::<RefreshOrdering>();
+    add_for_all_components!(@plugin app, setup_ordering);
 }
 
 fn setup_ordering<T: Component>(app: &mut App) {

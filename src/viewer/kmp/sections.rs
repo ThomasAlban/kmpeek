@@ -117,20 +117,51 @@ impl<'w, 's> KmpEditModeOptions<'w, 's> {
 }
 
 macro_rules! add_for_all_components {
-    ($sys:ident) => {
-        (
-            $sys::<StartPoint>,
-            $sys::<EnemyPathPoint>,
-            $sys::<ItemPathPoint>,
-            $sys::<Checkpoint>,
-            $sys::<RespawnPoint>,
-            $sys::<Object>,
-            $sys::<RoutePoint>,
-            $sys::<AreaPoint>,
-            $sys::<KmpCamera>,
-            $sys::<CannonPoint>,
-            $sys::<BattleFinishPoint>,
+    (@system $app:expr, $sys:ident) => {
+        $app.add_systems(
+            Update,
+            (
+                $sys::<StartPoint>,
+                $sys::<EnemyPathPoint>,
+                $sys::<ItemPathPoint>,
+                $sys::<Checkpoint>,
+                $sys::<RespawnPoint>,
+                $sys::<Object>,
+                $sys::<RoutePoint>,
+                $sys::<AreaPoint>,
+                $sys::<KmpCamera>,
+                $sys::<CannonPoint>,
+                $sys::<BattleFinishPoint>,
+            ),
         )
+    };
+    (@event $app:expr, $ev:ident) => {
+        $app.add_event::<$ev<StartPoint>>()
+            .add_event::<$ev<EnemyPathPoint>>()
+            .add_event::<$ev<ItemPathPoint>>()
+            .add_event::<$ev<Checkpoint>>()
+            .add_event::<$ev<RespawnPoint>>()
+            .add_event::<$ev<Object>>()
+            .add_event::<$ev<RoutePoint>>()
+            .add_event::<$ev<AreaPoint>>()
+            .add_event::<$ev<KmpCamera>>()
+            .add_event::<$ev<CannonPoint>>()
+            .add_event::<$ev<BattleFinishPoint>>()
+    };
+    (@plugin $app:expr, $plugin:ident) => {
+        $app.add_plugins((
+            $plugin::<StartPoint>,
+            $plugin::<EnemyPathPoint>,
+            $plugin::<ItemPathPoint>,
+            $plugin::<Checkpoint>,
+            $plugin::<RespawnPoint>,
+            $plugin::<Object>,
+            $plugin::<RoutePoint>,
+            $plugin::<AreaPoint>,
+            $plugin::<KmpCamera>,
+            $plugin::<CannonPoint>,
+            $plugin::<BattleFinishPoint>,
+        ))
     };
 }
 pub(crate) use add_for_all_components;
