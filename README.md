@@ -23,9 +23,9 @@ These are things that I want to get to in subsequent updates, once an initial ve
 
 - Undo/Redo
 - Edit tools (such as drawing lines of points)
+- Eline control handling - converting it to a setting on enemy points
 - Export/Import CSV from tables
 - Camera Preview
-- Eline control handling - converting it to a setting on enemy points
 - Copy/paste
 - Object KCL viewer
 - Ability to open/edit SZS files directly
