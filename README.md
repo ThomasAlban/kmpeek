@@ -13,8 +13,6 @@ These are the things I still need to do before an alpha release. Some of these a
 - [ ] Route editor
 - [ ] Saving back to KMP format
 - [ ] Custom object settings
-- [ ] Edit tools (such as drawing lines of points)
-- [ ] Undo/Redo
 - [ ] Auto updater (or at least a message if there is an update available)
 
 If you want to help test KMPeek when these things are done (before the main first release), talk to me on discord! @thomasalban
@@ -23,6 +21,8 @@ If you want to help test KMPeek when these things are done (before the main firs
 
 These are things that I want to get to in subsequent updates, once an initial version is released.
 
+- Undo/Redo
+- Edit tools (such as drawing lines of points)
 - Export/Import CSV from tables
 - Camera Preview
 - Eline control handling - converting it to a setting on enemy points
