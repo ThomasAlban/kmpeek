@@ -12,7 +12,7 @@ These are the things I still need to do before an alpha release. Some of these a
 - [x] Finish Table viewer
 - [x] Route editor
 - [ ] Saving back to KMP format
-- [ ] Custom object settings
+- [ ] Object search by id/name
 - [ ] Auto updater (or at least a message if there is an update available)
 
 If you want to help test KMPeek when these things are done (before the main first release), talk to me on discord! @thomasalban
@@ -24,6 +24,7 @@ These are things that I want to get to in subsequent updates, once an initial ve
 - Undo/Redo
 - Edit tools (such as drawing lines of points)
 - Eline control handling - converting it to a setting on enemy points
+- Custom object settings
 - Export/Import CSV from tables
 - Camera Preview
 - Copy/paste
