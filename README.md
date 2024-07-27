@@ -10,7 +10,7 @@ These are the things I still need to do before an alpha release. Some of these a
 
 - [x] Finish checkpoint editor
 - [x] Finish Table viewer
-- [ ] Route editor
+- [x] Route editor
 - [ ] Saving back to KMP format
 - [ ] Custom object settings
 - [ ] Auto updater (or at least a message if there is an update available)
