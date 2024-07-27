@@ -20,7 +20,6 @@ use crate::{
 };
 use bevy::{
     ecs::{
-        component::{ComponentHooks, StorageType},
         entity::{EntityHashMap, EntityHashSet},
         system::SystemParam,
     },
@@ -45,34 +44,19 @@ pub fn checkpoint_plugin(app: &mut App) {
         .add_systems(
             PostUpdate,
             set_checkpoint_node_height.after(TransformSystem::TransformPropagate),
-        );
+        )
+        .observe(on_remove_cp_left)
+        .observe(on_remove_cp_right);
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Component, Clone, PartialEq, Debug)]
 pub struct CheckpointLeft {
     pub right: Entity,
     pub line: Entity,
     pub plane: Entity,
     pub arrow: Entity,
 }
-impl Component for CheckpointLeft {
-    const STORAGE_TYPE: StorageType = StorageType::Table;
-    fn register_component_hooks(hooks: &mut ComponentHooks) {
-        hooks.on_remove(|mut world, e, _| {
-            let cp = world.get::<CheckpointLeft>(e).unwrap().clone();
 
-            // if we didn't already delete the right checkpoint (which could have happened as we
-            // could have deleted the right hand one first which then deletes the left hand one)
-            if let Some(mut e) = world.commands().get_entity(cp.right) {
-                e.despawn();
-            }
-
-            world.commands().entity(cp.line).despawn();
-            world.commands().entity(cp.plane).despawn();
-            world.commands().entity(cp.arrow).despawn();
-        });
-    }
-}
 impl Default for CheckpointLeft {
     fn default() -> Self {
         Self {
@@ -83,25 +67,13 @@ impl Default for CheckpointLeft {
         }
     }
 }
-#[derive(Clone, PartialEq)]
+#[derive(Component, Clone, PartialEq)]
 pub struct CheckpointRight {
     pub left: Entity,
     pub line: Entity,
     pub plane: Entity,
 }
-impl Component for CheckpointRight {
-    const STORAGE_TYPE: StorageType = StorageType::Table;
-    fn register_component_hooks(hooks: &mut ComponentHooks) {
-        hooks.on_remove(|mut world, e, _| {
-            let cp_right = world.get::<CheckpointRight>(e).unwrap();
-            let left_e = cp_right.left;
-            // despawn the left entity, which will in turn delete the line and plane
-            if let Some(e) = world.commands().get_entity(left_e) {
-                e.despawn_recursive();
-            }
-        });
-    }
-}
+
 impl Default for CheckpointRight {
     fn default() -> Self {
         Self {
@@ -142,6 +114,40 @@ impl Default for CheckpointHeight {
     fn default() -> Self {
         Self(DEFAULT_CP_HEIGHT)
     }
+}
+
+fn on_remove_cp_left(
+    trigger: Trigger<OnRemove, CheckpointLeft>,
+    q_cp_left: Query<&CheckpointLeft>,
+    mut commands: Commands,
+) {
+    let cp_left = q_cp_left.get(trigger.entity()).unwrap();
+    let cp_right = cp_left.right;
+
+    commands.add(move |world: &mut World| {
+        if let Some(e) = world.get_entity_mut(cp_right) {
+            e.despawn_recursive();
+        }
+    });
+
+    commands.entity(cp_left.line).despawn();
+    commands.entity(cp_left.plane).despawn();
+    commands.entity(cp_left.arrow).despawn();
+}
+
+fn on_remove_cp_right(
+    trigger: Trigger<OnRemove, CheckpointRight>,
+    q_cp_right: Query<&CheckpointRight>,
+    mut commands: Commands,
+) {
+    let cp_right = q_cp_right.get(trigger.entity()).unwrap();
+    let cp_left = cp_right.left;
+
+    commands.add(move |world: &mut World| {
+        if let Some(e) = world.get_entity_mut(cp_left) {
+            e.despawn_recursive();
+        }
+    });
 }
 
 pub struct CheckpointSpawner {
@@ -529,13 +535,31 @@ fn update_checkpoint_planes(
     }
 }
 
+// #[derive(SystemParam)]
+// pub struct GetSelectedCheckpoints<'w, 's> {
+//     q_cp_left: Query<'w, 's, (Entity, Has<Selected>), With<CheckpointLeft>>,
+//     q_cp_right: Query<'w, 's, &'static CheckpointRight, With<Selected>>,
+// }
+// impl GetSelectedCheckpoints<'_, '_> {
+//     pub fn get(&self) -> EntityHashSet {
+//         let cp_left_of_right: EntityHashSet = self.q_cp_right.iter().map(|x| x.left).collect();
+//         let mut cps = EntityHashSet::default();
+//         for (e, selected) in self.q_cp_left.iter() {
+//             if selected || cp_left_of_right.contains(&e) {
+//                 cps.insert(e);
+//             }
+//         }
+//         cps
+//     }
+// }
+
 #[derive(SystemParam)]
 pub struct GetSelectedCheckpoints<'w, 's> {
     q_cp_left: Query<'w, 's, (&'static mut Checkpoint, Entity, Has<Selected>)>,
     q_cp_right: Query<'w, 's, &'static mut CheckpointRight, With<Selected>>,
 }
 impl GetSelectedCheckpoints<'_, '_> {
-    pub fn get(&mut self) -> impl Iterator<Item = (Entity, Mut<Checkpoint>)> {
+    pub fn get(&mut self) -> EntityHashMap<Mut<Checkpoint>> {
         let cp_left_of_right: EntityHashSet = self.q_cp_right.iter().map(|x| x.left).collect();
         let mut cps: EntityHashMap<Mut<Checkpoint>> = EntityHashMap::default();
         for (cp_l, e, selected) in self.q_cp_left.iter_mut() {
@@ -543,7 +567,17 @@ impl GetSelectedCheckpoints<'_, '_> {
                 cps.insert(e, cp_l);
             }
         }
-        cps.into_iter()
+        cps
+    }
+    pub fn get_entities(&self) -> EntityHashSet {
+        let cp_left_of_right: EntityHashSet = self.q_cp_right.iter().map(|x| x.left).collect();
+        let mut cps = EntityHashSet::default();
+        for (_, e, selected) in self.q_cp_left.iter() {
+            if selected || cp_left_of_right.contains(&e) {
+                cps.insert(e);
+            }
+        }
+        cps
     }
 }
 

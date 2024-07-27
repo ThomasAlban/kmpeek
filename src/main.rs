@@ -1,8 +1,10 @@
+#![allow(unused_imports)]
+
 mod ui;
 mod util;
 mod viewer;
 
-use bevy::prelude::*;
+use bevy::{prelude::*, winit::WinitSettings};
 use ui::ui_plugin;
 use viewer::viewer_plugin;
 

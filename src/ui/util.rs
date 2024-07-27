@@ -1,11 +1,21 @@
 #![allow(dead_code)]
+use bevy::ecs::system::SystemState;
 use bevy::math::{vec3, Dir3, EulerRot, Quat};
+use bevy::prelude::{Entity, Has, Query, With, World};
+use bevy::window::{PrimaryWindow, Window};
 use bevy::{math::Vec3, transform::components::Transform};
-use bevy_egui::egui::{self, Response, Ui, WidgetText};
+use bevy_egui::egui::{self, pos2, vec2, Rect, Response, TextStyle, Ui, WidgetText};
 use bevy_egui::egui::{
     Align, Align2, Area, CollapsingResponse, Color32, Context, Image, ImageButton, ImageSource, Order, Sense, Vec2,
 };
+use bevy_egui::{EguiContext, EguiContexts};
 use std::{fmt::Display, hash::Hash};
+
+pub fn get_egui_ctx(world: &mut World) -> Context {
+    let mut system_state = SystemState::<Query<&mut EguiContext, With<PrimaryWindow>>>::new(world);
+    let mut q = system_state.get_mut(world);
+    q.single_mut().get_mut().clone()
+}
 
 #[derive(Clone, Copy)]
 pub enum DragSpeed {
@@ -25,7 +35,7 @@ impl From<DragSpeed> for f64 {
 
 pub mod multi_edit {
     use super::{euler_to_quat, quat_to_euler, DragSpeed};
-    use bevy::{math::Vec3, transform::components::Transform};
+    use bevy::{math::Vec3, prelude::Mut, transform::components::Transform};
     use bevy_egui::egui::{self, emath::Numeric, Checkbox, DragValue, Response, Ui, WidgetText};
     use std::{
         fmt::Display,
@@ -34,8 +44,14 @@ pub mod multi_edit {
 
     /// Maps an iterator to a child of each element of that iterator
     macro_rules! map {
-        ($iter:ident, $($fields:ident).*) => {
-            $iter.iter_mut().map(|x| &mut x.1$(.$fields)*)
+        ($iter:ident => 0 $($fields:tt)*) => {
+            $iter.iter_mut().map(|x| x.0.reborrow().map_unchanged(|x| &mut x.$($fields)*))
+        };
+        ($iter:ident => 1 $($fields:tt)*) => {
+            $iter.iter_mut().map(|x| x.1.reborrow().map_unchanged(|x| &mut x.$($fields)*))
+        };
+        ($iter:ident => $($fields:tt)*) => {
+            $iter.iter_mut().map(|x| x.reborrow().map_unchanged(|x| &mut x.$($fields)*))
         };
     }
     pub(crate) use map;
@@ -58,13 +74,31 @@ pub mod multi_edit {
         changed
     }
 
+    // pub fn rotation_multi_edit_mut<'a>(
+    //     ui: &mut Ui,
+    //     transforms: impl IntoIterator<Item = Mut<'a, Transform>>,
+    //     add_contents: impl FnOnce(&mut Ui, &mut [Mut<Vec3>]) -> (Response, Response, Response),
+    // ) -> bool {
+    //     let mut transforms: Vec<_> = transforms.into_iter().collect();
+    //     let mut rots: Vec<_> = transforms.iter().map(|t| quat_to_euler(t)).collect();
+
+    //     let res = add_contents(ui, &mut rots);
+
+    //     let changed = res.0.changed() || res.1.changed() || res.2.changed();
+
+    //     for (transform, new_rot) in transforms.iter_mut().zip(rots.iter()) {
+    //         euler_to_quat(*new_rot, res.clone(), transform);
+    //     }
+    //     changed
+    // }
+
     pub fn drag_value_multi_edit<
         'a,
         T: 'a + Clone + PartialEq + Numeric + Sub<Output = T> + AddAssign<T> + SubAssign<T>,
     >(
         ui: &mut Ui,
         speed: DragSpeed,
-        items: impl IntoIterator<Item = &'a mut T>,
+        items: impl IntoIterator<Item = Mut<'a, T>>,
     ) -> Response {
         let mut items: Vec<_> = items.into_iter().collect();
         let mut edit = *items[0];
@@ -114,7 +148,7 @@ pub mod multi_edit {
     pub fn combobox_enum_multi_edit<'a, T>(
         ui: &mut Ui,
         width: Option<f32>,
-        items: impl IntoIterator<Item = &'a mut T>,
+        items: impl IntoIterator<Item = Mut<'a, T>>,
     ) -> Response
     where
         T: 'a + strum::IntoEnumIterator + Display + PartialEq + Clone,
@@ -181,7 +215,7 @@ pub mod multi_edit {
         res
     }
 
-    pub fn checkbox_multi_edit<'a>(ui: &mut Ui, items: impl IntoIterator<Item = &'a mut bool>) -> Response {
+    pub fn checkbox_multi_edit<'a>(ui: &mut Ui, items: impl IntoIterator<Item = Mut<'a, bool>>) -> Response {
         let mut items: Vec<_> = items.into_iter().collect();
         let mut edit = *items[0];
 
@@ -389,6 +423,137 @@ pub fn button_triggered_popup<R>(
     res
 }
 
+#[derive(Clone)]
+pub enum RouteBtnType {
+    /// All that is selected has no route link
+    NoRoute,
+    /// There are multiple things selected with differing route links
+    Multi { indexes: Vec<Option<usize>>, visible: bool },
+    /// All that is selected is linked to the same route
+    Single { index: usize, visible: bool },
+}
+#[derive(Default)]
+pub struct RouteBtnResponse {
+    pub cross_pressed: bool,
+    pub eyedropper_pressed: bool,
+    pub view_pressed: bool,
+}
+pub fn route_btn(ui: &mut Ui, route_btn_type: &RouteBtnType) -> RouteBtnResponse {
+    use RouteBtnType::*;
+
+    let mut res = RouteBtnResponse::default();
+
+    let width = ui.available_width();
+
+    ui.spacing_mut().item_spacing = Vec2::splat(0.);
+
+    let bg_size = vec2(width, ui.spacing().interact_size.y);
+    let icon_hb_size = vec2(
+        ui.spacing().icon_width_inner + 1.5 * ui.spacing().icon_spacing,
+        ui.spacing().interact_size.y,
+    );
+
+    // allocate the background
+    let (bg_rect, _bg_res) = ui.allocate_at_least(bg_size, Sense::hover());
+    let bg_visuals = ui.style().visuals.widgets.inactive;
+
+    // paint the background
+    ui.painter()
+        .rect_filled(bg_rect, bg_visuals.rounding, bg_visuals.weak_bg_fill);
+
+    let mut next_icon_hb_rect = Rect::from_min_size(
+        bg_rect.right_top() - vec2(ui.spacing().button_padding.x + icon_hb_size.x, 0.),
+        icon_hb_size,
+    );
+
+    ui.style_mut().interaction.tooltip_delay = 0.1;
+    ui.style_mut().interaction.show_tooltips_only_when_still = false;
+
+    // do the cross
+
+    if let Multi { .. } | Single { .. } = route_btn_type {
+        // allocate the cross icon hitbox
+        let cross_hb_res = ui
+            .allocate_rect(next_icon_hb_rect, Sense::click())
+            .on_hover_text_at_pointer("Delete route Link");
+
+        res.cross_pressed = cross_hb_res.clicked();
+
+        // draw the cross
+        let cross_middle = next_icon_hb_rect.center();
+        let cross_size = ui.spacing().icon_width_inner;
+        let cross_rect = Rect::from_center_size(cross_middle, Vec2::splat(cross_size));
+        let cross_color = ui.style().interact(&cross_hb_res).fg_stroke;
+
+        ui.painter() // paints \
+            .line_segment([cross_rect.left_top(), cross_rect.right_bottom()], cross_color);
+        ui.painter() // paints /
+            .line_segment([cross_rect.right_top(), cross_rect.left_bottom()], cross_color);
+
+        next_icon_hb_rect = next_icon_hb_rect.translate(vec2(-icon_hb_size.x, 0.));
+    }
+
+    // do the eyedropper
+
+    // allocate the eyedropper hitbox
+    let eyedropper_hb_res = ui
+        .allocate_rect(next_icon_hb_rect, Sense::click())
+        .on_hover_text_at_pointer("Link route");
+    res.eyedropper_pressed = eyedropper_hb_res.clicked();
+
+    // draw the eyedropper
+    let eyedropper_middle = next_icon_hb_rect.center();
+    let eyedropper_size = ui.spacing().icon_width_inner * 1.2;
+    let eyedropper_rect = Rect::from_center_size(eyedropper_middle, Vec2::splat(eyedropper_size));
+    let eyedropper_color = ui.style().interact(&eyedropper_hb_res).fg_stroke.color;
+
+    Icons::eyedropper(ui.ctx(), eyedropper_size)
+        .tint(eyedropper_color)
+        .paint_at(ui, eyedropper_rect);
+
+    next_icon_hb_rect = next_icon_hb_rect.translate(vec2(-icon_hb_size.x, 0.));
+
+    // do the view btn
+
+    if let Multi { visible, .. } | Single { visible, .. } = route_btn_type {
+        // allocate the view hitbox
+        let view_hb_res = ui
+            .allocate_rect(next_icon_hb_rect, Sense::click())
+            .on_hover_text_at_pointer("View linked route");
+        res.view_pressed = view_hb_res.clicked();
+
+        // draw the view btn
+        let view_middle = next_icon_hb_rect.center();
+        let view_size = ui.spacing().icon_width_inner * 1.3;
+        let view_rect = Rect::from_center_size(view_middle, Vec2::splat(view_size));
+
+        if *visible {
+            Icons::view_on(ui.ctx(), view_size)
+        } else {
+            Icons::view_off(ui.ctx(), view_size)
+        }
+        .paint_at(ui, view_rect);
+    }
+
+    // draw the text
+    let text: WidgetText = match route_btn_type {
+        NoRoute => "No Route".into(),
+        Multi { .. } => "".into(),
+        Single { index, .. } => format!("Route {index}").into(),
+    };
+    let galley = text.into_galley(ui, None, f32::INFINITY, TextStyle::Button);
+
+    let text_start = pos2(
+        bg_rect.min.x + ui.spacing().button_padding.x,
+        bg_rect.center().y - 0.5 * galley.size().y,
+    );
+
+    ui.painter()
+        .galley(text_start, galley, ui.style().visuals.widgets.inactive.text_color());
+
+    res
+}
+
 pub fn view_icon_btn(ui: &mut Ui, checked: &mut bool) -> Response {
     ui.style_mut().spacing.button_padding = Vec2::ZERO;
 
@@ -415,7 +580,6 @@ macro_rules! impl_img {
     ($name:ident) => {
         impl Icons {
             pub fn $name<'a>(ctx: &Context, size: impl Into<f32>) -> Image<'a> {
-                //let $path: literal = concat!("../../assets/icons/", stringify!($name), ".svg");
                 svg_image(
                     egui::ImageSource::Bytes {
                         uri: ::std::borrow::Cow::Borrowed(concat!(
@@ -453,6 +617,7 @@ impl_img!(translate);
 impl_img!(tweak);
 impl_img!(view_off);
 impl_img!(view_on);
+impl_img!(eyedropper);
 
 impl Icons {
     pub const SECTION_COLORS: [Color32; 12] = [

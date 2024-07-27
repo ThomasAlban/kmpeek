@@ -5,7 +5,15 @@ pub mod kmp_file;
 pub mod read_write_arrays;
 pub mod shapes;
 
-use bevy::{math::vec2, prelude::*};
+use bevy::{
+    ecs::{
+        component::Tick,
+        entity::EntityHashSet,
+        query::{QueryData, WorldQuery},
+    },
+    math::vec2,
+    prelude::*,
+};
 use bevy_egui::egui::{self, Pos2};
 use bevy_mod_raycast::{
     immediate::{Raycast, RaycastSettings},
@@ -244,4 +252,33 @@ impl<'a, 'w, 's> RaycastFromCam<'a, 'w, 's> {
         };
         self.raycast.cast_ray(ray, &self.settings).to_vec()
     }
+}
+
+/// Just give me a mut, damn it! (I really am at the end of my tether)
+pub fn give_me_a_mut<'a, T: 'a, R>(items: impl IntoIterator<Item = &'a mut T>, f: impl FnOnce(Vec<Mut<T>>) -> R) -> R {
+    let mut items: Vec<_> = items.into_iter().collect();
+
+    let mut ticks = Vec::with_capacity(items.len());
+    for _ in 0..items.len() {
+        ticks.push((Tick::default(), Tick::default()))
+    }
+    let mut items_mut = Vec::with_capacity(items.len());
+    for (item, ticks) in items.iter_mut().zip(ticks.iter_mut()) {
+        let m = Mut::new(*item, &mut ticks.0, &mut ticks.1, Tick::default(), Tick::default());
+        items_mut.push(m);
+    }
+    f(items_mut)
+}
+
+pub fn iter_mut_from_entities<'a, R: QueryData>(
+    entities: &EntityHashSet,
+    q: &'a mut Query<(Entity, R)>,
+) -> Vec<<R as WorldQuery>::Item<'a>> {
+    let mut items = Vec::new();
+    for (e, item) in q.iter_mut() {
+        if entities.contains(&e) {
+            items.push(item);
+        }
+    }
+    items
 }

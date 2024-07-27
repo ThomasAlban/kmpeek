@@ -373,6 +373,43 @@ impl_kmp_rotation_point!(Jgpt);
 impl_kmp_rotation_point!(Cnpt);
 impl_kmp_rotation_point!(Mspt);
 
+pub trait MaybeRouteId {
+    fn get_route_id(&self) -> Option<u8>;
+}
+macro_rules! impl_no_route_id {
+    ($kmp_section:ty) => {
+        impl MaybeRouteId for $kmp_section {
+            fn get_route_id(&self) -> Option<u8> {
+                None
+            }
+        }
+    };
+}
+
+impl MaybeRouteId for Gobj {
+    fn get_route_id(&self) -> Option<u8> {
+        (self.route != 0xffff).then_some(self.route as u8)
+    }
+}
+impl MaybeRouteId for Area {
+    fn get_route_id(&self) -> Option<u8> {
+        (self.kind == 3).then_some(self.route)
+    }
+}
+impl MaybeRouteId for Came {
+    fn get_route_id(&self) -> Option<u8> {
+        (self.route != 0xff).then_some(self.route)
+    }
+}
+impl_no_route_id!(Ktpt);
+impl_no_route_id!(Enpt);
+impl_no_route_id!(Itpt);
+impl_no_route_id!(Ckpt);
+impl_no_route_id!(PotiPoint);
+impl_no_route_id!(Jgpt);
+impl_no_route_id!(Cnpt);
+impl_no_route_id!(Mspt);
+
 #[test]
 fn test_full_rewrite() {
     read_write_kmp_test("test_files/desert_course/course.kmp");

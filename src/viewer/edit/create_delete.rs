@@ -9,15 +9,16 @@ use crate::{
             checkpoints::{CheckpointHeight, GetSelectedCheckpoints},
             components::{
                 AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint, KmpCamera,
-                KmpSelectablePoint, Object, RespawnPoint, Spawn, Spawner, StartPoint, TrackInfo,
+                KmpSelectablePoint, MaxConnectedPath, Object, RespawnPoint, RoutePoint, Spawn, Spawner, StartPoint,
+                TrackInfo,
             },
             ordering::RefreshOrdering,
-            path::{is_checkpoint, RecalcPaths},
+            path::{is_checkpoint, KmpPathNode, RecalcPaths},
             sections::{KmpEditMode, ToKmpSection},
         },
     },
 };
-use bevy::{prelude::*, utils::HashSet};
+use bevy::{ecs::entity::EntityHashSet, prelude::*};
 use bevy_mod_raycast::prelude::*;
 
 #[derive(SystemSet, Debug, PartialEq, Eq, Hash, Clone)]
@@ -37,6 +38,7 @@ pub fn create_delete_plugin(app: &mut App) {
                     create_path::<Checkpoint>,
                     create_point::<RespawnPoint>,
                     create_point::<Object>,
+                    create_path::<RoutePoint>,
                     create_point::<AreaPoint>,
                     create_point::<KmpCamera>,
                     create_point::<CannonPoint>,
@@ -79,10 +81,11 @@ fn create_point<T: Component + ToKmpSection + Spawn + Default + Clone>(
     ev_just_created_point.send(JustCreatedPoint(entity));
 }
 
-fn create_path<T: Component + ToKmpSection + Spawn + Default + Clone>(
+fn create_path<T: Component + ToKmpSection + Spawn + Default + Clone + MaxConnectedPath>(
     mut commands: Commands,
     mode: Option<Res<KmpEditMode<T>>>,
     q_selected_pt: Query<Entity, (With<T>, With<Selected>)>,
+    q_kmp_path_node: Query<&KmpPathNode>,
     mut q_cp: GetSelectedCheckpoints,
     mut ev_create_point: EventReader<CreatePoint>,
     mut ev_recalc_paths: EventWriter<RecalcPaths>,
@@ -95,15 +98,22 @@ fn create_path<T: Component + ToKmpSection + Spawn + Default + Clone>(
         return;
     };
     let pos = create_pt.position;
-    let prev_nodes: HashSet<_> = if is_checkpoint::<T>() {
-        q_cp.get().map(|x| x.0).collect()
+    let prev_nodes: EntityHashSet = if is_checkpoint::<T>() {
+        q_cp.get().into_iter().map(|x| x.0).collect()
     } else {
         q_selected_pt.iter().collect()
     };
+
+    // if any prev points are at max linking capacity, then return
+    if q_kmp_path_node.iter_many(&prev_nodes).any(|x| x.at_max_next()) {
+        return;
+    }
+
     ev_recalc_paths.send(RecalcPaths::all());
     let entity = Spawner::<T>::default()
         .pos(pos)
         .prev_nodes(prev_nodes)
+        .max_connected(T::MAX_CONNECTED)
         .spawn_command(&mut commands);
     ev_just_created_point.send(JustCreatedPoint(entity));
 }

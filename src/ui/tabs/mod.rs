@@ -4,17 +4,18 @@ mod settings;
 mod table;
 mod viewport;
 
-use self::{
-    edit::ShowEditTab, outliner::ShowOutlinerTab, settings::ShowSettingsTab, table::ShowTableTab,
-    viewport::ShowViewportTab,
-};
-use super::{settings::AppSettings, update_ui::UiSection};
+use super::{settings::AppSettings, util::get_egui_ctx};
 use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::{egui, EguiContexts};
 use bevy_pkv::PkvStore;
+use edit::show_edit_tab;
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
+use outliner::show_outliner_tab;
 use serde::{Deserialize, Serialize};
+use settings::show_settings_tab;
 use strum_macros::{Display, EnumIter};
+use table::show_table_tab;
+use viewport::show_viewport_tab;
 
 pub fn docktree_plugin(app: &mut App) {
     app.add_systems(Startup, setup_docktree);
@@ -32,7 +33,7 @@ fn setup_docktree(mut commands: Commands, mut pkv: ResMut<PkvStore>) {
     commands.insert_resource(tree);
 }
 
-#[derive(Deref, DerefMut, Resource, Serialize, Deserialize)]
+#[derive(Deref, DerefMut, Resource, Serialize, Deserialize, Clone)]
 pub struct DockTree(DockState<Tab>);
 impl Default for DockTree {
     fn default() -> Self {
@@ -47,10 +48,6 @@ impl Default for DockTree {
     }
 }
 
-pub trait UiSubSection {
-    fn show(&mut self, ui: &mut egui::Ui);
-}
-
 #[derive(Display, PartialEq, EnumIter, Serialize, Deserialize, Clone, Copy)]
 pub enum Tab {
     Viewport,
@@ -61,31 +58,19 @@ pub enum Tab {
 }
 
 // this tells egui how to render each tab
-#[derive(SystemParam)]
-pub struct TabViewer<'w, 's> {
-    pub p: ParamSet<
-        'w,
-        's,
-        (
-            ShowViewportTab<'w, 's>,
-            ShowOutlinerTab<'w, 's>,
-            ShowEditTab<'w, 's>,
-            ShowTableTab<'w, 's>,
-            ShowSettingsTab<'w, 's>,
-        ),
-    >,
-}
-impl egui_dock::TabViewer for TabViewer<'_, '_> {
+
+pub struct TabViewer<'a>(&'a mut World);
+impl egui_dock::TabViewer for TabViewer<'_> {
     // each tab will be distinguished by an enum which can be converted to a string using strum
     type Tab = Tab;
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
         // we can do different things inside the tab depending on its name
         match tab {
-            Tab::Viewport => self.p.p0().show(ui),
-            Tab::Outliner => self.p.p1().show(ui),
-            Tab::Edit => self.p.p2().show(ui),
-            Tab::Table => self.p.p3().show(ui),
-            Tab::Settings => self.p.p4().show(ui),
+            Tab::Viewport => show_viewport_tab(ui, self.0),
+            Tab::Outliner => show_outliner_tab(ui, self.0),
+            Tab::Edit => show_edit_tab(ui, self.0),
+            Tab::Table => show_table_tab(ui, self.0),
+            Tab::Settings => show_settings_tab(ui, self.0),
         };
     }
     // show the title of the tab - the 'Tab' type already stores its title anyway
@@ -94,22 +79,13 @@ impl egui_dock::TabViewer for TabViewer<'_, '_> {
     }
 }
 
-#[derive(SystemParam)]
-pub struct ShowDockArea<'w, 's> {
-    params: ParamSet<'w, 's, (TabViewer<'w, 's>, ResMut<'w, AppSettings>)>,
-    tree: ResMut<'w, DockTree>,
+pub fn show_dock_area(world: &mut World) {
+    let ctx = &get_egui_ctx(world);
 
-    contexts: EguiContexts<'w, 's>,
-}
-impl UiSection for ShowDockArea<'_, '_> {
-    fn show(&mut self) {
-        let ctx = self.contexts.ctx_mut();
+    let style = Style::from_egui(ctx.style().as_ref());
 
-        let style = Style::from_egui(ctx.style().as_ref());
-
+    world.resource_scope(|world, mut tree: Mut<DockTree>| {
         // show the actual dock area
-        DockArea::new(&mut self.tree)
-            .style(style)
-            .show(ctx, &mut self.params.p0());
-    }
+        DockArea::new(&mut tree).style(style).show(ctx, &mut TabViewer(world));
+    });
 }

@@ -1,4 +1,4 @@
-use super::{file_dialog::ShowFileDialog, menu_bar::ShowMenuBar, tabs::ShowDockArea};
+use super::{file_dialog::show_file_dialog, menu_bar::show_menu_bar, tabs::show_dock_area};
 use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_egui::{EguiContext, EguiContexts};
 use std::path::PathBuf;
@@ -17,10 +17,6 @@ fn egui_has_primary_context(query: Query<(), (With<EguiContext>, With<PrimaryWin
     !query.is_empty()
 }
 
-pub trait UiSection {
-    fn show(&mut self);
-}
-
 #[derive(Event)]
 pub struct KmpFileSelected(pub PathBuf);
 
@@ -31,9 +27,9 @@ fn setup_ui_images(mut contexts: EguiContexts) {
     egui_extras::install_image_loaders(contexts.ctx_mut());
 }
 
-// this function may look small, but this displays all the UI and by extension displays the viewport too. Don't be fooled!
-fn update_ui(mut p: ParamSet<(ShowMenuBar, ShowDockArea, ShowFileDialog)>) {
-    p.p0().show();
-    p.p1().show();
-    p.p2().show();
+fn update_ui(world: &mut World) {
+    show_menu_bar(world);
+    show_dock_area(world);
+    show_file_dialog(world);
+    world.flush();
 }

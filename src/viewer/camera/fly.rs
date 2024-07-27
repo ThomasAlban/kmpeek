@@ -121,7 +121,8 @@ fn fly_cam_move(
     let mut speed_boost = false;
 
     if keys.get_pressed().count() > 0 {
-        // redraw the window when we're holding a button down (e.g. flying around but not moving the mouse) as otherwise the window doesn't redraw
+        // redraw the window when we're holding a button down (e.g. flying around but not moving the mouse)
+        // as otherwise the window doesn't redraw
         ev_request_redraw.send(RequestRedraw);
     }
 
@@ -149,7 +150,8 @@ fn fly_cam_move(
 
     let mut transform_cp = *transform;
 
-    transform_cp.translation += velocity * 200. * settings.camera.fly.speed / window.scale_factor();
+    transform_cp.translation +=
+        velocity * /*time.delta_seconds() */  200. * settings.camera.fly.speed / window.scale_factor();
 
     transform.set_if_neq(transform_cp);
 }

@@ -1,4 +1,4 @@
-use super::update_ui::UiSection;
+use super::util::get_egui_ctx;
 use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::{egui::Align2, EguiContexts};
 use egui_file::FileDialog;
@@ -28,27 +28,45 @@ pub struct FileDialogResult {
 
 const FILE_DIALOG_SIZE: (f32, f32) = (500., 250.);
 
-#[derive(SystemParam)]
-pub struct ShowFileDialog<'w, 's> {
-    contexts: EguiContexts<'w, 's>,
-    file_dialog: ResMut<'w, FileDialogRes>,
-    ev_file_dialog_result: EventWriter<'w, FileDialogResult>,
-}
-impl UiSection for ShowFileDialog<'_, '_> {
-    fn show(&mut self) {
-        let ctx = self.contexts.ctx_mut();
-        if let Some((dialog, dialog_type)) = &mut self.file_dialog.0 {
+pub fn show_file_dialog(world: &mut World) {
+    let ctx = &get_egui_ctx(world);
+
+    world.resource_scope(|world, mut file_dialog: Mut<FileDialogRes>| {
+        if let Some((dialog, dialog_type)) = &mut file_dialog.0 {
+            let dialog_type = *dialog_type;
             if dialog.show(ctx).selected() {
                 if let Some(path) = dialog.path() {
-                    self.ev_file_dialog_result.send(FileDialogResult {
+                    world.send_event(FileDialogResult {
                         path: path.into(),
-                        dialog_type: *dialog_type,
+                        dialog_type,
                     });
                 }
             }
         }
-    }
+    });
 }
+
+// #[derive(SystemParam)]
+// pub struct ShowFileDialog<'w, 's> {
+//     contexts: EguiContexts<'w, 's>,
+//     file_dialog: ResMut<'w, FileDialogRes>,
+//     ev_file_dialog_result: EventWriter<'w, FileDialogResult>,
+// }
+// impl UiSection for ShowFileDialog<'_, '_> {
+//     fn show(&mut self) {
+//         let ctx = self.contexts.ctx_mut();
+//         if let Some((dialog, dialog_type)) = &mut self.file_dialog.0 {
+//             if dialog.show(ctx).selected() {
+//                 if let Some(path) = dialog.path() {
+//                     self.ev_file_dialog_result.send(FileDialogResult {
+//                         path: path.into(),
+//                         dialog_type: *dialog_type,
+//                     });
+//                 }
+//             }
+//         }
+//     }
+// }
 
 #[derive(SystemParam)]
 pub struct FileDialogManager<'w> {

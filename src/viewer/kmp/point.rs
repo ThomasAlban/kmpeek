@@ -1,7 +1,8 @@
 use super::{
     meshes_materials::{KmpMeshes, PointMaterials},
     ordering::{NextOrderID, OrderId},
-    FromKmp, KmpError, KmpSelectablePoint, RespawnPoint, Spawn, Spawner,
+    routes::RouteLink,
+    FromKmp, KmpError, KmpSelectablePoint, MaybeRouteId, RespawnPoint, Spawn, Spawner,
 };
 use crate::{
     ui::settings::AppSettings,
@@ -14,15 +15,16 @@ use crate::{
         normalize::{Normalize, NormalizeInheritParent},
     },
 };
-use bevy::{ecs::world::Command, math::vec3, prelude::*};
+use bevy::{ecs::world::Command, math::vec3, prelude::*, utils::HashMap};
 use bevy_mod_outline::{OutlineBundle, OutlineVolume};
 use std::sync::Arc;
 
 pub fn spawn_point_section<
-    T: KmpGetSection + KmpPositionPoint + KmpRotationPoint + Send + Sync + 'static + Clone,
+    T: KmpGetSection + KmpPositionPoint + KmpRotationPoint + Send + Sync + 'static + Clone + MaybeRouteId,
     U: Component + FromKmp<T> + Clone + Spawn,
 >(
     commands: &mut Commands,
+    route_id_map: &HashMap<u8, Entity>,
     kmp: Arc<KmpFile>,
     kmp_errors: &mut Vec<KmpError>,
 ) -> Vec<Entity> {
@@ -38,11 +40,15 @@ pub fn spawn_point_section<
             euler_rot.y.to_radians(),
             euler_rot.z.to_radians(),
         );
+        let maybe_route_id = node.get_route_id();
+        let maybe_route = maybe_route_id.and_then(|x| route_id_map.get(&x)).copied();
+
         let entity = Spawner::<U>::new(U::from_kmp(node, kmp_errors))
             .pos(position)
             .rot(rotation)
             .visible(false)
             .order_id(i as u32)
+            .maybe_route(maybe_route)
             .spawn_command(commands);
 
         entities.push(entity);
@@ -131,6 +137,9 @@ pub fn spawn_point<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mu
             NormalizeInheritParent,
         ));
     });
+    if let Some(route_e) = spawner.route {
+        entity.insert(RouteLink(route_e));
+    }
     entity.id()
 }
 

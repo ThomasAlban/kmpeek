@@ -116,53 +116,42 @@ pub fn spawn_model(
     let stgi = kmp.stgi.entries.first().unwrap();
     commands.insert_resource(TrackInfo::from_kmp(stgi, &mut kmp_errors));
 
-    // --- START POINTS ---
+    // --- ROUTES ---
+    let route_id_map = spawn_route_section(&mut commands, kmp.clone(), &mut kmp_errors);
 
-    spawn_point_section::<Ktpt, StartPoint>(&mut commands, kmp.clone(), &mut kmp_errors);
+    // --- START POINTS ---
+    spawn_point_section::<Ktpt, StartPoint>(&mut commands, &route_id_map, kmp.clone(), &mut kmp_errors);
 
     // --- ENEMY PATHS ---
-
     spawn_enemy_item_path_section::<Enpt, EnemyPathPoint>(&mut commands, kmp.clone(), &mut kmp_errors);
 
     // --- ITEM PATHS ---
-
     spawn_enemy_item_path_section::<Itpt, ItemPathPoint>(&mut commands, kmp.clone(), &mut kmp_errors);
 
     // --- CHECKPOINTS ---
     spawn_checkpoint_section(&mut commands, kmp.clone(), &mut kmp_errors, checkpoint_height.0);
 
     // --- OBJECTS ---
-
-    spawn_point_section::<Gobj, Object>(&mut commands, kmp.clone(), &mut kmp_errors);
-
-    // --- ROUTES ---
-
-    spawn_route_section(&mut commands, kmp.clone(), &mut kmp_errors);
+    spawn_point_section::<Gobj, Object>(&mut commands, &route_id_map, kmp.clone(), &mut kmp_errors);
 
     // --- AREAS ---
-
-    spawn_point_section::<Area, AreaPoint>(&mut commands, kmp.clone(), &mut kmp_errors);
+    spawn_point_section::<Area, AreaPoint>(&mut commands, &route_id_map, kmp.clone(), &mut kmp_errors);
 
     // --- CAMREAS ---
-
-    spawn_point_section::<Came, KmpCamera>(&mut commands, kmp.clone(), &mut kmp_errors);
+    spawn_point_section::<Came, KmpCamera>(&mut commands, &route_id_map, kmp.clone(), &mut kmp_errors);
 
     // --- RESPAWN POINTS ---
-
-    let respawn_points = spawn_point_section::<Jgpt, RespawnPoint>(&mut commands, kmp.clone(), &mut kmp_errors);
+    let respawn_points =
+        spawn_point_section::<Jgpt, RespawnPoint>(&mut commands, &route_id_map, kmp.clone(), &mut kmp_errors);
     respawn_points
         .iter()
         .for_each(|e| commands.add(AddRespawnPointPreview(*e)));
 
     // --- CANNON POINTS ---
-
-    spawn_point_section::<Cnpt, CannonPoint>(&mut commands, kmp.clone(), &mut kmp_errors);
+    spawn_point_section::<Cnpt, CannonPoint>(&mut commands, &route_id_map, kmp.clone(), &mut kmp_errors);
 
     // --- FINISH POINTS ---
-
-    spawn_point_section::<Mspt, BattleFinishPoint>(&mut commands, kmp.clone(), &mut kmp_errors);
-
-    // ---
+    spawn_point_section::<Mspt, BattleFinishPoint>(&mut commands, &route_id_map, kmp.clone(), &mut kmp_errors);
 
     ev_recalc_paths.send(RecalcPaths::all());
 }

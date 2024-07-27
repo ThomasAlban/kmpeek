@@ -11,7 +11,12 @@ use crate::{
     ui::util::quat_to_euler,
     util::kmp_file::{Area, Came, Enpt, Gobj, Itpt, Ktpt, Poti, PotiPoint, Stgi},
 };
-use bevy::{math::vec3, prelude::*, utils::HashSet};
+use bevy::{
+    ecs::{entity::EntityHashSet, world::Command},
+    math::vec3,
+    prelude::*,
+    utils::HashSet,
+};
 use binrw::{BinRead, BinWrite};
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
@@ -34,7 +39,7 @@ pub struct PathStart;
 pub struct PathOverallStart;
 
 // --- TRACK INFO COMPONENTS ---
-#[derive(Resource, Component, Default, Serialize, Deserialize)]
+#[derive(Resource, Component, Default, Serialize, Deserialize, PartialEq, Clone)]
 pub struct TrackInfo {
     pub track_type: TrackType,
     pub lap_count: u8,
@@ -154,7 +159,6 @@ pub struct CheckpointMarker;
 pub struct Object {
     pub object_id: u16,
     pub scale: Vec3,
-    pub route: u16,
     pub settings: [u16; 8],
     pub presence: u16,
 }
@@ -435,7 +439,6 @@ impl FromKmp<Gobj> for Object {
         Self {
             object_id: data.object_id,
             scale: data.scale.into(),
-            route: data.route,
             settings: data.settings,
             presence: data.presence_flags,
         }
@@ -668,6 +671,7 @@ pub struct Spawner<T: Component + Spawn + Clone + Default> {
     pub order_id: Option<u32>,
     pub e: Option<Entity>,
     pub visible: bool,
+    pub route: Option<Entity>,
 }
 impl<T: Component + Spawn + Clone + Default> Default for Spawner<T> {
     fn default() -> Self {
@@ -679,6 +683,7 @@ impl<T: Component + Spawn + Clone + Default> Default for Spawner<T> {
             order_id: None,
             e: None,
             visible: true,
+            route: None,
         }
     }
 }
@@ -703,8 +708,8 @@ impl<T: Component + Spawn + Clone + Default> Spawner<T> {
         self.prev_nodes = Some(prev_nodes.into_iter().collect());
         self
     }
-    pub fn max_connected(mut self, max: u8) -> Self {
-        self.max = max;
+    pub fn max_connected(mut self, max: impl Into<u8>) -> Self {
+        self.max = max.into();
         self
     }
     pub fn order_id(mut self, id: u32) -> Self {
@@ -715,8 +720,17 @@ impl<T: Component + Spawn + Clone + Default> Spawner<T> {
         self.visible = visible;
         self
     }
+
     pub fn entity(mut self, entity: Entity) -> Self {
         self.e = Some(entity);
+        self
+    }
+    pub fn route(mut self, route: Entity) -> Self {
+        self.route = Some(route);
+        self
+    }
+    pub fn maybe_route(mut self, route: Option<Entity>) -> Self {
+        self.route = route;
         self
     }
     pub fn spawn_command(mut self, commands: &mut Commands) -> Entity {
@@ -730,6 +744,26 @@ impl<T: Component + Spawn + Clone + Default> Spawner<T> {
     pub fn spawn(self, world: &mut World) -> Entity {
         T::spawn(self, world)
     }
+}
+
+//
+// --- MAX CONNECTED PATHS ---
+//
+
+pub trait MaxConnectedPath {
+    const MAX_CONNECTED: u8;
+}
+impl MaxConnectedPath for EnemyPathPoint {
+    const MAX_CONNECTED: u8 = 6;
+}
+impl MaxConnectedPath for ItemPathPoint {
+    const MAX_CONNECTED: u8 = 6;
+}
+impl MaxConnectedPath for Checkpoint {
+    const MAX_CONNECTED: u8 = 6;
+}
+impl MaxConnectedPath for RoutePoint {
+    const MAX_CONNECTED: u8 = 1;
 }
 
 //

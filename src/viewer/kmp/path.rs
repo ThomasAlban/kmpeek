@@ -22,11 +22,7 @@ use crate::{
     },
 };
 use bevy::{
-    ecs::{
-        component::{ComponentHooks, StorageType},
-        entity::EntityHashMap,
-        system::SystemParam,
-    },
+    ecs::{entity::EntityHashMap, system::SystemParam},
     prelude::*,
     utils::{HashMap, HashSet},
 };
@@ -35,18 +31,21 @@ use std::{any::TypeId, fmt::Debug};
 use std::{marker::PhantomData, sync::Arc};
 
 pub fn path_plugin(app: &mut App) {
-    app.add_event::<RecalcPaths>().add_systems(
-        Update,
-        (
-            update_node_links::<EnemyPathPoint>,
-            update_node_links::<ItemPathPoint>,
-            update_node_links::<Checkpoint>,
-            update_node_links::<CheckpointRight>,
-            update_node_links::<RoutePoint>,
-            traverse_paths,
+    app.add_event::<RecalcPaths>()
+        .add_systems(
+            Update,
+            (
+                update_node_links::<EnemyPathPoint>,
+                update_node_links::<ItemPathPoint>,
+                update_node_links::<Checkpoint>,
+                update_node_links::<CheckpointRight>,
+                update_node_links::<RoutePoint>,
+                traverse_paths,
+            )
+                .after(DeleteSet),
         )
-            .after(DeleteSet),
-    );
+        .observe(on_add_kmp_path_node)
+        .observe(on_remove_kmp_path_node);
 }
 
 // represents a link between 2 nodes
@@ -98,7 +97,7 @@ impl ToPathType for RoutePoint {
 pub struct KmpPathNodeLinkLine;
 
 // component attached to kmp entities which are linked to other kmp entities
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Component, Clone, Debug, PartialEq)]
 pub struct KmpPathNode {
     pub max: u8,
     pub prev_nodes: HashSet<Entity>,
@@ -113,48 +112,7 @@ impl Default for KmpPathNode {
         }
     }
 }
-impl Component for KmpPathNode {
-    const STORAGE_TYPE: StorageType = StorageType::Table;
-    fn register_component_hooks(hooks: &mut ComponentHooks) {
-        hooks.on_add(|mut world, e, _| {
-            // on adding this component, ensure that the next/prev nodes also all hold references to the current node
-            let cur_node = world.get::<KmpPathNode>(e).unwrap();
-            let next_nodes = cur_node.get_next();
-            let prev_nodes = cur_node.get_previous();
 
-            for next_entity in next_nodes {
-                let mut next_node = world.get_mut::<KmpPathNode>(next_entity).unwrap();
-                next_node.prev_nodes.insert(e);
-            }
-            for prev_entity in prev_nodes {
-                let mut prev_node = world.get_mut::<KmpPathNode>(prev_entity).unwrap();
-                prev_node.next_nodes.insert(e);
-            }
-        });
-        hooks.on_remove(|mut world, e, _| {
-            let cur_node = world.get::<KmpPathNode>(e).unwrap();
-            let next_nodes = cur_node.get_next();
-            let prev_nodes = cur_node.get_previous();
-
-            for next_entity in next_nodes {
-                let mut next_node = world.get_mut::<KmpPathNode>(next_entity).unwrap();
-                next_node.prev_nodes.remove(&e);
-            }
-            for prev_entity in prev_nodes {
-                let mut prev_node = world.get_mut::<KmpPathNode>(prev_entity).unwrap();
-                prev_node.next_nodes.remove(&e);
-            }
-            if world.get::<EnemyPathPoint>(e).is_some() {
-                world.send_event(RecalcPaths::enemy());
-            } else if world.get::<ItemPathPoint>(e).is_some() {
-                world.send_event(RecalcPaths::item());
-            } else if world.get::<Checkpoint>(e).is_some() {
-                // don't need to check for cp right as we'll be despawning that one anyway in the same swoop
-                world.send_event(RecalcPaths::cp());
-            }
-        });
-    }
-}
 impl KmpPathNode {
     pub fn new(max: u8) -> Self {
         KmpPathNode {
@@ -243,6 +201,63 @@ impl KmpPathNode {
 
         true
     }
+    // pub fn at_max_prev(&self) -> bool {
+    //     self.prev_nodes.len() >= self.max.into()
+    // }
+    pub fn at_max_next(&self) -> bool {
+        self.next_nodes.len() >= self.max.into()
+    }
+}
+
+fn on_add_kmp_path_node(trigger: Trigger<OnAdd, KmpPathNode>, mut q_kmp_path_node: Query<&mut KmpPathNode>) {
+    // on adding this component, ensure that the next/prev nodes also all hold references to the current node
+    let e = trigger.entity();
+
+    let cur_node = q_kmp_path_node.get(e).unwrap();
+
+    let next_nodes = cur_node.get_next();
+    let prev_nodes = cur_node.get_previous();
+
+    for next_entity in next_nodes {
+        let mut next_node = q_kmp_path_node.get_mut(next_entity).unwrap();
+        next_node.prev_nodes.insert(e);
+    }
+    for prev_entity in prev_nodes {
+        let mut prev_node = q_kmp_path_node.get_mut(prev_entity).unwrap();
+        prev_node.next_nodes.insert(e);
+    }
+}
+
+fn on_remove_kmp_path_node(
+    trigger: Trigger<OnRemove, KmpPathNode>,
+    mut q_kmp_path_node: Query<&mut KmpPathNode>,
+    mut ev_recalc_paths: EventWriter<RecalcPaths>,
+    q_is_enemy_path_pt: Query<(), With<EnemyPathPoint>>,
+    q_is_item_path_pt: Query<(), With<ItemPathPoint>>,
+    q_is_checkpoint: Query<(), With<Checkpoint>>,
+) {
+    let e = trigger.entity();
+
+    let cur_node = q_kmp_path_node.get(e).unwrap();
+    let next_nodes = cur_node.get_next();
+    let prev_nodes = cur_node.get_previous();
+
+    for next_entity in next_nodes {
+        let mut next_node = q_kmp_path_node.get_mut(next_entity).unwrap();
+        next_node.prev_nodes.remove(&e);
+    }
+    for prev_entity in prev_nodes {
+        let mut prev_node = q_kmp_path_node.get_mut(prev_entity).unwrap();
+        prev_node.next_nodes.remove(&e);
+    }
+    if q_is_enemy_path_pt.get(e).is_ok() {
+        ev_recalc_paths.send(RecalcPaths::enemy());
+    } else if q_is_item_path_pt.get(e).is_ok() {
+        ev_recalc_paths.send(RecalcPaths::item());
+    } else if q_is_checkpoint.get(e).is_ok() {
+        // don't need to check for cp right as we'll be despawning that one anyway in the same swoop
+        ev_recalc_paths.send(RecalcPaths::cp());
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -267,6 +282,9 @@ pub fn is_checkpoint<T: 'static>() -> bool {
 }
 pub fn is_checkpoint_right<T: 'static>() -> bool {
     TypeId::of::<T>() == TypeId::of::<CheckpointRight>()
+}
+pub fn is_route_pt<T: 'static>() -> bool {
+    TypeId::of::<T>() == TypeId::of::<RoutePoint>()
 }
 // pub fn is_path<T: 'static>() -> bool {
 //     is_enemy_point::<T>() || is_item_point::<T>() || is_checkpoint::<T>()
@@ -515,6 +533,11 @@ pub fn update_node_links<T: Component + ToPathType + Clone>(
         if !nodes_to_be_linked.contains(&(kmp_node_link.prev_node, kmp_node_link.next_node))
             && kmp_node_link.kind == T::to_path_type()
         {
+            commands.add(move |world: &mut World| {
+                if let Some(e) = world.get_entity_mut(link_entity) {
+                    e.despawn_recursive();
+                }
+            });
             continue;
         }
         nodes_to_be_linked.remove(&(kmp_node_link.prev_node, kmp_node_link.next_node));
@@ -522,11 +545,7 @@ pub fn update_node_links<T: Component + ToPathType + Clone>(
         // update visibility of node link based on the linking nodes
         if let Ok([prev_visib, next_visib]) = q_visibility.get_many([kmp_node_link.prev_node, kmp_node_link.next_node])
         {
-            if prev_visib.to_bool() && next_visib.to_bool() {
-                *visibility = Visibility::Visible;
-            } else {
-                *visibility = Visibility::Hidden;
-            }
+            *visibility = (prev_visib.to_bool() && next_visib.to_bool()).to_visibility();
         }
 
         // don't bother unless the kmp node link is actually visible
@@ -536,10 +555,14 @@ pub fn update_node_links<T: Component + ToPathType + Clone>(
 
         // see https://github.com/bevyengine/bevy/issues/11517
         let Ok(transforms) = q_transform.get_many_mut([kmp_node_link.prev_node, kmp_node_link.next_node]) else {
-            if let Some(e) = commands.get_entity(link_entity) {
-                e.despawn_recursive();
-            }
-
+            // we can't just delete the entity, because there might be another command also pushed to the queue to delete it
+            // so we need to push a custom command which checks then and there if the entity exists, to avoid warnings that
+            // the entity we are trying to delete doesn't already exist
+            commands.add(move |world: &mut World| {
+                if let Some(e) = world.get_entity_mut(link_entity) {
+                    e.despawn_recursive();
+                }
+            });
             continue;
         };
         let [prev_transform, next_transform] = transforms.map(Ref::from);

@@ -49,70 +49,49 @@ impl<T: Component + ToKmpSection> Default for KmpEditMode<T> {
 #[derive(Event, Default)]
 pub struct KmpEditModeChange;
 
-#[derive(SystemParam)]
-pub struct KmpEditModeOptions<'w, 's> {
-    start_point: Option<Res<'w, KmpEditMode<StartPoint>>>,
-    enemy_path: Option<Res<'w, KmpEditMode<EnemyPathPoint>>>,
-    item_path: Option<Res<'w, KmpEditMode<ItemPathPoint>>>,
-    checkpoint: Option<Res<'w, KmpEditMode<Checkpoint>>>,
-    respawn_point: Option<Res<'w, KmpEditMode<RespawnPoint>>>,
-    object: Option<Res<'w, KmpEditMode<Object>>>,
-    route: Option<Res<'w, KmpEditMode<RoutePoint>>>,
-    area: Option<Res<'w, KmpEditMode<AreaPoint>>>,
-    camera: Option<Res<'w, KmpEditMode<KmpCamera>>>,
-    cannon_point: Option<Res<'w, KmpEditMode<CannonPoint>>>,
-    battle_finish_point: Option<Res<'w, KmpEditMode<BattleFinishPoint>>>,
-    commands: Commands<'w, 's>,
-    ev_mode_change: EventWriter<'w, KmpEditModeChange>,
-    // etc
+pub fn change_kmp_edit_mode<T: Component + ToKmpSection>(world: &mut World) {
+    world.remove_resource::<KmpEditMode<StartPoint>>();
+    world.remove_resource::<KmpEditMode<EnemyPathPoint>>();
+    world.remove_resource::<KmpEditMode<ItemPathPoint>>();
+    world.remove_resource::<KmpEditMode<Checkpoint>>();
+    world.remove_resource::<KmpEditMode<RespawnPoint>>();
+    world.remove_resource::<KmpEditMode<Object>>();
+    world.remove_resource::<KmpEditMode<RoutePoint>>();
+    world.remove_resource::<KmpEditMode<AreaPoint>>();
+    world.remove_resource::<KmpEditMode<KmpCamera>>();
+    world.remove_resource::<KmpEditMode<CannonPoint>>();
+    world.remove_resource::<KmpEditMode<BattleFinishPoint>>();
+    world.remove_resource::<KmpEditMode<TrackInfo>>();
+
+    world.init_resource::<KmpEditMode<T>>();
+    world.send_event_default::<KmpEditModeChange>();
 }
 
-impl<'w, 's> KmpEditModeOptions<'w, 's> {
-    pub fn get_kmp_section(&self) -> KmpSection {
-        if self.start_point.is_some() {
-            KmpSection::StartPoints
-        } else if self.enemy_path.is_some() {
-            KmpSection::EnemyPaths
-        } else if self.item_path.is_some() {
-            KmpSection::ItemPaths
-        } else if self.checkpoint.is_some() {
-            KmpSection::Checkpoints
-        } else if self.respawn_point.is_some() {
-            KmpSection::RespawnPoints
-        } else if self.object.is_some() {
-            KmpSection::Objects
-        } else if self.route.is_some() {
-            KmpSection::Routes
-        } else if self.area.is_some() {
-            KmpSection::Areas
-        } else if self.camera.is_some() {
-            KmpSection::Cameras
-        } else if self.cannon_point.is_some() {
-            KmpSection::CannonPoints
-        } else if self.battle_finish_point.is_some() {
-            KmpSection::BattleFinishPoints
-        } else {
-            KmpSection::TrackInfo
-        }
-    }
-    fn remove_all_modes(&mut self) {
-        self.commands.remove_resource::<KmpEditMode<StartPoint>>();
-        self.commands.remove_resource::<KmpEditMode<EnemyPathPoint>>();
-        self.commands.remove_resource::<KmpEditMode<ItemPathPoint>>();
-        self.commands.remove_resource::<KmpEditMode<Checkpoint>>();
-        self.commands.remove_resource::<KmpEditMode<RespawnPoint>>();
-        self.commands.remove_resource::<KmpEditMode<Object>>();
-        self.commands.remove_resource::<KmpEditMode<RoutePoint>>();
-        self.commands.remove_resource::<KmpEditMode<AreaPoint>>();
-        self.commands.remove_resource::<KmpEditMode<KmpCamera>>();
-        self.commands.remove_resource::<KmpEditMode<CannonPoint>>();
-        self.commands.remove_resource::<KmpEditMode<BattleFinishPoint>>();
-        self.commands.remove_resource::<KmpEditMode<TrackInfo>>();
-    }
-    pub fn change_mode<T: Component + ToKmpSection>(&mut self) {
-        self.remove_all_modes();
-        self.commands.insert_resource(KmpEditMode::<T>::default());
-        self.ev_mode_change.send_default();
+pub fn get_kmp_section(world: &mut World) -> KmpSection {
+    if world.contains_resource::<KmpEditMode<StartPoint>>() {
+        KmpSection::StartPoints
+    } else if world.contains_resource::<KmpEditMode<EnemyPathPoint>>() {
+        KmpSection::EnemyPaths
+    } else if world.contains_resource::<KmpEditMode<ItemPathPoint>>() {
+        KmpSection::ItemPaths
+    } else if world.contains_resource::<KmpEditMode<Checkpoint>>() {
+        KmpSection::Checkpoints
+    } else if world.contains_resource::<KmpEditMode<RespawnPoint>>() {
+        KmpSection::RespawnPoints
+    } else if world.contains_resource::<KmpEditMode<Object>>() {
+        KmpSection::Objects
+    } else if world.contains_resource::<KmpEditMode<RoutePoint>>() {
+        KmpSection::Routes
+    } else if world.contains_resource::<KmpEditMode<AreaPoint>>() {
+        KmpSection::Areas
+    } else if world.contains_resource::<KmpEditMode<KmpCamera>>() {
+        KmpSection::Cameras
+    } else if world.contains_resource::<KmpEditMode<CannonPoint>>() {
+        KmpSection::CannonPoints
+    } else if world.contains_resource::<KmpEditMode<BattleFinishPoint>>() {
+        KmpSection::BattleFinishPoints
+    } else {
+        KmpSection::TrackInfo
     }
 }
 

@@ -7,11 +7,12 @@ use crate::{
         kmp::{
             checkpoints::{get_both_cp_nodes, CheckpointRight},
             components::{Checkpoint, CheckpointMarker, EnemyPathPoint, ItemPathPoint, KmpSelectablePoint, RoutePoint},
-            path::{KmpPathNode, RecalcPaths},
+            path::{is_route_pt, KmpPathNode, RecalcPaths},
+            routes::GetRouteStart,
         },
     },
 };
-use bevy::prelude::*;
+use bevy::{ecs::world::Command, prelude::*};
 use bevy_mod_raycast::prelude::*;
 
 pub fn link_unlink_plugin(app: &mut App) {
@@ -66,6 +67,7 @@ fn link_points<T: Component + LinkKmpPoint>(
     q_selected: Query<Entity, With<Selected>>,
     mut commands: Commands,
     mut ev_recalc_paths: EventWriter<RecalcPaths>,
+    get_route_start: GetRouteStart,
 ) {
     let Some(alt_clicked_pt) = *alt_clicked_pt else {
         return;
@@ -73,6 +75,13 @@ fn link_points<T: Component + LinkKmpPoint>(
 
     if q_pts.contains(alt_clicked_pt) {
         for selected in q_selected.iter().filter(|e| q_pts.contains(*e)) {
+            // we need to check we are not linking to our own route start to create a circle
+            if is_route_pt::<T>() {
+                let route_start_e = get_route_start.get_entity(selected);
+                if route_start_e == alt_clicked_pt {
+                    continue;
+                }
+            }
             commands.add(move |world: &mut World| {
                 T::link(world, selected, alt_clicked_pt);
             });
@@ -111,31 +120,29 @@ pub fn unlink_points(
         return;
     }
 
-    let unlink_command = |world: &mut World, prev: Entity, next: Entity| {
-        // if it is a checkpoint
-        if world.entity(prev).contains::<Checkpoint>() || world.entity(next).contains::<CheckpointRight>() {
-            let (prev_left, prev_right) = get_both_cp_nodes(world, prev);
-            let (next_left, next_right) = get_both_cp_nodes(world, next);
-            KmpPathNode::unlink_nodes(prev_left, next_left, world);
-            KmpPathNode::unlink_nodes(prev_right, next_right, world);
-        } else {
-            KmpPathNode::unlink_nodes(prev, next, world);
+    struct Unlink(Entity, Entity);
+    impl Command for Unlink {
+        fn apply(self, world: &mut World) {
+            if world.entity(self.0).contains::<Checkpoint>() || world.entity(self.1).contains::<CheckpointRight>() {
+                let (prev_left, prev_right) = get_both_cp_nodes(world, self.0);
+                let (next_left, next_right) = get_both_cp_nodes(world, self.1);
+                KmpPathNode::unlink_nodes(prev_left, next_left, world);
+                KmpPathNode::unlink_nodes(prev_right, next_right, world);
+            } else {
+                KmpPathNode::unlink_nodes(self.0, self.1, world);
+            }
         }
-    };
+    }
 
     for selected in q_selected.iter() {
         let Ok(node) = q_kmp_path_node.get(selected) else {
             continue;
         };
         for prev_node_entity in node.prev_nodes.iter().copied() {
-            commands.add(move |world: &mut World| {
-                unlink_command(world, prev_node_entity, selected);
-            });
+            commands.add(Unlink(prev_node_entity, selected));
         }
         for next_node_entity in node.next_nodes.iter().copied() {
-            commands.add(move |world: &mut World| {
-                unlink_command(world, selected, next_node_entity);
-            });
+            commands.add(Unlink(selected, next_node_entity));
         }
     }
     ev_recalc_paths.send(RecalcPaths::all());
