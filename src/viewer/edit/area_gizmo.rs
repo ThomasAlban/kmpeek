@@ -1,6 +1,6 @@
 use crate::{
     ui::viewport::ViewportInfo,
-    util::{get_ray_from_cam, ui_viewport_to_ndc, world_to_ui_viewport},
+    util::{egui_has_primary_context, get_ray_from_cam, ui_viewport_to_ndc, world_to_ui_viewport},
     viewer::{
         camera::{Gizmo2dCam, TopDownCam},
         edit::select::Selected,
@@ -119,12 +119,12 @@ fn draw_area_handles(
         vec3(0., 0., 0.5),
     ];
 
+    let Ok(window) = q_window.get_single() else { return };
+
     // get the active camera
     let cam = q_cam.iter().find(|cam| cam.0.is_active).unwrap();
     let is_topdown = cam.2;
     let cam = (cam.0, cam.1);
-
-    let window = q_window.single();
 
     let mut interacted = false;
     area_gizmo_opts.mouse_hovering = false;

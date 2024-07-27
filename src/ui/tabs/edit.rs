@@ -16,7 +16,7 @@ use crate::{
             },
             ordering::OrderId,
             path::{PathGroups, PathType, RecalcPaths, ToPathType},
-            routes::{GetRouteStart, InRouteSelectionMode, RouteLink},
+            routes::{GetRouteStart, InRouteSelectionMode, RouteLink, RouteLinkedEntities},
             sections::KmpEditMode,
         },
     },
@@ -36,11 +36,8 @@ use bevy_egui::egui::{
     Sense, Stroke, TextStyle, Ui, Vec2, WidgetText,
 };
 use std::{
-    arch::aarch64::vst1_lane_s8,
-    borrow::BorrowMut,
     f32::consts::PI,
     fmt::Display,
-    iter::empty,
     ops::{AddAssign, Sub, SubAssign},
 };
 
@@ -135,16 +132,59 @@ pub fn show_edit_tab(ui: &mut Ui, world: &mut World) {
         route_edit_row.show(ui, items.iter().map(|x| x.1));
     });
 
-    edit_component_entities::<GetRouteStart, Query<(Entity, &mut RouteSettings)>>(
+    edit_component_entities::<
+        GetRouteStart,
+        (
+            Query<(Entity, (&mut RouteSettings, &RouteLinkedEntities))>,
+            Query<&mut Visibility>,
+        ),
+    >(
         ui,
         world,
         |r| r.get_selected(),
         "Route Settings",
-        |ui, entities, mut q| {
+        |ui, entities, (mut q, mut q_visibility)| {
             let mut items = iter_mut_from_entities(&entities, &mut q);
 
-            checkbox_edit_row(ui, "Smooth Motion", map!(items => smooth_motion));
-            combobox_edit_row(ui, "Loop Style", map!(items => loop_style));
+            checkbox_edit_row(ui, "Smooth Motion", map!(items => 0 smooth_motion));
+            combobox_edit_row(ui, "Loop Style", map!(items => 0 loop_style));
+
+            let mut all_visible = true;
+            let mut iterated = false;
+            for (_, route_linked_es) in items.iter() {
+                for e in route_linked_es.iter() {
+                    iterated = true;
+                    let visible = q_visibility.get(*e).unwrap().to_bool();
+                    if !visible {
+                        all_visible = false
+                    };
+                }
+            }
+            if !iterated {
+                all_visible = false;
+            }
+
+            let res = edit_row(ui, "Show Linked", false, |ui| {
+                let size = egui::Vec2::splat(ui.spacing().interact_size.y * 0.8);
+                ui.add_sized(
+                    size,
+                    if all_visible {
+                        Icons::view_on(ui.ctx(), ui.spacing().interact_size.y * 0.8)
+                    } else {
+                        Icons::view_off(ui.ctx(), ui.spacing().interact_size.y * 0.8)
+                    }
+                    .sense(Sense::click()),
+                )
+            });
+
+            if res.clicked() {
+                for (_, route_linked_es) in items.iter() {
+                    for e in route_linked_es.iter() {
+                        let mut v = q_visibility.get_mut(*e).unwrap();
+                        *v = (!all_visible).to_visibility();
+                    }
+                }
+            }
         },
     );
 

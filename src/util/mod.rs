@@ -13,8 +13,12 @@ use bevy::{
     },
     math::vec2,
     prelude::*,
+    window::PrimaryWindow,
 };
-use bevy_egui::egui::{self, Pos2};
+use bevy_egui::{
+    egui::{self, Pos2},
+    EguiContext,
+};
 use bevy_mod_raycast::{
     immediate::{Raycast, RaycastSettings},
     primitives::IntersectionData,
@@ -281,4 +285,8 @@ pub fn iter_mut_from_entities<'a, R: QueryData>(
         }
     }
     items
+}
+
+pub fn egui_has_primary_context(query: Query<(), (With<EguiContext>, With<PrimaryWindow>)>) -> bool {
+    !query.is_empty()
 }

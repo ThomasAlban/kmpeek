@@ -1,3 +1,5 @@
+use crate::util::egui_has_primary_context;
+
 use super::{file_dialog::show_file_dialog, menu_bar::show_menu_bar, tabs::show_dock_area};
 use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_egui::{EguiContext, EguiContexts};
@@ -11,10 +13,6 @@ pub fn update_ui_plugin(app: &mut App) {
         .add_event::<KclFileSelected>()
         .add_systems(Startup, setup_ui_images)
         .add_systems(Update, update_ui.in_set(UpdateUiSet).run_if(egui_has_primary_context));
-}
-
-fn egui_has_primary_context(query: Query<(), (With<EguiContext>, With<PrimaryWindow>)>) -> bool {
-    !query.is_empty()
 }
 
 #[derive(Event)]

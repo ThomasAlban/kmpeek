@@ -83,7 +83,7 @@ fn update_normalize(
     //     }
     //     return;
     // }
-    let window = q_window.single();
+    let Ok(window) = q_window.get_single() else { return };
 
     let (camera_position, camera) = {
         let q_cam = p.p0();
