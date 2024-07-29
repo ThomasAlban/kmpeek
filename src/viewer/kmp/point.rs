@@ -27,9 +27,9 @@ pub fn spawn_point_section<
     route_id_map: &HashMap<u8, Entity>,
     kmp: Arc<KmpFile>,
     kmp_errors: &mut Vec<KmpError>,
-) -> Vec<Entity> {
+) -> HashMap<u32, Entity> {
     let node_entries = &T::get_section(kmp.as_ref()).entries;
-    let mut entities = Vec::with_capacity(node_entries.len());
+    let mut id_entity_map = HashMap::default();
 
     for (i, node) in node_entries.iter().enumerate() {
         let position: Vec3 = node.get_position().into();
@@ -50,10 +50,9 @@ pub fn spawn_point_section<
             .order_id(i as u32)
             .maybe_route(maybe_route)
             .spawn_command(commands);
-
-        entities.push(entity);
+        id_entity_map.insert(i as u32, entity);
     }
-    entities
+    id_entity_map
 }
 
 pub fn spawn_point<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mut World) -> Entity {

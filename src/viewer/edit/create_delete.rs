@@ -1,7 +1,7 @@
 use super::select::{SelectSet, Selected};
 use crate::{
     ui::viewport::ViewportInfo,
-    util::{get_ray_from_cam, ui_viewport_to_ndc, RaycastFromCam},
+    util::{get_ray_from_cam, try_despawn, ui_viewport_to_ndc, RaycastFromCam},
     viewer::{
         camera::Gizmo2dCam,
         kcl_model::KCLModelSection,
@@ -192,9 +192,7 @@ fn delete_point(
     }
 
     for e in q_selected.iter_mut() {
-        if let Some(e) = commands.get_entity(e) {
-            e.despawn_recursive();
-        }
+        try_despawn(&mut commands, e);
     }
     ev_refresh_ordering.send_default();
 }

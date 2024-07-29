@@ -15,7 +15,6 @@ pub fn ui_state_plugin(app: &mut App) {
     app.insert_resource(PkvStore::new("ThomasAlban", "kmpeek"))
         // .init_resource::<CustomiseKclOpen>()
         // .init_resource::<CameraSettingsOpen>()
-        .init_resource::<KmpFilePath>()
         // .init_resource::<ShowModesCollapsed>()
         // .init_resource::<KmpVisibility>()
         .add_event::<SaveDockTree>()
@@ -37,26 +36,14 @@ pub fn reset_docktree(mut pkv: ResMut<PkvStore>, mut tree: ResMut<DockTree>) {
     pkv.set("tree", tree.as_ref()).unwrap();
 }
 
-// #[derive(Resource, Default)]
-// pub struct CustomiseKclOpen(pub bool);
-// #[derive(Resource, Default)]
-// pub struct CameraSettingsOpen(pub bool);
-
-#[derive(Resource, Default)]
-pub struct KmpFilePath(pub Option<PathBuf>);
-// #[derive(Resource, Default)]
-// pub struct ShowModesCollapsed(pub Option<f32>);
-// #[derive(Resource, Default, Clone, PartialEq)]
-// pub struct KmpVisibility(pub [bool; 11]);
-
-#[derive(Serialize, Deserialize, Resource, Deref, DerefMut)]
-pub struct Increment(pub u32);
+#[derive(Resource, Default, Deref, DerefMut)]
+pub struct KmpFilePath(pub PathBuf);
 
 pub fn check_cmd_args(
     mut ev_kmp_file_selected: EventWriter<KmpFileSelected>,
     mut ev_kcl_file_selected: EventWriter<KclFileSelected>,
-    mut kmp_file_path: ResMut<KmpFilePath>,
     settings: Res<AppSettings>,
+    mut commands: Commands,
 ) {
     // if there is a command line arg of a path to a kmp or kcl, open it
     let args: Vec<String> = env::args().collect();
@@ -67,7 +54,7 @@ pub fn check_cmd_args(
                 // if the file is a kmp file
                 if file_ext == "kmp" {
                     // open it
-                    kmp_file_path.0 = Some(path.into());
+                    commands.insert_resource(KmpFilePath(path.into()));
                     ev_kmp_file_selected.send(KmpFileSelected(path.into()));
                     // if there is a course.kcl in the same directory and the setting to open it is set, open the kcl as well
                     if settings.open_course_kcl_in_dir {

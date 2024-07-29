@@ -18,7 +18,7 @@ fn main() {
             }),
             ..default()
         }))
-        // .insert_resource(WinitSettings::desktop_app())
+        .insert_resource(WinitSettings::desktop_app())
         .add_plugins((viewer_plugin, ui_plugin))
         .run();
 }

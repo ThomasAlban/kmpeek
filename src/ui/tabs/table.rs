@@ -23,19 +23,8 @@ use bevy::{
 use bevy_egui::egui::{self, emath::Numeric, Checkbox, Direction, DragValue, Layout, Response, Sense, Ui};
 use egui_extras::{Column, TableBuilder, TableRow};
 
-type KmpTableQuery<'w, 's, C> = Query<
-    'w,
-    's,
-    (
-        &'static mut C,
-        &'static mut Transform,
-        Entity,
-        Has<Selected>,
-        &'static OrderId,
-    ),
->;
-
 pub fn show_table_tab(ui: &mut Ui, world: &mut World) {
+    // show the top bit if we are not in track info mode
     if !world.contains_resource::<KmpEditMode<TrackInfo>>() {
         ui.horizontal(|ui| {
             ui.heading(get_kmp_section(world).to_string());
@@ -229,7 +218,7 @@ fn show_kmp_table<T: Component + ToKmpSection + PartialEq + Clone + ShowKmpTable
     }
 
     let mut ss = SystemState::<(
-        KmpTableQuery<T>,
+        Query<(&mut T, &mut Transform, Entity, Has<Selected>, &OrderId)>,
         Query<Entity, With<T>>,
         Commands,
         Res<ButtonInput<KeyCode>>,

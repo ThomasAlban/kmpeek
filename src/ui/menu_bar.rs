@@ -1,13 +1,13 @@
 use super::{
     file_dialog::{self, FileDialogManager},
     tabs::{DockTree, Tab},
-    ui_state::{ResetDockTree, SaveDockTree},
+    ui_state::{KmpFilePath, ResetDockTree, SaveDockTree},
     util::get_egui_ctx,
 };
 use bevy::ecs::system::{SystemParam, SystemState};
 use bevy::prelude::*;
 use bevy_egui::{
-    egui::{self, Align, Layout},
+    egui::{self, Align, Button, Layout},
     EguiContexts,
 };
 use strum::IntoEnumIterator;
@@ -23,32 +23,47 @@ pub fn show_menu_bar(world: &mut World) {
             }
             ui.menu_button("File", |ui| {
                 if ui
-                    .add(egui::Button::new("Open KMP/KCL").shortcut_text(format!("{sc_btn}+O")))
+                    .add(Button::new("Open KMP/KCL").shortcut_text(format!("{sc_btn}+O")))
                     .clicked()
                 {
-                    let mut system_state = SystemState::<FileDialogManager>::new(world);
-                    let mut file_dialog = system_state.get_mut(world);
+                    let mut ss = SystemState::<FileDialogManager>::new(world);
+                    let mut file_dialog = ss.get_mut(world);
 
                     file_dialog.open_kmp_kcl();
 
                     ui.close_menu();
                 }
+                if !world.contains_resource::<KmpFilePath>() {
+                    ui.disable();
+                }
+
+                // haven't implemented this yet
+                // ui.disable();
                 if ui
-                    .add(egui::Button::new("Save").shortcut_text(format!("{sc_btn}+S")))
+                    .add(Button::new("Save").shortcut_text(format!("{sc_btn}+S")))
+                    .clicked()
+                {
+                    ui.close_menu();
+                }
+
+                if ui
+                    .add(Button::new("Save as...").shortcut_text(format!("{sc_btn}+Shift+S")))
                     .clicked()
                 {
                     ui.close_menu();
                 }
             });
             ui.menu_button("Edit", |ui| {
+                // haven't implemented undo/redo yet
+                ui.disable();
                 if ui
-                    .add(egui::Button::new("Undo").shortcut_text(format!("{sc_btn}+Z")))
+                    .add(Button::new("Undo").shortcut_text(format!("{sc_btn}+Z")))
                     .clicked()
                 {
                     // undo!();
                 }
                 if ui
-                    .add(egui::Button::new("Redo").shortcut_text(format!("{sc_btn}+Shift+Z")))
+                    .add(Button::new("Redo").shortcut_text(format!("{sc_btn}+Shift+Z")))
                     .clicked()
                 {
                     // redo!();

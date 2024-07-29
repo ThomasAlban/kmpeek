@@ -424,24 +424,28 @@ pub fn button_triggered_popup<R>(
 }
 
 #[derive(Clone)]
-pub enum RouteBtnType {
-    /// All that is selected has no route link
-    NoRoute,
-    /// There are multiple things selected with differing route links
+pub enum LinkSelectBtnType {
+    /// All that is selected has no link
+    NoLink,
+    /// There are multiple things selected with differing links
     Multi { indexes: Vec<Option<usize>>, visible: bool },
-    /// All that is selected is linked to the same route
+    /// All that is selected is linked to the same thing
     Single { index: usize, visible: bool },
 }
 #[derive(Default)]
-pub struct RouteBtnResponse {
+pub struct LinkSelectBtnResponse {
     pub cross_pressed: bool,
     pub eyedropper_pressed: bool,
     pub view_pressed: bool,
 }
-pub fn route_btn(ui: &mut Ui, route_btn_type: &RouteBtnType) -> RouteBtnResponse {
-    use RouteBtnType::*;
+pub fn link_select_btn(
+    ui: &mut Ui,
+    route_btn_type: &LinkSelectBtnType,
+    name: impl Into<String>,
+) -> LinkSelectBtnResponse {
+    use LinkSelectBtnType::*;
 
-    let mut res = RouteBtnResponse::default();
+    let mut res = LinkSelectBtnResponse::default();
 
     let width = ui.available_width();
 
@@ -465,9 +469,6 @@ pub fn route_btn(ui: &mut Ui, route_btn_type: &RouteBtnType) -> RouteBtnResponse
         bg_rect.right_top() - vec2(ui.spacing().button_padding.x + icon_hb_size.x, 0.),
         icon_hb_size,
     );
-
-    ui.style_mut().interaction.tooltip_delay = 0.1;
-    ui.style_mut().interaction.show_tooltips_only_when_still = false;
 
     // do the cross
 
@@ -537,9 +538,9 @@ pub fn route_btn(ui: &mut Ui, route_btn_type: &RouteBtnType) -> RouteBtnResponse
 
     // draw the text
     let text: WidgetText = match route_btn_type {
-        NoRoute => "No Route".into(),
+        NoLink => "None".into(),
         Multi { .. } => "".into(),
-        Single { index, .. } => format!("Route {index}").into(),
+        Single { index, .. } => format!("{} {}", name.into(), index).into(),
     };
     let galley = text.into_galley(ui, None, f32::INFINITY, TextStyle::Button);
 

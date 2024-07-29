@@ -1,14 +1,14 @@
 use crate::{
     ui::util::{
-        combobox_enum, framed_collapsing_header,
+        combobox_enum, framed_collapsing_header, link_select_btn,
         multi_edit::{checkbox_multi_edit, combobox_enum_multi_edit, drag_value_multi_edit, map, rotation_multi_edit},
-        route_btn, DragSpeed, Icons,
+        DragSpeed, Icons, LinkSelectBtnType,
     },
     util::{give_me_a_mut, iter_mut_from_entities, BoolToVisibility, ToEguiVec2, VisibilityToBool},
     viewer::{
-        edit::select::Selected,
+        edit::{link_select_mode::LinkSelectMode, select::Selected},
         kmp::{
-            checkpoints::GetSelectedCheckpoints,
+            checkpoints::{CheckpointRespawnLink, GetSelectedCheckpoints},
             components::{
                 AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint,
                 KmpCamera, Object, PathOverallStart, RespawnPoint, RoutePoint, RouteSettings, StartPoint, TrackInfo,
@@ -16,7 +16,7 @@ use crate::{
             },
             ordering::OrderId,
             path::{PathGroups, PathType, RecalcPaths, ToPathType},
-            routes::{GetRouteStart, InRouteSelectionMode, RouteLink, RouteLinkedEntities},
+            routes::{GetRouteStart, RouteLink, RouteLinkedEntities},
             sections::KmpEditMode,
         },
     },
@@ -98,15 +98,83 @@ pub fn show_edit_tab(ui: &mut Ui, world: &mut World) {
         },
     );
 
-    edit_component_entities::<GetSelectedCheckpoints, (Query<(Entity, &mut Checkpoint)>, PathStartBtn<Checkpoint>)>(
+    edit_component_entities::<
+        GetSelectedCheckpoints,
+        (
+            Query<(Entity, &mut Checkpoint)>,
+            PathStartBtn<Checkpoint>,
+            Query<&CheckpointRespawnLink>,
+            Query<&mut Visibility>,
+            Query<&OrderId>,
+            Commands,
+        ),
+    >(
         ui,
         world,
         |cps| cps.get_entities(),
-        "Checkpoints",
-        |ui, entities, (mut q_cp, mut path_start_btn)| {
+        "Checkpoint",
+        |ui,
+         entities,
+         (mut q_cp, mut path_start_btn, q_cp_respawn_link, mut q_visibility, q_order_id, mut commands)| {
             let mut items = iter_mut_from_entities(&entities, &mut q_cp);
-
             combobox_edit_row(ui, "Type", map!(items => kind));
+
+            edit_row(ui, "Respawn", false, |ui| {
+                let mut cp_respawn_links = Vec::new();
+                for e in entities.iter() {
+                    cp_respawn_links.push(q_cp_respawn_link.get(*e).ok());
+                }
+                // list of Option<bool>
+                // none if no link, bool represents visibility if it does exist
+                let mut visibilities = Vec::new();
+                for link in cp_respawn_links.iter() {
+                    visibilities.push((*link).and_then(|x| q_visibility.get(x.0).ok().map(|x| x.to_bool())));
+                }
+
+                // // looks weird but basically means 'go through all the visibilities which exist (skipping the ones that don't) and ask if all of them are visible or not'
+                let all_visible = visibilities.iter().filter_map(|x| *x).all(|x| x);
+
+                let link_select_btn_type = {
+                    if cp_respawn_links.iter().all(|x| x.is_none()) {
+                        LinkSelectBtnType::NoLink
+                    } else {
+                        let first_link = cp_respawn_links[0];
+
+                        // if they are all the same (and we know already that they are not all none)
+                        // so this means 'are we talking about a single respawn point
+                        if cp_respawn_links.iter().all(|x| *x == first_link) {
+                            let index = q_order_id.get(first_link.unwrap().0).unwrap().0 as usize;
+                            LinkSelectBtnType::Single {
+                                index,
+                                visible: all_visible,
+                            }
+                        } else {
+                            LinkSelectBtnType::Multi {
+                                indexes: Vec::new(),
+                                visible: all_visible,
+                            }
+                        }
+                    }
+                };
+
+                let res = link_select_btn(ui, &link_select_btn_type, "Respawn");
+
+                if res.cross_pressed {
+                    for e in entities.iter() {
+                        commands.entity(*e).remove::<CheckpointRespawnLink>();
+                    }
+                }
+                if res.view_pressed {
+                    for e in cp_respawn_links.iter().filter_map(|x| *x).map(|x| x.0) {
+                        let mut v_mut = q_visibility.get_mut(e).unwrap();
+                        *v_mut = (!all_visible).to_visibility();
+                    }
+                }
+                if res.eyedropper_pressed {
+                    commands.insert_resource(LinkSelectMode::<RespawnPoint>::new(entities.clone()));
+                }
+            });
+
             path_start_btn.show(ui, entities);
         },
     );
@@ -363,8 +431,8 @@ fn edit_component_entities<PEntities: SystemParam + 'static, P: SystemParam + 's
     title: &'static str,
     add_body: impl FnOnce(&mut Ui, EntityHashSet, <P as SystemParam>::Item<'_, '_>),
 ) {
-    let mut system_state = SystemState::<ParamSet<(PEntities, P)>>::new(world);
-    let mut paramset = system_state.get_mut(world);
+    let mut ss = SystemState::<ParamSet<(PEntities, P)>>::new(world);
+    let mut paramset = ss.get_mut(world);
 
     let p_entities = paramset.p0();
 
@@ -377,6 +445,8 @@ fn edit_component_entities<PEntities: SystemParam + 'static, P: SystemParam + 's
 
     framed_collapsing_header(title, ui, |ui| add_body(ui, entities, paramset.p1()));
     edit_spacing(ui);
+
+    ss.apply(world);
 }
 
 #[derive(SystemParam)]
@@ -487,7 +557,7 @@ pub fn edit_row<R>(
     .inner
 }
 
-use crate::ui::util::RouteBtnType::*;
+use crate::ui::util::LinkSelectBtnType::*;
 
 #[derive(SystemParam)]
 pub struct RouteEditRowParam<'w, 's> {
@@ -515,7 +585,7 @@ impl RouteEditRowParam<'_, '_> {
         let first_e = route_starts.first().copied().flatten();
 
         let route_btn_type = if route_starts.iter().all(|x| x.is_none()) {
-            NoRoute
+            NoLink
         } else {
             let mut route_visibilities = Vec::new();
             for route_start in route_starts.iter() {
@@ -533,7 +603,7 @@ impl RouteEditRowParam<'_, '_> {
             if route_starts.iter().all(|x| *x == first_e) {
                 let first_e = first_e.unwrap();
                 let mut index = None;
-                for (i, path_group) in path_groups.groups.iter().enumerate() {
+                for (i, path_group) in path_groups.iter().enumerate() {
                     if path_group.path[0] == first_e {
                         index = Some(i);
                     }
@@ -551,7 +621,7 @@ impl RouteEditRowParam<'_, '_> {
                 let mut indexes = Vec::new();
                 'outer: for route_start_e in route_starts.iter() {
                     if let Some(route_start_e) = *route_start_e {
-                        for (i, path_group) in path_groups.groups.iter().enumerate() {
+                        for (i, path_group) in path_groups.iter().enumerate() {
                             if path_group.path[0] == route_start_e {
                                 indexes.push(Some(i));
                                 continue 'outer;
@@ -569,7 +639,7 @@ impl RouteEditRowParam<'_, '_> {
             }
         };
 
-        let route_res = edit_row(ui, "Route", false, |ui| route_btn(ui, &route_btn_type));
+        let route_res = edit_row(ui, "Route", false, |ui| link_select_btn(ui, &route_btn_type, "Route"));
 
         if route_res.cross_pressed {
             for e in items.iter() {
@@ -580,7 +650,7 @@ impl RouteEditRowParam<'_, '_> {
         if route_res.view_pressed {
             match route_btn_type {
                 Single { index, visible } => {
-                    let Some(path) = path_groups.groups.get(index) else {
+                    let Some(path) = path_groups.get(index) else {
                         warn!("Something got fucked because the index of the route isn't found in the path groups");
                         return;
                     };
@@ -594,7 +664,7 @@ impl RouteEditRowParam<'_, '_> {
                 Multi { indexes, visible } => {
                     // go through all the routes which are linked
                     for index in indexes.iter().filter_map(|x| *x) {
-                        let Some(path) = path_groups.groups.get(index) else {
+                        let Some(path) = path_groups.get(index) else {
                             warn!("Something got fucked because the index of the route isn't found in the path groups");
                             return;
                         };
@@ -611,7 +681,7 @@ impl RouteEditRowParam<'_, '_> {
         }
 
         if route_res.eyedropper_pressed {
-            self.commands.insert_resource(InRouteSelectionMode(items));
+            self.commands.insert_resource(LinkSelectMode::<RoutePoint>::new(items));
         }
     }
 }

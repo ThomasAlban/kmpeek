@@ -9,10 +9,10 @@ use crate::{
         kmp::{
             components::{
                 AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint, KmpCamera,
-                Object, RespawnPoint, RoutePoint, StartPoint, TrackInfo,
+                KmpSelectablePoint, Object, RespawnPoint, RoutePoint, StartPoint, TrackInfo,
             },
             path::{PathGroup, PathGroups},
-            sections::{change_kmp_edit_mode, KmpEditMode, KmpSection, ToKmpSection},
+            sections::{change_kmp_edit_mode, KmpEditMode, KmpEditModeChange, KmpSection, ToKmpSection},
             SetSectionVisibility,
         },
     },
@@ -24,6 +24,16 @@ use bevy::{
 use bevy_egui::egui::{self, collapsing_header::CollapsingState, Align, Color32, Layout, Ui};
 
 pub fn show_outliner_tab(ui: &mut Ui, world: &mut World) {
+    // show the buttons at the top
+
+    ui.horizontal(|ui| {
+        // ui.add_space(18.);
+        if ui.button("Reset Visibilities").clicked() {
+            world.send_event(KmpEditModeChange);
+        }
+    });
+    ui.add_space(2.);
+
     show_track_info_outliner(ui, world);
     show_point_outliner::<StartPoint>(ui, world);
     show_path_outliner::<EnemyPathPoint>(ui, world);
@@ -68,7 +78,7 @@ fn show_path_outliner<T: Component + ToKmpSection>(ui: &mut Ui, world: &mut Worl
         .body(|ui| {
             let mut paths_to_show = Vec::new();
             if let Some(groups) = world.get_resource::<PathGroups<T>>() {
-                for (i, pathgroup) in groups.groups.iter().enumerate() {
+                for (i, pathgroup) in groups.iter().enumerate() {
                     paths_to_show.push((i, pathgroup.clone()));
                 }
             }

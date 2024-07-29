@@ -1,7 +1,7 @@
 use bevy::app::App;
 
 use self::{
-    camera::camera_plugin, edit::mouse_picking_plugin, grid::grid_plugin, kcl_model::kcl_plugin, kmp::kmp_plugin,
+    camera::camera_plugin, edit::edit_plugin, grid::grid_plugin, kcl_model::kcl_plugin, kmp::kmp_plugin,
     normalize::normalize_plugin,
 };
 
@@ -19,6 +19,6 @@ pub fn viewer_plugin(app: &mut App) {
         kcl_plugin,
         normalize_plugin,
         grid_plugin,
-        mouse_picking_plugin,
+        edit_plugin,
     ));
 }

@@ -7,8 +7,8 @@ use crate::{
     util::ToEguiRect,
     viewer::{
         camera::{CameraMode, CameraModeChanged},
-        edit::{select::SelectBox, EditMode},
-        kmp::routes::InRouteSelectionMode,
+        edit::{link_select_mode::LinkSelectMode, select::SelectBox, EditMode},
+        kmp::components::{RespawnPoint, RoutePoint},
     },
 };
 use bevy::{
@@ -72,9 +72,13 @@ pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
     world.resource_mut::<ViewportInfo>().mouse_on_overlayed_ui = responses.iter().any(|x| x.contains_pointer());
 
     // show the route hover label if needed
-    if world.contains_resource::<InRouteSelectionMode>() {
+    if world.contains_resource::<LinkSelectMode<RoutePoint>>() {
         show_tooltip_at_pointer(ui.ctx(), ui.layer_id(), ui.next_auto_id(), |ui| {
-            ui.label("Select a route (ESC to cancel)");
+            ui.label("Select a Route (ESC to cancel)");
+        });
+    } else if world.contains_resource::<LinkSelectMode<RespawnPoint>>() {
+        show_tooltip_at_pointer(ui.ctx(), ui.layer_id(), ui.next_auto_id(), |ui| {
+            ui.label("Select a Respawn (ESC to cancel)");
         });
     }
 }

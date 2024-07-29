@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use super::{
-    checkpoints::{CheckpointHeight, CheckpointLeft, CheckpointSpawner},
+    checkpoints::{checkpoint_spawner, CheckpointHeight, CheckpointLeft},
     ordering::OrderId,
     path::{spawn_path, KmpPathNode},
     point::spawn_point,
@@ -18,10 +18,11 @@ use bevy::{
     utils::HashSet,
 };
 use binrw::{BinRead, BinWrite};
+use derive_new::new;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 
-#[derive(Component, Default, Clone, Copy)]
+#[derive(Component, Default, Clone, Copy, new)]
 pub struct TransformEditOptions {
     pub hide_rotation: bool,
     pub hide_y_translation: bool,
@@ -643,14 +644,15 @@ impl_spawn_point!(BattleFinishPoint);
 impl Spawn for Checkpoint {
     fn spawn(spawner: Spawner<Self>, world: &mut World) -> Entity {
         let pos = spawner.transform.translation.xz();
-        let mut cp_spawner = CheckpointSpawner::new(spawner.component)
-            .pos(pos, pos)
+        let (left, right) = checkpoint_spawner()
+            .cp(spawner.component)
+            .pos((pos, pos))
             .visible(spawner.visible)
-            .height(world.resource::<CheckpointHeight>().0);
-        if let Some(order_id) = spawner.order_id {
-            cp_spawner = cp_spawner.order_id(order_id);
-        }
-        let (left, right) = cp_spawner.spawn(world);
+            .maybe_right_e(spawner.e)
+            .height(world.resource::<CheckpointHeight>().0)
+            .maybe_order_id(spawner.order_id)
+            .world(world)
+            .call();
 
         if let Some(prev_nodes) = spawner.prev_nodes {
             for prev_left in prev_nodes {
@@ -676,13 +678,13 @@ pub struct Spawner<T: Component + Spawn + Clone + Default> {
 impl<T: Component + Spawn + Clone + Default> Default for Spawner<T> {
     fn default() -> Self {
         Self {
+            max: 6,
+            visible: true,
             transform: Transform::default(),
             component: T::default(),
             prev_nodes: None,
-            max: 6,
             order_id: None,
             e: None,
-            visible: true,
             route: None,
         }
     }

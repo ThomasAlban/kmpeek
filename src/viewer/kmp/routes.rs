@@ -14,14 +14,14 @@ use super::{
 use bevy::{
     ecs::{
         entity::{EntityHashMap, EntityHashSet},
-        system::SystemParam,
+        system::{SystemParam, SystemState},
     },
     prelude::*,
     utils::HashMap,
 };
 use bevy_mod_raycast::prelude::Raycast;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 
 pub fn routes_plugin(app: &mut App) {
     app.add_systems(Update, update_routes)
@@ -30,8 +30,7 @@ pub fn routes_plugin(app: &mut App) {
         .observe(on_add_route_link)
         .observe(on_remove_route_link)
         .observe(on_add_route_pt)
-        .observe(on_remove_route_pt)
-        .add_systems(Update, update_route_selection_mode.after(SelectSet));
+        .observe(on_remove_route_pt);
 }
 
 #[derive(Component, Default, Clone, Serialize, Deserialize, Debug, Deref, DerefMut)]
@@ -79,19 +78,21 @@ fn on_remove_route_linked_entities(
 ) {
     let e = trigger.entity();
     let route_linked_es = q_route_linked_es.get(e).unwrap().clone();
-    let kmp_path_node = q_kmp_path_node.get(e).unwrap();
+    let kmp_path_node = q_kmp_path_node.get(e).unwrap().clone();
 
-    // when we delete, try to move the route start forward to the next in the path
-    if let Some(next_e) = kmp_path_node.next_nodes.iter().next().copied() {
-        commands.add(move |world: &mut World| {
-            route_linked_es.move_route_start(world, e, next_e);
-        });
-    } else {
-        // if there wasn't a next node to move ourselves to, then we'll have to delete all the route references
-        for linked_e in route_linked_es.iter() {
-            commands.entity(*linked_e).remove::<RouteLink>();
+    commands.add(move |world: &mut World| {
+        // when we delete, try to move the route start forward to the next in the path
+        if let Some(next_e) = kmp_path_node.next_nodes.iter().next().copied() {
+            if world.get_entity(next_e).is_some() && world.get_entity(e).is_some() {
+                route_linked_es.move_route_start(world, e, next_e);
+            }
+        } else {
+            // if there wasn't a next node to move ourselves to, then we'll have to delete all the route references
+            for linked_e in route_linked_es.iter() {
+                world.entity_mut(*linked_e).remove::<RouteLink>();
+            }
         }
-    }
+    });
 }
 
 #[derive(Component, Clone, Serialize, Deserialize, Debug, Deref, DerefMut)]
@@ -110,9 +111,8 @@ fn on_add_route_link(
     route_linked_es.insert(e);
 }
 fn on_remove_route_link(
-    trigger: Trigger<OnAdd, RouteLink>,
+    trigger: Trigger<OnRemove, RouteLink>,
     q_route_link: Query<&RouteLink>,
-
     mut q_route_linked_es: Query<&mut RouteLinkedEntities>,
 ) {
     let e = trigger.entity();
@@ -243,81 +243,4 @@ impl GetRouteStart<'_, '_> {
         }
         start_es
     }
-}
-
-#[derive(Resource)]
-pub struct InRouteSelectionMode(pub Vec<Entity>);
-
-fn update_route_selection_mode(
-    res: Option<Res<InRouteSelectionMode>>,
-    keys: Res<ButtonInput<KeyCode>>,
-    mut q_visibility: Query<(Entity, &mut Visibility)>,
-    // saves the visibility state of everything before we went into route selection mode
-    mut e_v_map: Local<HashMap<Entity, Visibility>>,
-    mut commands: Commands,
-    get_route_start: GetRouteStart,
-    q_camera: Query<(&mut Camera, &GlobalTransform), Without<Gizmo2dCam>>,
-    viewport_info: Res<ViewportInfo>,
-    mouse_buttons: Res<ButtonInput<MouseButton>>,
-    q_window: Query<&Window>,
-    q_route_pt: Query<Entity, With<RoutePoint>>,
-    mut raycast: Raycast,
-    q_non_route_pt: Query<Entity, (With<KmpSelectablePoint>, Without<RoutePoint>)>,
-) {
-    let Some(res) = res else { return };
-
-    if res.is_added() {
-        // we only just went into route selection mode so we need to set everything up
-        for (e, v) in q_visibility.iter() {
-            e_v_map.insert(e, *v);
-        }
-        for e in q_non_route_pt.iter() {
-            *q_visibility.get_mut(e).unwrap().1 = Visibility::Hidden;
-        }
-        for e in q_route_pt.iter() {
-            *q_visibility.get_mut(e).unwrap().1 = Visibility::Visible;
-        }
-    }
-
-    let mut reset_visibilities = || {
-        for (e, v) in e_v_map.iter() {
-            let (_, mut v_mut) = q_visibility.get_mut(*e).unwrap();
-            *v_mut = *v;
-        }
-    };
-
-    if keys.just_pressed(KeyCode::Escape) {
-        commands.remove_resource::<InRouteSelectionMode>();
-        reset_visibilities();
-    }
-
-    if !mouse_buttons.just_pressed(MouseButton::Left) {
-        return;
-    }
-
-    commands.remove_resource::<InRouteSelectionMode>();
-
-    let Some(mouse_pos) = q_window.single().cursor_position() else {
-        return;
-    };
-
-    // get the active camera
-    let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
-
-    let mouse_pos_ndc = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
-
-    let intersections = RaycastFromCam::new(cam, mouse_pos_ndc, &mut raycast)
-        .filter(&|e| q_route_pt.contains(e))
-        .cast();
-    let Some(intersection_e) = intersections.first().map(|x| x.0) else {
-        return;
-    };
-
-    let route_start_e = get_route_start.get_entity(intersection_e);
-
-    for to_be_linked_e in res.0.iter() {
-        commands.entity(*to_be_linked_e).insert(RouteLink(route_start_e));
-    }
-
-    reset_visibilities();
 }

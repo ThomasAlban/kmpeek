@@ -1,6 +1,7 @@
 use crate::util::read_write_arrays::ReadArrays;
 use bevy::{math::vec3, prelude::*};
 use byteorder::{ReadBytesExt, BE};
+use derive_new::new;
 use std::io::{self, Read, Seek, SeekFrom};
 use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 
@@ -76,15 +77,13 @@ pub enum KclFlag {
 pub struct Kcl {
     pub vertex_groups: Vec<VertexGroup>,
 }
-impl Kcl {
-    fn new() -> Self {
+impl Default for Kcl {
+    fn default() -> Self {
         let mut vertex_groups: Vec<VertexGroup> = Vec::with_capacity(32);
         for _ in 0..32 {
-            vertex_groups.push(VertexGroup {
-                vertices: Vec::new(),
-            })
+            vertex_groups.push(VertexGroup { vertices: Vec::new() })
         }
-        Kcl { vertex_groups }
+        Self { vertex_groups }
     }
 }
 
@@ -128,7 +127,7 @@ impl Kcl {
         // go to the start of the triangular prisms section
         r.seek(SeekFrom::Start(offsets[2] as u64 + 0x10))?;
 
-        let mut kcl = Kcl::new();
+        let mut kcl = Kcl::default();
 
         while r.stream_position()? < offsets[3] as u64 {
             let length = r.read_f32::<BE>()?;

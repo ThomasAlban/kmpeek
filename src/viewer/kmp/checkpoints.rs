@@ -8,7 +8,7 @@ use super::{
 };
 use crate::{
     ui::settings::AppSettings,
-    util::BoolToVisibility,
+    util::{try_despawn, BoolToVisibility},
     viewer::{
         edit::{
             select::Selected,
@@ -26,8 +26,10 @@ use bevy::{
     math::vec3,
     prelude::*,
     transform::TransformSystem,
+    utils::HashMap,
 };
 use bevy_mod_outline::{OutlineBundle, OutlineVolume};
+use bon::builder;
 use std::sync::Arc;
 
 pub fn checkpoint_plugin(app: &mut App) {
@@ -36,7 +38,7 @@ pub fn checkpoint_plugin(app: &mut App) {
             Update,
             (
                 set_checkpoint_right_visibility,
-                update_checkpoint_lines,
+                update_checkpoint_lines_arrows,
                 update_checkpoint_planes,
                 update_checkpoint_colors,
             ),
@@ -45,9 +47,22 @@ pub fn checkpoint_plugin(app: &mut App) {
             PostUpdate,
             set_checkpoint_node_height.after(TransformSystem::TransformPropagate),
         )
+        // .add_systems(
+        //     Update,
+        //     |q1: Query<(), (With<CpArrowParent>, With<Normalize>)>,
+        //      q2: Query<(), (With<CpArrowChild>, With<NormalizeInheritParent>)>| {
+        //         dbg!(q1.iter().len());
+        //         dbg!(q2.iter().len());
+        //     },
+        // )
         .observe(on_remove_cp_left)
         .observe(on_remove_cp_right);
 }
+
+#[derive(Component)]
+pub struct CpArrowParent;
+#[derive(Component)]
+pub struct CpArrowChild;
 
 #[derive(Component, Clone, PartialEq, Debug)]
 pub struct CheckpointLeft {
@@ -95,6 +110,9 @@ pub struct CheckpointPlane {
     pub right: Entity,
 }
 
+#[derive(Component, PartialEq, Clone, Copy)]
+pub struct CheckpointRespawnLink(pub Entity);
+
 fn calc_cp_plane_transform(left: Vec2, right: Vec2, height: f32) -> Transform {
     // lerp btw left and right pos with half the height as y
     let pos = left.lerp(right, 0.5).extend(height / 2.).xzy();
@@ -124,15 +142,10 @@ fn on_remove_cp_left(
     let cp_left = q_cp_left.get(trigger.entity()).unwrap();
     let cp_right = cp_left.right;
 
-    commands.add(move |world: &mut World| {
-        if let Some(e) = world.get_entity_mut(cp_right) {
-            e.despawn_recursive();
-        }
-    });
-
-    commands.entity(cp_left.line).despawn();
-    commands.entity(cp_left.plane).despawn();
-    commands.entity(cp_left.arrow).despawn();
+    try_despawn(&mut commands, cp_right);
+    try_despawn(&mut commands, cp_left.line);
+    try_despawn(&mut commands, cp_left.plane);
+    try_despawn(&mut commands, cp_left.arrow);
 }
 
 fn on_remove_cp_right(
@@ -143,258 +156,175 @@ fn on_remove_cp_right(
     let cp_right = q_cp_right.get(trigger.entity()).unwrap();
     let cp_left = cp_right.left;
 
-    commands.add(move |world: &mut World| {
-        if let Some(e) = world.get_entity_mut(cp_left) {
-            e.despawn_recursive();
-        }
-    });
+    try_despawn(&mut commands, cp_left);
 }
 
-pub struct CheckpointSpawner {
-    kmp_component: Checkpoint,
-    left_pos: Vec2,
-    right_pos: Vec2,
-    height: f32,
-    visible: bool,
+#[builder]
+pub fn checkpoint_spawner(
+    world: &mut World,
+    cp: Checkpoint,
+    #[builder(default)] pos: (Vec2, Vec2),
+    visible: Option<bool>,
+    #[builder(default = DEFAULT_CP_HEIGHT)] height: f32,
     order_id: Option<u32>,
-    left_e: Option<Entity>,
-    right_e: Option<Entity>,
-}
-impl CheckpointSpawner {
-    pub fn new(kmp_component: Checkpoint) -> Self {
-        Self {
-            kmp_component,
-            left_pos: Vec2::default(),
-            right_pos: Vec2::default(),
-            height: DEFAULT_CP_HEIGHT,
-            visible: true,
-            order_id: None,
-            left_e: None,
-            right_e: None,
-        }
-    }
-    pub fn pos(mut self, left: Vec2, right: Vec2) -> Self {
-        self.left_pos = left;
-        self.right_pos = right;
-        self
-    }
-    pub fn visible(mut self, visible: bool) -> Self {
-        self.visible = visible;
-        self
-    }
-    pub fn height(mut self, height: f32) -> Self {
-        self.height = height;
-        self
-    }
-    pub fn order_id(mut self, id: u32) -> Self {
-        self.order_id = Some(id);
-        self
-    }
-    pub fn left_transform(&self) -> Transform {
-        Transform::from_xyz(self.left_pos.x, self.height, self.left_pos.y)
-    }
-    pub fn right_transform(&self) -> Transform {
-        Transform::from_xyz(self.right_pos.x, self.height, self.right_pos.y)
-    }
+    #[builder(into = false)] right_e: Option<Entity>,
+) -> (Entity, Entity) {
+    let (left_pos, right_pos) = (pos.0, pos.1);
+    let left_transform = Transform::from_xyz(left_pos.x, height, left_pos.y);
+    let right_transform = Transform::from_xyz(right_pos.x, height, right_pos.y);
+    let left_tr = left_transform.translation;
+    let right_tr = right_transform.translation;
 
-    fn spawn_arrow(&self, world: &mut World, entity: Entity) {
-        let l_tr = self.left_transform().translation;
-        let r_tr = self.right_transform().translation;
-        let parent_transform = calc_cp_arrow_transform(l_tr, r_tr);
+    let line_transform = calc_line_transform(left_tr, right_tr);
 
-        // basically got these values from trial and error
-        let child_transform = Transform::from_translation(vec3(0., 75., 0.)).with_scale(vec3(0.4, 1., 1.));
+    let meshes = world.resource::<KmpMeshes>();
+    let (sphere_mesh, cylinder_mesh, cone_mesh, plane_mesh) = (
+        meshes.sphere.clone(),
+        meshes.cylinder.clone(),
+        meshes.cone.clone(),
+        meshes.plane.clone(),
+    );
+    let cp_materials = world.resource::<CheckpointMaterials>();
+    let (material, material_plane) = match cp.kind {
+        CheckpointKind::Normal => (cp_materials.normal.clone(), cp_materials.normal_plane.clone()),
+        CheckpointKind::Key => (cp_materials.key.clone(), cp_materials.key_plane.clone()),
+        CheckpointKind::LapCount => (cp_materials.lap_count.clone(), cp_materials.lap_count_plane.clone()),
+    };
 
-        let mesh = world.resource::<KmpMeshes>().cone.clone();
-        let cp_materials = world.resource::<CheckpointMaterials>();
-        let material = match self.kmp_component.kind {
-            CheckpointKind::Normal => cp_materials.normal.clone(),
-            CheckpointKind::Key => cp_materials.key.clone(),
-            CheckpointKind::LapCount => cp_materials.lap_count.clone(),
-        };
+    let outline = world.resource::<AppSettings>().kmp_model.outline;
 
-        world
-            .get_entity_mut(entity)
-            .unwrap()
-            .insert((
-                SpatialBundle {
-                    visibility: self.visible.to_visibility(),
-                    transform: parent_transform,
-                    ..default()
+    // either gets the order id, or gets it from the NextOrderID (which will increment it for next time)
+    let order_id = order_id.unwrap_or_else(|| world.resource::<NextOrderID<Checkpoint>>().get());
+
+    let visibility = visible.unwrap_or(true).to_visibility();
+
+    let left_e = world.spawn_empty().id();
+    let right_e = right_e.unwrap_or_else(|| world.spawn_empty().id());
+
+    let line_e = world.spawn_empty().id();
+    let arrow_e = world.spawn_empty().id();
+    let plane_e = world.spawn_empty().id();
+
+    let cp_bundle = || {
+        (
+            KmpSelectablePoint,
+            Tweakable(SnapTo::CheckpointPlane),
+            TransformEditOptions::new(true, true),
+            GizmoTransformable,
+            Normalize::new(200., 30., BVec3::TRUE),
+            OutlineBundle {
+                outline: OutlineVolume {
+                    visible: false,
+                    colour: outline.color,
+                    width: outline.width,
                 },
-                Normalize::new(200., 30., BVec3::TRUE),
-            ))
-            .with_children(|parent| {
-                parent.spawn((
-                    PbrBundle {
-                        mesh,
-                        material,
-                        transform: child_transform,
-                        ..default()
-                    },
-                    NormalizeInheritParent,
-                ));
-            });
-    }
-
-    fn spawn_line(&self, world: &mut World, entity: Entity, arrow_entity: Entity) {
-        let l_tr = self.left_transform().translation;
-        let r_tr = self.right_transform().translation;
-        let line_transform = calc_line_transform(l_tr, r_tr);
-
-        let mesh = world.resource::<KmpMeshes>().cylinder.clone();
-        let cp_materials = world.resource::<CheckpointMaterials>();
-        let material = match self.kmp_component.kind {
-            CheckpointKind::Normal => cp_materials.normal.clone(),
-            CheckpointKind::Key => cp_materials.key.clone(),
-            CheckpointKind::LapCount => cp_materials.lap_count.clone(),
-        };
-        world.get_entity_mut(entity).unwrap().insert((
-            PbrBundle {
-                mesh,
-                material,
-                transform: line_transform,
-                visibility: self.visible.to_visibility(),
                 ..default()
             },
-            Normalize::new(200., 30., BVec3::new(true, false, true)),
-            CheckpointLine {
-                left: self.left_e.unwrap(),
-                right: self.right_e.unwrap(),
-                arrow: arrow_entity,
-            },
-        ));
-    }
+            KmpPathNode::default(),
+            CheckpointMarker,
+        )
+    };
 
-    fn spawn_plane(&self, world: &mut World, entity: Entity) {
-        let mesh = world.resource::<KmpMeshes>().plane.clone();
-        let cp_materials = world.resource::<CheckpointMaterials>();
-        let material = match self.kmp_component.kind {
-            CheckpointKind::Normal => cp_materials.normal_plane.clone(),
-            CheckpointKind::Key => cp_materials.key_plane.clone(),
-            CheckpointKind::LapCount => cp_materials.lap_count_plane.clone(),
-        };
-        let transform = calc_cp_plane_transform(self.left_pos, self.right_pos, self.height);
+    // spawn the left of the checkpoint
+    world.entity_mut(left_e).insert((
+        PbrBundle {
+            mesh: sphere_mesh.clone(),
+            material: material.clone(),
+            transform: left_transform,
+            visibility,
+            ..default()
+        },
+        cp.clone(),
+        CheckpointLeft {
+            right: right_e,
+            line: line_e,
+            plane: plane_e,
+            arrow: arrow_e,
+        },
+        OrderId(order_id),
+        cp_bundle(),
+    ));
 
-        world.entity_mut(entity).insert((
-            PbrBundle {
-                mesh,
-                material,
-                transform,
+    // spawn the right of the checkpoint
+    world.entity_mut(right_e).insert((
+        PbrBundle {
+            mesh: sphere_mesh,
+            material: material.clone(),
+            transform: right_transform,
+            visibility,
+            ..default()
+        },
+        CheckpointRight {
+            left: left_e,
+            line: line_e,
+            plane: plane_e,
+        },
+        cp_bundle(),
+    ));
+
+    // spawn the line
+    world.get_entity_mut(line_e).unwrap().insert((
+        PbrBundle {
+            mesh: cylinder_mesh,
+            material: material.clone(),
+            transform: line_transform,
+            visibility,
+            ..default()
+        },
+        Normalize::new(200., 30., BVec3::new(true, false, true)),
+        CheckpointLine {
+            left: left_e,
+            right: right_e,
+            arrow: arrow_e,
+        },
+    ));
+
+    // spawn the arrow
+    let arrow_parent_transform = calc_cp_arrow_transform(left_tr, right_tr);
+    // basically got these values from trial and error
+    let arrow_child_transform = Transform::from_translation(vec3(0., 75., 0.)).with_scale(vec3(0.4, 1., 1.));
+    world
+        .get_entity_mut(arrow_e)
+        .unwrap()
+        .insert((
+            SpatialBundle {
                 visibility: Visibility::Visible,
+                transform: arrow_parent_transform,
                 ..default()
             },
-            CheckpointPlane {
-                left: self.left_e.unwrap(),
-                right: self.right_e.unwrap(),
-            },
-        ));
-    }
-
-    // pub fn spawn_command(mut self, commands: &mut Commands) -> (Entity, Entity) {
-    //     let left = self.left_e.unwrap_or_else(|| commands.spawn_empty().id());
-    //     let right = self.right_e.unwrap_or_else(|| commands.spawn_empty().id());
-    //     self.left_e = Some(left);
-    //     self.right_e = Some(right);
-
-    //     commands.add(move |world: &mut World| {
-    //         self.spawn(world);
-    //     });
-    //     (left, right)
-    // }
-
-    pub fn spawn(mut self, world: &mut World) -> (Entity, Entity) {
-        let mesh = world.resource::<KmpMeshes>().sphere.clone();
-        let cp_materials = world.resource::<CheckpointMaterials>();
-        let material = match self.kmp_component.kind {
-            CheckpointKind::Normal => cp_materials.normal.clone(),
-            CheckpointKind::Key => cp_materials.key.clone(),
-            CheckpointKind::LapCount => cp_materials.lap_count.clone(),
-        };
-        let outline = world.resource::<AppSettings>().kmp_model.outline;
-
-        // either gets the order id, or gets it from the NextOrderID (which will increment it for next time)
-        let order_id = self
-            .order_id
-            .unwrap_or_else(|| world.resource::<NextOrderID<Checkpoint>>().get());
-
-        let left = self.left_e.unwrap_or_else(|| world.spawn_empty().id());
-        let right = self.right_e.unwrap_or_else(|| world.spawn_empty().id());
-        self.left_e = Some(left);
-        self.right_e = Some(right);
-
-        let line = world.spawn_empty().id();
-        let arrow = world.spawn_empty().id();
-        let plane = world.spawn_empty().id();
-
-        let cp_bundle = || {
-            (
-                KmpSelectablePoint,
-                Tweakable(SnapTo::CheckpointPlane),
-                TransformEditOptions {
-                    hide_rotation: true,
-                    hide_y_translation: true,
-                },
-                GizmoTransformable,
-                Normalize::new(200., 30., BVec3::TRUE),
-                OutlineBundle {
-                    outline: OutlineVolume {
-                        visible: false,
-                        colour: outline.color,
-                        width: outline.width,
-                    },
+            CpArrowParent,
+            Normalize::new(200., 30., BVec3::TRUE),
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                PbrBundle {
+                    mesh: cone_mesh,
+                    material,
+                    transform: arrow_child_transform,
                     ..default()
                 },
-                KmpPathNode::default(),
-                CheckpointMarker,
-            )
-        };
+                CpArrowChild,
+                NormalizeInheritParent,
+            ));
+        });
 
-        world.entity_mut(left).insert((
-            PbrBundle {
-                mesh: mesh.clone(),
-                material: material.clone(),
-                transform: Transform::from_translation(vec3(self.left_pos.x, self.height, self.left_pos.y)),
-                visibility: if self.visible {
-                    Visibility::Visible
-                } else {
-                    Visibility::Hidden
-                },
-                ..default()
-            },
-            self.kmp_component.clone(),
-            CheckpointLeft {
-                right,
-                line,
-                plane,
-                arrow,
-            },
-            OrderId(order_id),
-            cp_bundle(),
-        ));
+    // spawn the plane
+    let transform = calc_cp_plane_transform(left_pos, right_pos, height);
+    world.entity_mut(plane_e).insert((
+        PbrBundle {
+            mesh: plane_mesh,
+            material: material_plane,
+            transform,
+            visibility,
+            ..default()
+        },
+        CheckpointPlane {
+            left: left_e,
+            right: right_e,
+        },
+    ));
 
-        world.entity_mut(right).insert((
-            PbrBundle {
-                mesh,
-                material,
-                transform: Transform::from_translation(vec3(self.right_pos.x, self.height, self.right_pos.y)),
-                visibility: if self.visible {
-                    Visibility::Visible
-                } else {
-                    Visibility::Hidden
-                },
-                ..default()
-            },
-            CheckpointRight { left, line, plane },
-            cp_bundle(),
-        ));
-
-        self.spawn_line(world, line, arrow);
-        self.spawn_arrow(world, arrow);
-        self.spawn_plane(world, plane);
-
-        (left, right)
-    }
+    (left_e, right_e)
 }
 
 pub fn spawn_checkpoint_section(
@@ -402,6 +332,7 @@ pub fn spawn_checkpoint_section(
     kmp: Arc<KmpFile>,
     kmp_errors: &mut Vec<KmpError>,
     height: f32,
+    respawn_point_id_map: HashMap<u32, Entity>,
 ) {
     let kmp_groups = get_kmp_data_and_component_groups::<Ckpt, Checkpoint>(kmp, kmp_errors);
 
@@ -417,14 +348,19 @@ pub fn spawn_checkpoint_section(
             let mut right_entity_group = left_entity_group.clone();
             for (j, node) in data_group.nodes.iter().enumerate() {
                 let kmp_component = component_group[j].clone();
-                let (left, right) = CheckpointSpawner::new(kmp_component)
-                    .pos(node.cp_left.into(), node.cp_right.into())
+                let (left, right) = checkpoint_spawner()
+                    .cp(kmp_component)
+                    .pos((node.cp_left.into(), node.cp_right.into()))
                     .visible(false)
                     .height(height)
-                    .order_id(acc)
-                    .spawn(world);
+                    .order_id(acc as u32)
+                    .world(world)
+                    .call();
                 if i == 0 && j == 0 {
                     world.entity_mut(left).insert(PathOverallStart);
+                }
+                if let Some(respawn_e) = respawn_point_id_map.get(&(node.respawn_pos as u32)) {
+                    world.entity_mut(left).insert(CheckpointRespawnLink(*respawn_e));
                 }
                 left_entity_group.entities.push(left);
                 right_entity_group.entities.push(right);
@@ -496,7 +432,7 @@ fn update_checkpoint_colors(
     }
 }
 
-fn update_checkpoint_lines(
+fn update_checkpoint_lines_arrows(
     mut q_cp_line: Query<(&CheckpointLine, &mut Transform, &mut Visibility)>,
     mut q_cp_part: Query<(&mut Transform, &mut Visibility), Without<CheckpointLine>>,
 ) {
@@ -534,24 +470,6 @@ fn update_checkpoint_planes(
         *plane_trans = new_plane_trans;
     }
 }
-
-// #[derive(SystemParam)]
-// pub struct GetSelectedCheckpoints<'w, 's> {
-//     q_cp_left: Query<'w, 's, (Entity, Has<Selected>), With<CheckpointLeft>>,
-//     q_cp_right: Query<'w, 's, &'static CheckpointRight, With<Selected>>,
-// }
-// impl GetSelectedCheckpoints<'_, '_> {
-//     pub fn get(&self) -> EntityHashSet {
-//         let cp_left_of_right: EntityHashSet = self.q_cp_right.iter().map(|x| x.left).collect();
-//         let mut cps = EntityHashSet::default();
-//         for (e, selected) in self.q_cp_left.iter() {
-//             if selected || cp_left_of_right.contains(&e) {
-//                 cps.insert(e);
-//             }
-//         }
-//         cps
-//     }
-// }
 
 #[derive(SystemParam)]
 pub struct GetSelectedCheckpoints<'w, 's> {

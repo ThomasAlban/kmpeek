@@ -1,6 +1,6 @@
 use crate::{
     ui::{settings::AppSettings, update_ui::KclFileSelected},
-    util::kcl_file::Kcl,
+    util::{kcl_file::Kcl, try_despawn},
 };
 use bevy::{
     prelude::*,
@@ -89,7 +89,7 @@ pub fn spawn_model(
     }
     // despawn all entities with KCLModelSection (so that we have a clean slate)
     for entity in q_model.iter_mut() {
-        commands.entity(entity).despawn();
+        try_despawn(&mut commands, entity);
     }
     commands.remove_resource::<Kcl>();
 

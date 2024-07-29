@@ -17,13 +17,13 @@ bevy = { version = "0.14.0", default-features = false, features = [
     "bevy_gizmos",
 ] }
 
-bevy_egui = "0.28.0"
+# bevy_egui = "0.28.0"
+bevy_egui = { git = "https://github.com/mvlabat/bevy_egui", branch = "fix-redraws" }
 bevy_mod_raycast = "0.18"
-bevy_mod_outline = { git = "https://github.com/komadori/bevy_mod_outline", branch = "bevy-0.14" }
+bevy_mod_outline = "0.8.1"
 bevy_pkv = { git = "https://github.com/v-kat/bevy_pkv", branch = "0.14" }
-transform-gizmo-bevy = { git = "https://github.com/zhaop/transform-gizmo", branch = "bevy-0.14" }
-# transform-gizmo-bevy = { git = "https://github.com/urholaukkarinen/transform-gizmo/" }
-bevy_infinite_grid = { git = "https://github.com/tychedelia/bevy_infinite_grid" }
+transform-gizmo-bevy = "0.3"
+bevy_infinite_grid = "0.13"
 egui_dock = { version = "0.13", features = ["serde"] }
 egui_extras = { version = "0.28.1", default-features = false, features = [
     "all_loaders",
@@ -41,6 +41,8 @@ strum = "0.26.1"
 strum_macros = "0.26.1"
 bevy_vector_shapes = "0.8.0"
 csv = "1.3.0"
+derive-new = "0.6.0"
+bon = { git = "https://github.com/elastio/bon" }
 
 
 # Enable a small amount of optimization in debug mode
@@ -56,7 +58,7 @@ opt-level = 3
 lto = true
 strip = true
 # for some reason setting codegen-units = 1 for release builds results in a seg fault (at least on macos), no idea why
-# codegen-units = 1
+codegen-units = 1
 
 [lints.clippy]
 type_complexity = "allow"

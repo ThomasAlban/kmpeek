@@ -1,13 +1,14 @@
 use super::area_gizmo::AreaGizmoOptions;
 use super::create_delete::JustCreatedPoint;
+use super::link_select_mode::LinkSelectMode;
 use super::EditMode;
 use crate::ui::keybinds::{Modifier, ModifiersPressed};
 use crate::ui::update_ui::UpdateUiSet;
 use crate::ui::viewport::ViewportInfo;
 use crate::util::{ui_viewport_to_ndc, world_to_ui_viewport, RaycastFromCam, VisibilityToBool};
 use crate::viewer::camera::Gizmo2dCam;
-use crate::viewer::kmp::components::KmpSelectablePoint;
-use crate::viewer::kmp::routes::InRouteSelectionMode;
+use crate::viewer::kmp::checkpoints::CheckpointRight;
+use crate::viewer::kmp::components::{Checkpoint, KmpSelectablePoint, RespawnPoint, RoutePoint};
 use crate::viewer::kmp::sections::KmpEditModeChange;
 use bevy::prelude::*;
 use bevy_mod_outline::*;
@@ -44,7 +45,8 @@ fn select(
     q_selected: Query<Entity, With<Selected>>,
     mut ev_just_created_point: EventReader<JustCreatedPoint>,
 
-    route_selection_mode: Option<Res<InRouteSelectionMode>>,
+    route_selection_mode: Option<Res<LinkSelectMode<RoutePoint>>>,
+    respawn_selection_mode: Option<Res<LinkSelectMode<RespawnPoint>>>,
 ) {
     if !viewport_info.mouse_in_viewport
         || viewport_info.mouse_on_overlayed_ui
@@ -53,6 +55,7 @@ fn select(
         || area_gizmo_opts.mouse_hovering
         || q_gizmos.iter().any(|x| x.is_focused())
         || route_selection_mode.is_some()
+        || respawn_selection_mode.is_some()
     {
         return;
     }
@@ -112,9 +115,10 @@ fn select_all(
 fn deselect_if_not_visible(
     mut commands: Commands,
     q_selected: Query<(Entity, &Visibility), With<Selected>>,
-    route_selection_mode: Option<Res<InRouteSelectionMode>>,
+    route_select_mode: Option<Res<LinkSelectMode<RoutePoint>>>,
+    respawn_select_mode: Option<Res<LinkSelectMode<RespawnPoint>>>,
 ) {
-    if route_selection_mode.is_some() {
+    if route_select_mode.is_some() || respawn_select_mode.is_some() {
         return;
     }
     for (e, visible) in q_selected.iter() {

@@ -10,7 +10,7 @@ use crate::{
     ui::settings::AppSettings,
     util::{
         kmp_file::{KmpFile, KmpGetPathSection, KmpGetSection, KmpPositionPoint},
-        BoolToVisibility, VisibilityToBool,
+        try_despawn, BoolToVisibility, VisibilityToBool,
     },
     viewer::{
         edit::{
@@ -27,6 +27,7 @@ use bevy::{
     utils::{HashMap, HashSet},
 };
 use bevy_mod_outline::{OutlineBundle, OutlineVolume};
+use derive_new::new;
 use std::{any::TypeId, fmt::Debug};
 use std::{marker::PhantomData, sync::Arc};
 
@@ -97,10 +98,12 @@ impl ToPathType for RoutePoint {
 pub struct KmpPathNodeLinkLine;
 
 // component attached to kmp entities which are linked to other kmp entities
-#[derive(Component, Clone, Debug, PartialEq)]
+#[derive(Component, Clone, Debug, PartialEq, new)]
 pub struct KmpPathNode {
     pub max: u8,
+    #[new(default)]
     pub prev_nodes: HashSet<Entity>,
+    #[new(default)]
     pub next_nodes: HashSet<Entity>,
 }
 impl Default for KmpPathNode {
@@ -114,13 +117,6 @@ impl Default for KmpPathNode {
 }
 
 impl KmpPathNode {
-    pub fn new(max: u8) -> Self {
-        KmpPathNode {
-            max,
-            prev_nodes: HashSet::with_capacity(max as usize),
-            next_nodes: HashSet::with_capacity(max as usize),
-        }
-    }
     #[allow(dead_code)]
     pub fn with_next(mut self, next: impl IntoIterator<Item = Entity>) -> Self {
         for next_e in next.into_iter() {
@@ -356,10 +352,7 @@ pub fn spawn_path<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mut
         KmpSelectablePoint,
         Tweakable(SnapTo::Kcl),
         OrderId(order_id),
-        TransformEditOptions {
-            hide_rotation: true,
-            hide_y_translation: false,
-        },
+        TransformEditOptions::new(true, false),
         GizmoTransformable,
         Normalize::new(200., 30., BVec3::TRUE),
         OutlineBundle {
@@ -533,11 +526,7 @@ pub fn update_node_links<T: Component + ToPathType + Clone>(
         if !nodes_to_be_linked.contains(&(kmp_node_link.prev_node, kmp_node_link.next_node))
             && kmp_node_link.kind == T::to_path_type()
         {
-            commands.add(move |world: &mut World| {
-                if let Some(e) = world.get_entity_mut(link_entity) {
-                    e.despawn_recursive();
-                }
-            });
+            try_despawn(&mut commands, link_entity);
             continue;
         }
         nodes_to_be_linked.remove(&(kmp_node_link.prev_node, kmp_node_link.next_node));
@@ -555,14 +544,7 @@ pub fn update_node_links<T: Component + ToPathType + Clone>(
 
         // see https://github.com/bevyengine/bevy/issues/11517
         let Ok(transforms) = q_transform.get_many_mut([kmp_node_link.prev_node, kmp_node_link.next_node]) else {
-            // we can't just delete the entity, because there might be another command also pushed to the queue to delete it
-            // so we need to push a custom command which checks then and there if the entity exists, to avoid warnings that
-            // the entity we are trying to delete doesn't already exist
-            commands.add(move |world: &mut World| {
-                if let Some(e) = world.get_entity_mut(link_entity) {
-                    e.despawn_recursive();
-                }
-            });
+            try_despawn(&mut commands, link_entity);
             continue;
         };
         let [prev_transform, next_transform] = transforms.map(Ref::from);
@@ -782,16 +764,5 @@ pub struct PathGroup {
     pub next_paths: Vec<usize>,
 }
 
-#[derive(Resource, Clone)]
-pub struct PathGroups<T: Component> {
-    pub groups: Vec<PathGroup>,
-    _p: PhantomData<T>,
-}
-impl<T: Component> PathGroups<T> {
-    fn new(groups: Vec<PathGroup>) -> Self {
-        Self {
-            groups,
-            _p: PhantomData,
-        }
-    }
-}
+#[derive(Resource, Clone, new, Deref, DerefMut)]
+pub struct PathGroups<T: Component>(#[deref] pub Vec<PathGroup>, PhantomData<T>);

@@ -1,14 +1,15 @@
-use crate::ui::settings::AppSettings;
+use crate::{ui::settings::AppSettings, util::VisibilityToBool};
 use bevy::prelude::*;
+use derive_new::new;
 
-use super::camera::Gizmo2dCam;
+use super::{camera::Gizmo2dCam, kmp::checkpoints::CpArrowParent};
 
 pub fn normalize_plugin(app: &mut App) {
     app.add_systems(Last, update_normalize);
 }
 
 /// Marker struct that marks entities with meshes that should be scaled relative to the camera.
-#[derive(Component, Debug)]
+#[derive(Component, Debug, new)]
 pub struct Normalize {
     /// Length of the object in world space units
     pub size_in_world: f32,
@@ -16,15 +17,7 @@ pub struct Normalize {
     pub desired_pixel_size: f32,
     pub axes: BVec3,
 }
-impl Normalize {
-    pub fn new(size_in_world: f32, desired_pixel_size: f32, axes: BVec3) -> Self {
-        Self {
-            size_in_world,
-            desired_pixel_size,
-            axes,
-        }
-    }
-}
+
 /// Marker struct that marks entities which should inherit their normalization from the parent
 #[derive(Component, Debug)]
 pub struct NormalizeInheritParent;
@@ -35,54 +28,12 @@ pub struct NormalizeInheritParent;
 fn update_normalize(
     mut p: ParamSet<(
         Query<(&GlobalTransform, &Camera), Without<Gizmo2dCam>>,
-        Query<(&mut GlobalTransform, &Normalize, &ViewVisibility, Option<&Children>)>,
+        Query<(&mut GlobalTransform, &Normalize, Option<&Children>)>,
         Query<(&mut GlobalTransform, &Transform, &ViewVisibility), With<NormalizeInheritParent>>,
     )>,
     settings: Res<AppSettings>,
     q_window: Query<&Window>,
 ) {
-    // if !settings.kmp_model.normalize {
-    //     let set_scale =
-    //         |mut gt: Mut<GlobalTransform>, default_scale: Option<Vec3>, visibility: &ViewVisibility, axes: BVec3| {
-    //             if *visibility == ViewVisibility::HIDDEN {
-    //                 return;
-    //             }
-    //             let mut transform_cp = gt.compute_transform();
-    //             let scale_before = transform_cp.scale;
-    //             let scale = default_scale.unwrap_or(Vec3::ONE);
-    //             transform_cp.scale = scale * settings.kmp_model.point_scale;
-    //             if !axes.x {
-    //                 transform_cp.scale.x = scale_before.x;
-    //             }
-    //             if !axes.y {
-    //                 transform_cp.scale.y = scale_before.y;
-    //             }
-    //             if !axes.z {
-    //                 transform_cp.scale.z = scale_before.z;
-    //             }
-    //             gt.set_if_neq(transform_cp.into());
-    //         };
-    //     // we have to make a separate vector because of rust being annoying with it's borrow checking rules
-    //     let mut children_to_deal_with = Vec::new();
-
-    //     for (gt, normalize, visibility, children) in p.p1().iter_mut() {
-    //         if let Some(children) = children {
-    //             for child in children.iter() {
-    //                 children_to_deal_with.push(*child);
-    //             }
-    //         }
-    //         set_scale(gt, None, visibility, normalize.axes);
-    //     }
-
-    //     let mut p2 = p.p2();
-    //     for child in children_to_deal_with {
-    //         let Ok((gt, _, visibility, normalize)) = p2.get_mut(child) else {
-    //             continue;
-    //         };
-    //         set_scale(gt, normalize.default_scale, visibility, BVec3::TRUE);
-    //     }
-    //     return;
-    // }
     let Ok(window) = q_window.get_single() else { return };
 
     let (camera_position, camera) = {
@@ -95,10 +46,11 @@ fn update_normalize(
 
     let mut children_to_deal_with = Vec::new();
 
-    for (mut gt, normalize, visibility, children) in p.p1().iter_mut() {
-        if *visibility == ViewVisibility::HIDDEN {
-            continue;
-        }
+    for (mut gt, normalize, children) in p.p1().iter_mut() {
+        // should check here if ViewVisibility is hidden (to make it more efficient),
+        // but for some reason that doesn't work for checkpoint arrows and I couldn't
+        // be bothered to fix it
+
         let mut transform_cp = gt.compute_transform();
 
         let distance = view.transform_point3(transform_cp.translation).z;

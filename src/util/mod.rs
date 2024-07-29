@@ -23,6 +23,7 @@ use bevy_mod_raycast::{
     immediate::{Raycast, RaycastSettings},
     primitives::IntersectionData,
 };
+use derive_new::new;
 
 // World <-> Ui Viewport
 pub fn world_to_ui_viewport(cam: (&Camera, &GlobalTransform), viewport_rect: Rect, world_pos: Vec3) -> Option<Vec2> {
@@ -228,21 +229,15 @@ pub fn get_ray_from_cam(cam: (&Camera, &GlobalTransform), ndc: Vec2) -> Option<R
     ))
 }
 
+#[derive(new)]
 pub struct RaycastFromCam<'a, 'w, 's> {
     cam: (&'a Camera, &'a GlobalTransform),
     ndc: Vec2,
     raycast: &'a mut Raycast<'w, 's>,
+    #[new(default)]
     settings: RaycastSettings<'a>,
 }
 impl<'a, 'w, 's> RaycastFromCam<'a, 'w, 's> {
-    pub fn new(cam: (&'a Camera, &'a GlobalTransform), ndc: Vec2, raycast: &'a mut Raycast<'w, 's>) -> Self {
-        Self {
-            cam,
-            ndc,
-            raycast,
-            settings: RaycastSettings::default(),
-        }
-    }
     pub fn filter(mut self, filter: &'a impl Fn(Entity) -> bool) -> Self {
         self.settings.filter = filter;
         self
@@ -289,4 +284,12 @@ pub fn iter_mut_from_entities<'a, R: QueryData>(
 
 pub fn egui_has_primary_context(query: Query<(), (With<EguiContext>, With<PrimaryWindow>)>) -> bool {
     !query.is_empty()
+}
+
+pub fn try_despawn(commands: &mut Commands, entity: Entity) {
+    commands.add(move |world: &mut World| {
+        if let Some(e) = world.get_entity_mut(entity) {
+            e.despawn_recursive();
+        }
+    });
 }
