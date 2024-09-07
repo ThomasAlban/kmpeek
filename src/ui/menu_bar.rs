@@ -1,15 +1,14 @@
+use crate::viewer::kmp::SaveFile;
+
 use super::{
-    file_dialog::{self, FileDialogManager},
+    file_dialog::FileDialogManager,
     tabs::{DockTree, Tab},
     ui_state::{KmpFilePath, ResetDockTree, SaveDockTree},
     util::get_egui_ctx,
 };
-use bevy::ecs::system::{SystemParam, SystemState};
+use bevy::ecs::system::SystemState;
 use bevy::prelude::*;
-use bevy_egui::{
-    egui::{self, Align, Button, Layout},
-    EguiContexts,
-};
+use bevy_egui::egui::{self, Align, Button, Layout};
 use strum::IntoEnumIterator;
 
 pub fn show_menu_bar(world: &mut World) {
@@ -37,12 +36,11 @@ pub fn show_menu_bar(world: &mut World) {
                     ui.disable();
                 }
 
-                // haven't implemented this yet
-                // ui.disable();
                 if ui
                     .add(Button::new("Save").shortcut_text(format!("{sc_btn}+S")))
                     .clicked()
                 {
+                    world.send_event(SaveFile);
                     ui.close_menu();
                 }
 

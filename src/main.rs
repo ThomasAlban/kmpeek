@@ -1,5 +1,3 @@
-#![allow(unused_imports)]
-
 mod ui;
 mod util;
 mod viewer;

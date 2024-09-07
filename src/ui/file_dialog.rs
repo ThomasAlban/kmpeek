@@ -1,6 +1,6 @@
 use super::util::get_egui_ctx;
 use bevy::{ecs::system::SystemParam, prelude::*};
-use bevy_egui::{egui::Align2, EguiContexts};
+use bevy_egui::egui::Align2;
 use egui_file::FileDialog;
 use std::path::PathBuf;
 

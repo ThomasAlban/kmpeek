@@ -1,14 +1,14 @@
 #![allow(dead_code)]
 use bevy::ecs::system::SystemState;
 use bevy::math::{vec3, Dir3, EulerRot, Quat};
-use bevy::prelude::{Entity, Has, Query, With, World};
-use bevy::window::{PrimaryWindow, Window};
+use bevy::prelude::{Query, With, World};
+use bevy::window::PrimaryWindow;
 use bevy::{math::Vec3, transform::components::Transform};
 use bevy_egui::egui::{self, pos2, vec2, Rect, Response, TextStyle, Ui, WidgetText};
 use bevy_egui::egui::{
     Align, Align2, Area, CollapsingResponse, Color32, Context, Image, ImageButton, ImageSource, Order, Sense, Vec2,
 };
-use bevy_egui::{EguiContext, EguiContexts};
+use bevy_egui::EguiContext;
 use std::{fmt::Display, hash::Hash};
 
 pub fn get_egui_ctx(world: &mut World) -> Context {
@@ -34,7 +34,7 @@ impl From<DragSpeed> for f64 {
 }
 
 pub mod multi_edit {
-    use super::{euler_to_quat, quat_to_euler, DragSpeed};
+    use super::{euler_to_quat_ui, get_euler_rot, DragSpeed};
     use bevy::{math::Vec3, prelude::Mut, transform::components::Transform};
     use bevy_egui::egui::{self, emath::Numeric, Checkbox, DragValue, Response, Ui, WidgetText};
     use std::{
@@ -62,14 +62,14 @@ pub mod multi_edit {
         add_contents: impl FnOnce(&mut Ui, &mut [Vec3]) -> (Response, Response, Response),
     ) -> bool {
         let mut transforms: Vec<_> = transforms.into_iter().collect();
-        let mut rots: Vec<_> = transforms.iter().map(|t| quat_to_euler(t)).collect();
+        let mut rots: Vec<_> = transforms.iter().map(|t| get_euler_rot(t)).collect();
 
         let res = add_contents(ui, &mut rots);
 
         let changed = res.0.changed() || res.1.changed() || res.2.changed();
 
         for (transform, new_rot) in transforms.iter_mut().zip(rots.iter()) {
-            euler_to_quat(*new_rot, res.clone(), transform);
+            euler_to_quat_ui(*new_rot, res.clone(), transform);
         }
         changed
     }
@@ -297,7 +297,7 @@ pub fn drag_vec3(ui: &mut Ui, value: &mut Vec3, speed: impl Into<f64>) -> (Respo
     })
 }
 
-pub fn quat_to_euler(transform: &Transform) -> Vec3 {
+pub fn get_euler_rot(transform: &Transform) -> Vec3 {
     let euler = transform.rotation.to_euler(EulerRot::XYZ);
 
     let mut rot = vec3(
@@ -321,7 +321,15 @@ pub fn quat_to_euler(transform: &Transform) -> Vec3 {
     clamp_0_360(&mut rot.z);
     rot
 }
-pub fn euler_to_quat(rot: Vec3, res: (Response, Response, Response), transform: &mut Transform) {
+pub fn set_euler_rot(rot: Vec3, transform: &mut Transform) {
+    transform.rotation = Quat::from_euler(
+        EulerRot::XYZ,
+        f32::to_radians(rot.x),
+        f32::to_radians(rot.y),
+        f32::to_radians(rot.z),
+    );
+}
+pub fn euler_to_quat_ui(rot: Vec3, res: (Response, Response, Response), transform: &mut Transform) {
     let changed = res.0.changed() || res.1.changed() || res.2.changed();
 
     let mut update_rotation = |res: Response, axis: Dir3| {
@@ -335,12 +343,7 @@ pub fn euler_to_quat(rot: Vec3, res: (Response, Response, Response), transform: 
                 // if we are setting the value by typing it in, set the quaternion directly
                 // we can't always set the quaternion directly because it leads to problems involving
                 // the fact that euler -> quat -> euler does not always give the same result
-                transform.rotation = Quat::from_euler(
-                    EulerRot::XYZ,
-                    f32::to_radians(rot.x),
-                    f32::to_radians(rot.y),
-                    f32::to_radians(rot.z),
-                );
+                set_euler_rot(rot, transform);
             }
         }
     };
@@ -358,12 +361,12 @@ pub fn rotation_edit(
     transform: &mut Transform,
     add_contents: impl FnOnce(&mut Ui, &mut Vec3) -> (Response, Response, Response),
 ) -> bool {
-    let mut rot = quat_to_euler(transform);
+    let mut rot = get_euler_rot(transform);
 
     let res = add_contents(ui, &mut rot);
 
     let changed = res.0.changed() || res.1.changed() || res.2.changed();
-    euler_to_quat(rot, res, transform);
+    euler_to_quat_ui(rot, res, transform);
     changed
 }
 

@@ -35,7 +35,7 @@ impl<T: Component> Default for NextOrderID<T> {
     }
 }
 impl<T: Component> NextOrderID<T> {
-    pub fn set(&self, id: impl Into<u32>) {
+    fn set(&self, id: impl Into<u32>) {
         self.id.store(id.into(), Ordering::Relaxed);
     }
     pub fn get(&self) -> u32 {

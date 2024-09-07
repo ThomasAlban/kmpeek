@@ -4,7 +4,7 @@ use crate::{
     viewer::{
         camera::Gizmo2dCam,
         kmp::{
-            checkpoints::{CheckpointLeft, CheckpointRespawnLink},
+            checkpoints::CheckpointRespawnLink,
             components::{KmpSelectablePoint, RespawnPoint, RoutePoint},
             routes::{GetRouteStart, RouteLink},
         },
@@ -111,7 +111,7 @@ fn update_link_selection_mode<T: Component + CreateLink>(
 
     commands.remove_resource::<LinkSelectMode<T>>();
 
-    let Some(mouse_pos) = q_window.single().cursor_position() else {
+    let Some(mouse_pos) = q_window.get_single().ok().and_then(|x| x.cursor_position()) else {
         reset_visibilities();
         return;
     };

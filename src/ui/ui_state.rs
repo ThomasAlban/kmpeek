@@ -5,7 +5,6 @@ use super::{
 use crate::ui::update_ui::{KclFileSelected, KmpFileSelected};
 use bevy::prelude::*;
 use bevy_pkv::PkvStore;
-use serde::{Deserialize, Serialize};
 use std::{
     env,
     path::{Path, PathBuf},
@@ -36,14 +35,13 @@ pub fn reset_docktree(mut pkv: ResMut<PkvStore>, mut tree: ResMut<DockTree>) {
     pkv.set("tree", tree.as_ref()).unwrap();
 }
 
-#[derive(Resource, Default, Deref, DerefMut)]
+#[derive(Resource, Default, Deref, DerefMut, Clone)]
 pub struct KmpFilePath(pub PathBuf);
 
 pub fn check_cmd_args(
     mut ev_kmp_file_selected: EventWriter<KmpFileSelected>,
     mut ev_kcl_file_selected: EventWriter<KclFileSelected>,
     settings: Res<AppSettings>,
-    mut commands: Commands,
 ) {
     // if there is a command line arg of a path to a kmp or kcl, open it
     let args: Vec<String> = env::args().collect();
@@ -54,7 +52,6 @@ pub fn check_cmd_args(
                 // if the file is a kmp file
                 if file_ext == "kmp" {
                     // open it
-                    commands.insert_resource(KmpFilePath(path.into()));
                     ev_kmp_file_selected.send(KmpFileSelected(path.into()));
                     // if there is a course.kcl in the same directory and the setting to open it is set, open the kcl as well
                     if settings.open_course_kcl_in_dir {

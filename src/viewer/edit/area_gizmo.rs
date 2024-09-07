@@ -1,6 +1,6 @@
 use crate::{
     ui::viewport::ViewportInfo,
-    util::{egui_has_primary_context, get_ray_from_cam, ui_viewport_to_ndc, world_to_ui_viewport},
+    util::{get_ray_from_cam, ui_viewport_to_ndc, world_to_ui_viewport},
     viewer::{
         camera::{Gizmo2dCam, TopDownCam},
         edit::select::Selected,

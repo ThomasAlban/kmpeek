@@ -1,7 +1,7 @@
 use crate::{
     ui::{
         keybinds::ModifiersPressed,
-        util::{combobox_enum, drag_vec3, euler_to_quat, quat_to_euler, DragSpeed},
+        util::{combobox_enum, drag_vec3, euler_to_quat_ui, get_euler_rot, DragSpeed},
         viewport::ViewportInfo,
     },
     viewer::{
@@ -9,25 +9,23 @@ use crate::{
         kmp::{
             components::{
                 AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint,
-                KmpCamera, Object, RespawnPoint, StartPoint, TrackInfo,
+                KmpCamera, Object, RespawnPoint, StartPoint,
             },
             ordering::OrderId,
-            sections::{get_kmp_section, KmpEditMode, ToKmpSection},
+            sections::KmpEditMode,
         },
     },
 };
-use bevy::{
-    ecs::system::{SystemParam, SystemState},
-    prelude::*,
-};
+use bevy::{ecs::system::SystemState, prelude::*};
 use bevy_egui::egui::{self, emath::Numeric, Checkbox, Direction, DragValue, Layout, Response, Sense, Ui};
 use egui_extras::{Column, TableBuilder, TableRow};
 
 pub fn show_table_tab(ui: &mut Ui, world: &mut World) {
+    world.resource_mut::<ViewportInfo>().mouse_in_table = ui.ui_contains_pointer();
     // show the top bit if we are not in track info mode
-    if !world.contains_resource::<KmpEditMode<TrackInfo>>() {
+    if *world.resource::<KmpEditMode>() != KmpEditMode::TrackInfo {
         ui.horizontal(|ui| {
-            ui.heading(get_kmp_section(world).to_string());
+            ui.heading(world.resource::<KmpEditMode>().to_string());
             ui.add_space(10.);
             if ui.button("+").clicked() {
                 world.send_event_default::<CreatePoint>();
@@ -147,8 +145,8 @@ impl ShowKmpTableTrait for AreaPoint {
             AreaKind::FogEffect { bfg_entry, setting_2 } => {
                 two_labelled_drag_values_column(row, (bfg_entry, Slow, "BFG Entry"), (setting_2, Slow, "BFG Entry"));
             }
-            AreaKind::MovingRoad { route_id } => {
-                labelled_drag_value_column(row, route_id, Slow, "Route ID");
+            AreaKind::MovingRoad => {
+                // TODO - add route link
             }
             AreaKind::MinimapControl { setting_1, setting_2 } => {
                 two_labelled_drag_values_column(row, (setting_1, Slow, "Setting 1"), (setting_2, Slow, "Setting 2"));
@@ -185,7 +183,6 @@ impl ShowKmpTableTrait for KmpCamera {
     fn show_row(row: &mut TableRow, item: &mut Self) {
         combobox_column(row, &mut item.kind);
         drag_value_column(row, Slow, &mut item.next_index);
-        drag_value_column(row, Slow, &mut item.route);
         drag_value_column(row, Slow, &mut item.time);
         drag_value_column(row, Slow, &mut item.point_velocity);
         drag_value_column(row, Slow, &mut item.zoom_velocity);
@@ -212,8 +209,8 @@ impl ShowKmpTableTrait for BattleFinishPoint {
     fn show_row(_: &mut TableRow, _: &mut Self) {}
 }
 
-fn show_kmp_table<T: Component + ToKmpSection + PartialEq + Clone + ShowKmpTableTrait>(ui: &mut Ui, world: &mut World) {
-    if !world.contains_resource::<KmpEditMode<T>>() {
+fn show_kmp_table<T: Component + PartialEq + Clone + ShowKmpTableTrait>(ui: &mut Ui, world: &mut World) {
+    if !world.resource::<KmpEditMode>().in_mode::<T>() {
         return;
     }
 
@@ -319,10 +316,10 @@ fn show_kmp_table<T: Component + ToKmpSection + PartialEq + Clone + ShowKmpTable
                     });
                 });
                 if T::ROTATION {
-                    let mut rot = quat_to_euler(&transform_cp);
+                    let mut rot = get_euler_rot(&transform_cp);
                     row.col(|ui| {
                         let res = drag_vec3(ui, &mut rot, DragSpeed::Slow);
-                        euler_to_quat(rot, res, &mut transform_cp);
+                        euler_to_quat_ui(rot, res, &mut transform_cp);
                     });
                 }
 

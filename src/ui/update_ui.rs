@@ -1,8 +1,8 @@
 use crate::util::egui_has_primary_context;
 
 use super::{file_dialog::show_file_dialog, menu_bar::show_menu_bar, tabs::show_dock_area};
-use bevy::{prelude::*, window::PrimaryWindow};
-use bevy_egui::{EguiContext, EguiContexts};
+use bevy::prelude::*;
+use bevy_egui::EguiContexts;
 use std::path::PathBuf;
 
 #[derive(SystemSet, Hash, PartialEq, Eq, Clone, Debug)]
@@ -15,10 +15,10 @@ pub fn update_ui_plugin(app: &mut App) {
         .add_systems(Update, update_ui.in_set(UpdateUiSet).run_if(egui_has_primary_context));
 }
 
-#[derive(Event)]
+#[derive(Event, Deref, DerefMut)]
 pub struct KmpFileSelected(pub PathBuf);
 
-#[derive(Event)]
+#[derive(Event, Deref, DerefMut)]
 pub struct KclFileSelected(pub PathBuf);
 
 fn setup_ui_images(mut contexts: EguiContexts) {

@@ -1,16 +1,15 @@
 use super::{
     checkpoints::CheckpointRight,
-    components::FromKmp,
     meshes_materials::{CheckpointMaterials, KmpMeshes, PathMaterials},
     ordering::{NextOrderID, OrderId},
-    Checkpoint, EnemyPathPoint, ItemPathPoint, KmpError, KmpSelectablePoint, PathOverallStart, RoutePoint, Spawn,
-    Spawner, TransformEditOptions,
+    Checkpoint, EnemyPathPoint, ItemPathPoint, KmpComponent, KmpSectionName, KmpSelectablePoint, PathGroup,
+    PathOverallStart, RoutePoint, Section, Spawn, Spawner, TransformEditOptions,
 };
 use crate::{
     ui::settings::AppSettings,
     util::{
         kmp_file::{KmpFile, KmpGetPathSection, KmpGetSection, KmpPositionPoint},
-        try_despawn, BoolToVisibility, VisibilityToBool,
+        try_despawn,
     },
     viewer::{
         edit::{
@@ -22,14 +21,17 @@ use crate::{
     },
 };
 use bevy::{
-    ecs::{entity::EntityHashMap, system::SystemParam},
+    ecs::{
+        entity::EntityHashMap,
+        system::{SystemParam, SystemState},
+    },
     prelude::*,
     utils::{HashMap, HashSet},
 };
 use bevy_mod_outline::{OutlineBundle, OutlineVolume};
 use derive_new::new;
+use std::marker::PhantomData;
 use std::{any::TypeId, fmt::Debug};
-use std::{marker::PhantomData, sync::Arc};
 
 pub fn path_plugin(app: &mut App) {
     app.add_event::<RecalcPaths>()
@@ -286,43 +288,40 @@ pub fn is_route_pt<T: 'static>() -> bool {
 //     is_enemy_point::<T>() || is_item_point::<T>() || is_checkpoint::<T>()
 // }
 
-pub fn spawn_enemy_item_path_section<
-    T: KmpGetSection + KmpGetPathSection + KmpPositionPoint + Send + 'static + Clone,
-    U: Component + FromKmp<T> + Clone + Debug + Spawn,
->(
-    commands: &mut Commands,
-    kmp: Arc<KmpFile>,
-    kmp_errors: &mut Vec<KmpError>,
-) {
-    let kmp_groups = get_kmp_data_and_component_groups::<T, U>(kmp, kmp_errors);
+pub fn spawn_enemy_item_path_section<T: KmpComponent + Spawn>(world: &mut World, kmp: &KmpFile)
+where
+    T::KmpFormat: KmpGetSection + KmpGetPathSection + KmpPositionPoint,
+    PathGroup<T::KmpFormat>: KmpSectionName,
+{
+    let kmp_groups = get_kmp_data_and_component_groups::<T>(kmp, world);
 
-    commands.add(move |world: &mut World| {
-        let mut entity_groups: Vec<EntityGroup> = Vec::with_capacity(kmp_groups.len());
-        let mut acc = 0;
-        for (i, (data_group, component_group)) in kmp_groups.iter().enumerate() {
-            let mut entity_group = EntityGroup {
-                entities: Vec::with_capacity(data_group.nodes.len()),
-                next_groups: data_group.next_groups.clone(),
-            };
-            for (j, node) in data_group.nodes.iter().enumerate() {
-                let kmp_component = component_group[j].clone();
+    let mut entity_groups: Vec<EntityGroup> = Vec::with_capacity(kmp_groups.len());
+    let mut acc = 0;
+    for (i, (data_group, component_group)) in kmp_groups.iter().enumerate() {
+        let mut entity_group = EntityGroup {
+            entities: Vec::with_capacity(data_group.nodes.len()),
+            next_groups: data_group.next_groups.clone(),
+        };
+        for (j, node) in data_group.nodes.iter().enumerate() {
+            let kmp_component = component_group[j].clone();
 
-                let spawned_entity = Spawner::new(kmp_component)
-                    .pos(node.get_position())
-                    .visible(false)
-                    .order_id(acc)
-                    .spawn(world);
+            let spawned_entity = Spawner::builder()
+                .component(kmp_component)
+                .pos(node.get_position())
+                .visible(false)
+                .order_id(acc)
+                .build()
+                .spawn(world);
 
-                if i == 0 && j == 0 {
-                    world.entity_mut(spawned_entity).insert(PathOverallStart);
-                }
-                entity_group.entities.push(spawned_entity);
-                acc += 1;
+            if i == 0 && j == 0 {
+                world.entity_mut(spawned_entity).insert(PathOverallStart);
             }
-            entity_groups.push(entity_group);
+            entity_group.entities.push(spawned_entity);
+            acc += 1;
         }
-        link_entity_groups(world, entity_groups);
-    });
+        entity_groups.push(entity_group);
+    }
+    link_entity_groups(world, entity_groups);
 }
 
 pub fn spawn_path<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mut World) -> Entity {
@@ -343,8 +342,12 @@ pub fn spawn_path<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mut
         PbrBundle {
             mesh,
             material,
-            transform: spawner.transform,
-            visibility: spawner.visible.to_visibility(),
+            transform: spawner.get_transform(),
+            visibility: if spawner.visible {
+                Visibility::Visible
+            } else {
+                Visibility::Hidden
+            },
             ..default()
         },
         KmpPathNode::new(spawner.max).with_prev(spawner.prev_nodes.clone().unwrap_or_default()),
@@ -368,19 +371,18 @@ pub fn spawn_path<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mut
 }
 
 /// converts points and paths in the kmp to a list of groups containing the data, and components that have been converted from that data
-pub fn get_kmp_data_and_component_groups<
-    // this is the original kmp data from the file
-    T: KmpGetSection + KmpGetPathSection + Send + 'static + Clone,
-    // this is the kmp component which corresponds to the kmp data
-    U: Component + FromKmp<T> + Clone + Debug,
->(
-    kmp: Arc<KmpFile>,
-    kmp_errors: &mut Vec<KmpError>,
-) -> Vec<(KmpDataGroup<T>, Vec<U>)> {
-    let pathgroup_entries = &T::get_path_section(kmp.as_ref()).entries;
-    let node_entries = &T::get_section(kmp.as_ref()).entries;
+pub fn get_kmp_data_and_component_groups<T: KmpComponent>(
+    kmp: &KmpFile,
+    world: &mut World,
+) -> Vec<(KmpDataGroup<T::KmpFormat>, Vec<T>)>
+where
+    T::KmpFormat: KmpGetSection + KmpGetPathSection,
+    PathGroup<T::KmpFormat>: KmpSectionName,
+{
+    let pathgroup_entries = &**T::KmpFormat::get_path_section(kmp);
+    let node_entries = &**T::KmpFormat::get_section(kmp);
 
-    let mut result: Vec<(KmpDataGroup<T>, Vec<U>)> = Vec::with_capacity(pathgroup_entries.len());
+    let mut result: Vec<(KmpDataGroup<T::KmpFormat>, Vec<T>)> = Vec::with_capacity(pathgroup_entries.len());
 
     for group in pathgroup_entries.iter() {
         let mut next_groups = Vec::new();
@@ -396,7 +398,7 @@ pub fn get_kmp_data_and_component_groups<
         for i in group.start..(group.start + group.group_length) {
             let node = &node_entries[i as usize];
             nodes.push(node.clone());
-            let kmp_component = U::from_kmp(node, kmp_errors);
+            let kmp_component = T::from_kmp(node, world);
             kmp_component_group.push(kmp_component);
         }
         result.push((KmpDataGroup { nodes, next_groups }, kmp_component_group));
@@ -427,7 +429,7 @@ pub fn link_entity_groups(world: &mut World, entity_groups: Vec<EntityGroup>) {
     }
 }
 
-fn spawn_node_link<T: Component + ToPathType + Clone>(
+fn spawn_node_link<T: Component + Clone + ToPathType>(
     world: &mut World,
     prev_node: Entity,
     next_node: Entity,
@@ -497,7 +499,7 @@ fn spawn_node_link<T: Component + ToPathType + Clone>(
 }
 
 // TODO: make this more efficient by attaching link lines to the kmp points themselves
-pub fn update_node_links<T: Component + ToPathType + Clone>(
+pub fn update_node_links<T: Component + Clone + ToPathType>(
     // mode: Option<Res<KmpEditMode<T>>>,
     // cp_mode: Option<Res<KmpEditMode<Checkpoint>>>,
     q_visibility: Query<&Visibility, Without<KmpPathNodeLink>>,
@@ -534,7 +536,11 @@ pub fn update_node_links<T: Component + ToPathType + Clone>(
         // update visibility of node link based on the linking nodes
         if let Ok([prev_visib, next_visib]) = q_visibility.get_many([kmp_node_link.prev_node, kmp_node_link.next_node])
         {
-            *visibility = (prev_visib.to_bool() && next_visib.to_bool()).to_visibility();
+            *visibility = if prev_visib == Visibility::Visible && next_visib == Visibility::Visible {
+                Visibility::Visible
+            } else {
+                Visibility::Hidden
+            };
         }
 
         // don't bother unless the kmp node link is actually visible
@@ -657,8 +663,8 @@ pub struct TraversePath<'w, 's, T: Component> {
     q: Query<'w, 's, (Entity, &'static KmpPathNode), With<T>>,
 }
 impl<'w, 's, T: Component> TraversePath<'w, 's, T> {
-    fn traverse(self) -> PathGroups<T> {
-        let mut paths: Vec<PathGroup> = Vec::new();
+    fn traverse(self) -> EntityPathGroups<T> {
+        let mut paths: Vec<EntityPathGroup> = Vec::new();
         let mut node_to_path_index: HashMap<Entity, usize> = HashMap::default();
         let battle_mode = false;
 
@@ -667,7 +673,7 @@ impl<'w, 's, T: Component> TraversePath<'w, 's, T> {
 
         let mut nodes_to_handle: EntityHashMap<&KmpPathNode> = self.q.iter().collect();
         if nodes_to_handle.is_empty() {
-            return PathGroups::new(Vec::new());
+            return EntityPathGroups::new(Vec::new());
         }
         let first = self
             .q_start
@@ -688,7 +694,7 @@ impl<'w, 's, T: Component> TraversePath<'w, 's, T> {
 
             if is_battle_dispatcher(node) {
                 path.push(node_e);
-                paths.push(PathGroup { path, ..default() });
+                paths.push(EntityPathGroup { path, ..default() });
                 nodes_to_handle.remove(&node_e);
                 node_to_path_index.insert(node_e, path_index);
                 continue;
@@ -737,7 +743,7 @@ impl<'w, 's, T: Component> TraversePath<'w, 's, T> {
                 nodes_to_handle.remove(&path_node_e);
                 node_to_path_index.insert(next_node_e, path_index);
             }
-            paths.push(PathGroup { path, ..default() });
+            paths.push(EntityPathGroup { path, ..default() });
         }
 
         for i in 0..paths.len() {
@@ -753,16 +759,60 @@ impl<'w, 's, T: Component> TraversePath<'w, 's, T> {
             }
         }
 
-        PathGroups::new(paths)
+        EntityPathGroups::new(paths)
     }
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct PathGroup {
+pub struct EntityPathGroup {
     pub path: Vec<Entity>,
     pub prev_paths: Vec<usize>,
     pub next_paths: Vec<usize>,
 }
 
 #[derive(Resource, Clone, new, Deref, DerefMut)]
-pub struct PathGroups<T: Component>(#[deref] pub Vec<PathGroup>, PhantomData<T>);
+pub struct EntityPathGroups<T: Component>(#[deref] pub Vec<EntityPathGroup>, PhantomData<T>);
+
+pub fn save_path_section<T: KmpComponent>(
+    world: &mut World,
+) -> (Section<T::KmpFormat>, Section<PathGroup<T::KmpFormat>>)
+where
+    PathGroup<T::KmpFormat>: KmpSectionName,
+{
+    let mut ss = SystemState::<TraversePath<T>>::new(world);
+    let traverse_path = ss.get_mut(world);
+    traverse_path.traverse();
+    ss.apply(world);
+
+    let mut points = Vec::new();
+    let mut paths = Vec::new();
+
+    let entity_paths = world.resource::<EntityPathGroups<T>>().clone();
+    for entity_path in entity_paths.iter() {
+        let start = points.len() as u8;
+        let group_length = entity_path.path.len() as u8;
+
+        let mut prev_group = [0xffu8; 6];
+        for (i, index) in entity_path.prev_paths.iter().enumerate() {
+            prev_group[i] = *index as u8;
+        }
+        let mut next_group = [0xffu8; 6];
+        for (i, index) in entity_path.next_paths.iter().enumerate() {
+            next_group[i] = *index as u8;
+        }
+
+        for e in entity_path.path.iter() {
+            let transform = world.entity(*e).get::<Transform>().unwrap();
+            let pt = world
+                .entity(*e)
+                .get::<T>()
+                .unwrap()
+                .clone()
+                .to_kmp(*transform, world, *e);
+            points.push(pt);
+        }
+        paths.push(PathGroup::new(start, group_length, prev_group, next_group, 0));
+    }
+
+    (Section::new(points), Section::new(paths))
+}

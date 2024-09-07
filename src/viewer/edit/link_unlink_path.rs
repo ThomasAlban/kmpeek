@@ -48,7 +48,7 @@ pub fn get_pt_to_link(
     if q_selected.is_empty() {
         return None;
     }
-    let mouse_pos = q_window.single().cursor_position()?;
+    let mouse_pos = q_window.get_single().ok()?.cursor_position()?;
 
     let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
     let ndc_mouse_pos = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
@@ -61,7 +61,7 @@ pub fn get_pt_to_link(
     Some(*alt_clicked_pt)
 }
 
-fn link_points<T: Component + LinkKmpPoint>(
+fn link_points<T: Component + LinkKmpPoint + Default>(
     alt_clicked_pt: In<Option<Entity>>,
     q_pts: Query<(), With<T>>,
     q_selected: Query<Entity, With<Selected>>,

@@ -4,18 +4,18 @@ use crate::{
         multi_edit::{checkbox_multi_edit, combobox_enum_multi_edit, drag_value_multi_edit, map, rotation_multi_edit},
         DragSpeed, Icons, LinkSelectBtnType,
     },
-    util::{give_me_a_mut, iter_mut_from_entities, BoolToVisibility, ToEguiVec2, VisibilityToBool},
+    util::{give_me_a_mut, iter_mut_from_entities},
     viewer::{
         edit::{link_select_mode::LinkSelectMode, select::Selected},
         kmp::{
             checkpoints::{CheckpointRespawnLink, GetSelectedCheckpoints},
             components::{
-                AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint,
-                KmpCamera, Object, PathOverallStart, RespawnPoint, RoutePoint, RouteSettings, StartPoint, TrackInfo,
-                TransformEditOptions,
+                AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, CheckpointKind, EnemyPathPoint,
+                ItemPathPoint, KmpCamera, KmpCameraIntroStart, Object, PathOverallStart, RespawnPoint, RoutePoint,
+                RouteSettings, StartPoint, TrackInfo, TransformEditOptions,
             },
             ordering::OrderId,
-            path::{PathGroups, PathType, RecalcPaths, ToPathType},
+            path::{EntityPathGroups, PathType, RecalcPaths, ToPathType},
             routes::{GetRouteStart, RouteLink, RouteLinkedEntities},
             sections::KmpEditMode,
         },
@@ -23,20 +23,15 @@ use crate::{
 };
 use bevy::{
     ecs::{
-        component::Tick,
         entity::EntityHashSet,
-        query::{QueryData, QueryFilter, QueryIter, WorldQuery},
+        query::{QueryData, WorldQuery},
         system::{SystemParam, SystemState},
     },
     log::warn,
     prelude::*,
 };
-use bevy_egui::egui::{
-    self, emath::Numeric, pos2, vec2, Align, Align2, Checkbox, Color32, DragValue, Layout, Rect, Response, Rounding,
-    Sense, Stroke, TextStyle, Ui, Vec2, WidgetText,
-};
+use bevy_egui::egui::{self, emath::Numeric, Align, Checkbox, DragValue, Layout, Response, Sense, Ui, WidgetText};
 use std::{
-    f32::consts::PI,
     fmt::Display,
     ops::{AddAssign, Sub, SubAssign},
 };
@@ -119,6 +114,27 @@ pub fn show_edit_tab(ui: &mut Ui, world: &mut World) {
             let mut items = iter_mut_from_entities(&entities, &mut q_cp);
             combobox_edit_row(ui, "Type", map!(items => kind));
 
+            // see https://github.com/bevyengine/bevy/pull/14837
+            let kcp_ids: Vec<Mut<u8>> = items
+                .iter_mut()
+                .filter_map(|x| {
+                    if let CheckpointKind::Key(_) = x.bypass_change_detection().kind {
+                        Some(x.reborrow().map_unchanged(|y| {
+                            if let CheckpointKind::Key(id) = &mut y.kind {
+                                id
+                            } else {
+                                unreachable!()
+                            }
+                        }))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            if !kcp_ids.is_empty() {
+                drag_value_edit_row(ui, "Key Checkpoint ID", DragSpeed::Slow, kcp_ids);
+            }
+
             edit_row(ui, "Respawn", false, |ui| {
                 let mut cp_respawn_links = Vec::new();
                 for e in entities.iter() {
@@ -128,7 +144,8 @@ pub fn show_edit_tab(ui: &mut Ui, world: &mut World) {
                 // none if no link, bool represents visibility if it does exist
                 let mut visibilities = Vec::new();
                 for link in cp_respawn_links.iter() {
-                    visibilities.push((*link).and_then(|x| q_visibility.get(x.0).ok().map(|x| x.to_bool())));
+                    visibilities
+                        .push((*link).and_then(|x| q_visibility.get(x.0).ok().map(|x| x == Visibility::Visible)));
                 }
 
                 // // looks weird but basically means 'go through all the visibilities which exist (skipping the ones that don't) and ask if all of them are visible or not'
@@ -167,7 +184,11 @@ pub fn show_edit_tab(ui: &mut Ui, world: &mut World) {
                 if res.view_pressed {
                     for e in cp_respawn_links.iter().filter_map(|x| *x).map(|x| x.0) {
                         let mut v_mut = q_visibility.get_mut(e).unwrap();
-                        *v_mut = (!all_visible).to_visibility();
+                        *v_mut = if all_visible {
+                            Visibility::Hidden
+                        } else {
+                            Visibility::Visible
+                        };
                     }
                 }
                 if res.eyedropper_pressed {
@@ -222,7 +243,7 @@ pub fn show_edit_tab(ui: &mut Ui, world: &mut World) {
             for (_, route_linked_es) in items.iter() {
                 for e in route_linked_es.iter() {
                     iterated = true;
-                    let visible = q_visibility.get(*e).unwrap().to_bool();
+                    let visible = q_visibility.get(*e).unwrap() == Visibility::Visible;
                     if !visible {
                         all_visible = false
                     };
@@ -249,7 +270,11 @@ pub fn show_edit_tab(ui: &mut Ui, world: &mut World) {
                 for (_, route_linked_es) in items.iter() {
                     for e in route_linked_es.iter() {
                         let mut v = q_visibility.get_mut(*e).unwrap();
-                        *v = (!all_visible).to_visibility();
+                        *v = if all_visible {
+                            Visibility::Hidden
+                        } else {
+                            Visibility::Visible
+                        };
                     }
                 }
             }
@@ -294,11 +319,8 @@ pub fn show_edit_tab(ui: &mut Ui, world: &mut World) {
                         ui.add(DragValue::new(setting_2).speed(DragSpeed::Slow));
                     });
                 }
-                // TODO - abstract route IDs away
-                AreaKind::MovingRoad { route_id } => {
-                    edit_row(ui, "Route ID", true, |ui| {
-                        ui.add(DragValue::new(route_id).speed(DragSpeed::Slow));
-                    });
+                AreaKind::MovingRoad => {
+                    // TODO - add route link here
                 }
                 AreaKind::MinimapControl { setting_1, setting_2 } => {
                     edit_row(ui, "Setting 1", true, |ui| {
@@ -329,11 +351,29 @@ pub fn show_edit_tab(ui: &mut Ui, world: &mut World) {
         checkbox_edit_row(ui, "Always Show Area", map!(items => show_area));
     });
 
-    edit_component::<(&mut KmpCamera, Entity), RouteEditRowParam>(
+    edit_component::<(&mut KmpCamera, Entity), (RouteEditRowParam, Query<Entity, With<KmpCameraIntroStart>>, Commands)>(
         ui,
         world,
         "Camera",
-        |ui, items, mut route_edit_row| {
+        |ui, items, (mut route_edit_row, q_cam_start, mut commands)| {
+            edit_row(ui, "Intro Start", false, |ui| {
+                let mut intro_start_in_items = items.iter().any(|x| q_cam_start.contains(x.1));
+                let intermediate = intro_start_in_items && items.len() > 1;
+                ui.add_enabled_ui(false, |ui| {
+                    ui.add(Checkbox::without_text(&mut intro_start_in_items).indeterminate(intermediate));
+                });
+                if items.len() == 1 {
+                    let e = items[0].1;
+                    if ui.button("Set").clicked() {
+                        for e in q_cam_start.iter() {
+                            commands.entity(e).remove::<KmpCameraIntroStart>();
+                        }
+                        commands.entity(e).insert(KmpCameraIntroStart);
+                    }
+                }
+            });
+            edit_spacing(ui);
+
             combobox_edit_row(ui, "Type", map!(items => 0 kind));
             edit_spacing(ui);
             drag_value_edit_row(ui, "Next Index", DragSpeed::Slow, map!(items => 0 next_index));
@@ -367,9 +407,10 @@ pub fn show_edit_tab(ui: &mut Ui, world: &mut World) {
 }
 
 fn edit_track_info(ui: &mut Ui, world: &mut World) {
-    if !world.contains_resource::<KmpEditMode<TrackInfo>>() {
+    if *world.resource::<KmpEditMode>() != KmpEditMode::TrackInfo {
         return;
     }
+
     let Some(mut track_info) = world.get_resource_mut::<TrackInfo>() else {
         return;
     };
@@ -563,7 +604,7 @@ use crate::ui::util::LinkSelectBtnType::*;
 pub struct RouteEditRowParam<'w, 's> {
     q_route_link: Query<'w, 's, &'static RouteLink>,
     q_route_start: Query<'w, 's, Entity, With<RouteSettings>>,
-    path_groups: Option<Res<'w, PathGroups<RoutePoint>>>,
+    path_groups: Option<Res<'w, EntityPathGroups<RoutePoint>>>,
     q_visibility: Query<'w, 's, &'static mut Visibility>,
     commands: Commands<'w, 's>,
 }
@@ -592,7 +633,7 @@ impl RouteEditRowParam<'_, '_> {
                 route_visibilities.push(
                     route_start
                         .and_then(|x| self.q_visibility.get(x).ok())
-                        .map(|x| x.to_bool()),
+                        .map(|x| x == Visibility::Visible),
                 );
             }
 
@@ -658,7 +699,11 @@ impl RouteEditRowParam<'_, '_> {
                         let Ok(mut visibility) = self.q_visibility.get_mut(*e) else {
                             continue;
                         };
-                        *visibility = (!visible).to_visibility();
+                        *visibility = if visible {
+                            Visibility::Hidden
+                        } else {
+                            Visibility::Visible
+                        };
                     }
                 }
                 Multi { indexes, visible } => {
@@ -672,7 +717,11 @@ impl RouteEditRowParam<'_, '_> {
                             let Ok(mut visibility) = self.q_visibility.get_mut(*e) else {
                                 continue;
                             };
-                            *visibility = (!visible).to_visibility();
+                            *visibility = if visible {
+                                Visibility::Hidden
+                            } else {
+                                Visibility::Visible
+                            };
                         }
                     }
                 }

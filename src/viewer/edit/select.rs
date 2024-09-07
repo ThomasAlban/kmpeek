@@ -5,11 +5,10 @@ use super::EditMode;
 use crate::ui::keybinds::{Modifier, ModifiersPressed};
 use crate::ui::update_ui::UpdateUiSet;
 use crate::ui::viewport::ViewportInfo;
-use crate::util::{ui_viewport_to_ndc, world_to_ui_viewport, RaycastFromCam, VisibilityToBool};
+use crate::util::{ui_viewport_to_ndc, world_to_ui_viewport, RaycastFromCam};
 use crate::viewer::camera::Gizmo2dCam;
-use crate::viewer::kmp::checkpoints::CheckpointRight;
-use crate::viewer::kmp::components::{Checkpoint, KmpSelectablePoint, RespawnPoint, RoutePoint};
-use crate::viewer::kmp::sections::KmpEditModeChange;
+use crate::viewer::kmp::components::{KmpSelectablePoint, RespawnPoint, RoutePoint};
+use crate::viewer::kmp::sections::KmpEditMode;
 use bevy::prelude::*;
 use bevy_mod_outline::*;
 use bevy_mod_raycast::prelude::*;
@@ -60,7 +59,7 @@ fn select(
         return;
     }
 
-    let Some(mouse_pos) = q_window.single().cursor_position() else {
+    let Some(mouse_pos) = q_window.get_single().ok().and_then(|x| x.cursor_position()) else {
         return;
     };
 
@@ -121,19 +120,15 @@ fn deselect_if_not_visible(
     if route_select_mode.is_some() || respawn_select_mode.is_some() {
         return;
     }
-    for (e, visible) in q_selected.iter() {
-        if !visible.to_bool() {
+    for (e, visibility) in q_selected.iter() {
+        if visibility != Visibility::Visible {
             commands.entity(e).remove::<Selected>();
         }
     }
 }
 
-fn deselect_on_mode_change(
-    ev_mode_change: EventReader<KmpEditModeChange>,
-    mut commands: Commands,
-    q_selected: Query<Entity, With<Selected>>,
-) {
-    if ev_mode_change.is_empty() {
+fn deselect_on_mode_change(mode: Res<KmpEditMode>, mut commands: Commands, q_selected: Query<Entity, With<Selected>>) {
+    if !mode.is_changed() {
         return;
     }
     for e in q_selected.iter() {
@@ -164,7 +159,7 @@ fn select_box(
         return;
     }
 
-    let window = q_window.single();
+    let Ok(window) = q_window.get_single() else { return };
     let Some(mouse_pos) = window.cursor_position() else {
         return;
     };

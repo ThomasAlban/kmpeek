@@ -1,9 +1,6 @@
-use std::marker::PhantomData;
+use std::any::TypeId;
 
-use bevy::{
-    ecs::system::{Resource, SystemParam},
-    prelude::*,
-};
+use bevy::{ecs::system::Resource, prelude::*};
 use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 
 use super::{
@@ -12,11 +9,11 @@ use super::{
 };
 
 pub fn section_plugin(app: &mut App) {
-    app.add_event::<KmpEditModeChange>();
+    app.init_resource::<KmpEditMode>();
 }
 
-#[derive(Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Eq, Hash, Clone, Copy, Debug)]
-pub enum KmpSection {
+#[derive(Resource, Display, EnumString, IntoStaticStr, EnumIter, Default, PartialEq, Eq, Hash, Clone, Copy, Debug)]
+pub enum KmpEditMode {
     #[strum(serialize = "Start Points")]
     StartPoints,
     #[strum(serialize = "Enemy Paths")]
@@ -38,60 +35,59 @@ pub enum KmpSection {
     #[strum(serialize = "Track Info")]
     TrackInfo,
 }
-#[derive(Resource)]
-pub struct KmpEditMode<T: Component>(PhantomData<T>);
-impl<T: Component + ToKmpSection> Default for KmpEditMode<T> {
-    fn default() -> Self {
-        KmpEditMode(PhantomData)
+impl KmpEditMode {
+    pub fn to_type_id(self) -> TypeId {
+        match self {
+            Self::StartPoints => TypeId::of::<StartPoint>(),
+            Self::EnemyPaths => TypeId::of::<EnemyPathPoint>(),
+            Self::ItemPaths => TypeId::of::<ItemPathPoint>(),
+            Self::Checkpoints => TypeId::of::<Checkpoint>(),
+            Self::RespawnPoints => TypeId::of::<RespawnPoint>(),
+            Self::Objects => TypeId::of::<Object>(),
+            Self::Routes => TypeId::of::<RoutePoint>(),
+            Self::Areas => TypeId::of::<AreaPoint>(),
+            Self::Cameras => TypeId::of::<KmpCamera>(),
+            Self::CannonPoints => TypeId::of::<CannonPoint>(),
+            Self::BattleFinishPoints => TypeId::of::<BattleFinishPoint>(),
+            Self::TrackInfo => TypeId::of::<TrackInfo>(),
+        }
     }
-}
-
-#[derive(Event, Default)]
-pub struct KmpEditModeChange;
-
-pub fn change_kmp_edit_mode<T: Component + ToKmpSection>(world: &mut World) {
-    world.remove_resource::<KmpEditMode<StartPoint>>();
-    world.remove_resource::<KmpEditMode<EnemyPathPoint>>();
-    world.remove_resource::<KmpEditMode<ItemPathPoint>>();
-    world.remove_resource::<KmpEditMode<Checkpoint>>();
-    world.remove_resource::<KmpEditMode<RespawnPoint>>();
-    world.remove_resource::<KmpEditMode<Object>>();
-    world.remove_resource::<KmpEditMode<RoutePoint>>();
-    world.remove_resource::<KmpEditMode<AreaPoint>>();
-    world.remove_resource::<KmpEditMode<KmpCamera>>();
-    world.remove_resource::<KmpEditMode<CannonPoint>>();
-    world.remove_resource::<KmpEditMode<BattleFinishPoint>>();
-    world.remove_resource::<KmpEditMode<TrackInfo>>();
-
-    world.init_resource::<KmpEditMode<T>>();
-    world.send_event_default::<KmpEditModeChange>();
-}
-
-pub fn get_kmp_section(world: &mut World) -> KmpSection {
-    if world.contains_resource::<KmpEditMode<StartPoint>>() {
-        KmpSection::StartPoints
-    } else if world.contains_resource::<KmpEditMode<EnemyPathPoint>>() {
-        KmpSection::EnemyPaths
-    } else if world.contains_resource::<KmpEditMode<ItemPathPoint>>() {
-        KmpSection::ItemPaths
-    } else if world.contains_resource::<KmpEditMode<Checkpoint>>() {
-        KmpSection::Checkpoints
-    } else if world.contains_resource::<KmpEditMode<RespawnPoint>>() {
-        KmpSection::RespawnPoints
-    } else if world.contains_resource::<KmpEditMode<Object>>() {
-        KmpSection::Objects
-    } else if world.contains_resource::<KmpEditMode<RoutePoint>>() {
-        KmpSection::Routes
-    } else if world.contains_resource::<KmpEditMode<AreaPoint>>() {
-        KmpSection::Areas
-    } else if world.contains_resource::<KmpEditMode<KmpCamera>>() {
-        KmpSection::Cameras
-    } else if world.contains_resource::<KmpEditMode<CannonPoint>>() {
-        KmpSection::CannonPoints
-    } else if world.contains_resource::<KmpEditMode<BattleFinishPoint>>() {
-        KmpSection::BattleFinishPoints
-    } else {
-        KmpSection::TrackInfo
+    /// Panics if the inputted type does not map to an enum variant
+    pub fn from_type<T: 'static>() -> Self {
+        let t = TypeId::of::<T>();
+        if t == TypeId::of::<StartPoint>() {
+            Self::StartPoints
+        } else if t == TypeId::of::<EnemyPathPoint>() {
+            Self::EnemyPaths
+        } else if t == TypeId::of::<ItemPathPoint>() {
+            Self::ItemPaths
+        } else if t == TypeId::of::<Checkpoint>() {
+            Self::Checkpoints
+        } else if t == TypeId::of::<RespawnPoint>() {
+            Self::RespawnPoints
+        } else if t == TypeId::of::<Object>() {
+            Self::Objects
+        } else if t == TypeId::of::<RoutePoint>() {
+            Self::Routes
+        } else if t == TypeId::of::<AreaPoint>() {
+            Self::Areas
+        } else if t == TypeId::of::<KmpCamera>() {
+            Self::Cameras
+        } else if t == TypeId::of::<CannonPoint>() {
+            Self::CannonPoints
+        } else if t == TypeId::of::<BattleFinishPoint>() {
+            Self::BattleFinishPoints
+        } else if t == TypeId::of::<TrackInfo>() {
+            Self::TrackInfo
+        } else {
+            panic!("Incorrect type input supplied to KmpSection::from_type");
+        }
+    }
+    pub fn in_mode<T: 'static>(&self) -> bool {
+        self.to_type_id() == TypeId::of::<T>()
+    }
+    pub fn set_mode<T: 'static>(&mut self) {
+        *self = Self::from_type::<T>();
     }
 }
 
@@ -144,29 +140,3 @@ macro_rules! add_for_all_components {
     };
 }
 pub(crate) use add_for_all_components;
-
-pub trait ToKmpSection {
-    fn to_kmp_section() -> KmpSection;
-}
-macro_rules! impl_to_kmp_sect {
-    ($comp:ty, $sect:expr) => {
-        impl ToKmpSection for $comp {
-            fn to_kmp_section() -> KmpSection {
-                $sect
-            }
-        }
-    };
-}
-
-impl_to_kmp_sect!(StartPoint, KmpSection::StartPoints);
-impl_to_kmp_sect!(EnemyPathPoint, KmpSection::EnemyPaths);
-impl_to_kmp_sect!(ItemPathPoint, KmpSection::ItemPaths);
-impl_to_kmp_sect!(Checkpoint, KmpSection::Checkpoints);
-impl_to_kmp_sect!(RespawnPoint, KmpSection::RespawnPoints);
-impl_to_kmp_sect!(Object, KmpSection::Objects);
-impl_to_kmp_sect!(RoutePoint, KmpSection::Routes);
-impl_to_kmp_sect!(AreaPoint, KmpSection::Areas);
-impl_to_kmp_sect!(KmpCamera, KmpSection::Cameras);
-impl_to_kmp_sect!(CannonPoint, KmpSection::CannonPoints);
-impl_to_kmp_sect!(BattleFinishPoint, KmpSection::BattleFinishPoints);
-impl_to_kmp_sect!(TrackInfo, KmpSection::TrackInfo);

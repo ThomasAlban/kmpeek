@@ -1,27 +1,16 @@
-use crate::{
-    ui::viewport::ViewportInfo,
-    util::{ui_viewport_to_ndc, RaycastFromCam},
-    viewer::{
-        camera::Gizmo2dCam,
-        edit::select::{SelectSet, Selected},
-    },
-};
+use crate::viewer::edit::select::Selected;
 
 use super::{
     path::{KmpPathNode, RecalcPaths},
-    FromKmp, KmpError, KmpFile, KmpSelectablePoint, RoutePoint, RouteSettings, Spawner,
+    KmpComponent, KmpFile, KmpSectionIdEntityMap, RoutePoint, RouteSettings, Spawner,
 };
 use bevy::{
-    ecs::{
-        entity::{EntityHashMap, EntityHashSet},
-        system::{SystemParam, SystemState},
-    },
+    ecs::{entity::EntityHashSet, system::SystemParam},
     prelude::*,
     utils::HashMap,
 };
-use bevy_mod_raycast::prelude::Raycast;
+
 use serde::{Deserialize, Serialize};
-use std::{marker::PhantomData, sync::Arc};
 
 pub fn routes_plugin(app: &mut App) {
     app.add_systems(Update, update_routes)
@@ -149,39 +138,38 @@ fn on_remove_route_pt(
     }
 }
 
-pub fn spawn_route_section(
-    commands: &mut Commands,
-    kmp: Arc<KmpFile>,
-    kmp_errors: &mut Vec<KmpError>,
-) -> HashMap<u8, Entity> {
+pub fn spawn_route_section(world: &mut World, kmp: &KmpFile) -> KmpSectionIdEntityMap<RoutePoint> {
     let mut id_entity_map = HashMap::default();
-    for (i, route) in kmp.poti.entries.iter().enumerate() {
-        let mut prev_e = None;
+    for (i, route) in kmp.poti.iter().enumerate() {
+        let mut prev_e: Option<Entity> = None;
         for route_pt in route.points.iter() {
-            let e = Spawner::new(RoutePoint::from_kmp(route_pt, kmp_errors))
+            let e = Spawner::builder()
+                .component(RoutePoint::from_kmp(route_pt, world))
                 .pos(route_pt.position)
                 .visible(false)
-                .prev_nodes(prev_e) // will add the prev entity if it exists
-                .max_connected(1)
-                .spawn_command(commands);
+                .prev_nodes(prev_e.into_iter().collect::<EntityHashSet>())
+                .max(1)
+                .build()
+                .spawn(world);
 
             // insert the route settings to the first route point
             if prev_e.is_none() {
-                commands.entity(e).insert(RouteStartBundle {
-                    route_settings: RouteSettings::from_kmp(route, kmp_errors),
+                let route_settings = RouteSettings::from_kmp(route, world);
+                world.entity_mut(e).insert(RouteStartBundle {
+                    route_settings,
                     ..default()
                 });
             }
 
             // if we are at the first route point
             if prev_e.is_none() {
-                id_entity_map.insert(i as u8, e);
+                id_entity_map.insert(i as u32, e);
             }
 
             prev_e = Some(e);
         }
     }
-    id_entity_map
+    KmpSectionIdEntityMap::new(id_entity_map)
 }
 
 pub fn update_routes(

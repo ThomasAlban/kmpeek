@@ -3,24 +3,20 @@ use crate::{
         keybinds::ModifiersPressed,
         util::{view_icon_btn, Icons},
     },
-    util::BoolToVisibility,
     viewer::{
         edit::select::Selected,
         kmp::{
             components::{
                 AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint, KmpCamera,
-                KmpSelectablePoint, Object, RespawnPoint, RoutePoint, StartPoint, TrackInfo,
+                Object, RespawnPoint, RoutePoint, StartPoint,
             },
-            path::{PathGroup, PathGroups},
-            sections::{change_kmp_edit_mode, KmpEditMode, KmpEditModeChange, KmpSection, ToKmpSection},
+            path::{EntityPathGroup, EntityPathGroups},
+            sections::KmpEditMode,
             SetSectionVisibility,
         },
     },
 };
-use bevy::{
-    ecs::system::{SystemParam, SystemState},
-    prelude::*,
-};
+use bevy::prelude::*;
 use bevy_egui::egui::{self, collapsing_header::CollapsingState, Align, Color32, Layout, Ui};
 
 pub fn show_outliner_tab(ui: &mut Ui, world: &mut World) {
@@ -29,7 +25,7 @@ pub fn show_outliner_tab(ui: &mut Ui, world: &mut World) {
     ui.horizontal(|ui| {
         // ui.add_space(18.);
         if ui.button("Reset Visibilities").clicked() {
-            world.send_event(KmpEditModeChange);
+            world.resource_mut::<KmpEditMode>().set_changed();
         }
     });
     ui.add_space(2.);
@@ -55,29 +51,29 @@ fn show_track_info_outliner(ui: &mut Ui, world: &mut World) {
         ui.add_space(18.);
         ui.add_sized(
             [ICON_SIZE, ICON_SIZE],
-            Icons::track_info(ui.ctx(), ICON_SIZE).tint(Icons::SECTION_COLORS[KmpSection::TrackInfo as usize]),
+            Icons::track_info(ui.ctx(), ICON_SIZE).tint(Icons::SECTION_COLORS[KmpEditMode::TrackInfo as usize]),
         );
         if ui
-            .selectable_label(world.contains_resource::<KmpEditMode<TrackInfo>>(), "Track Info")
+            .selectable_label(*world.resource::<KmpEditMode>() == KmpEditMode::TrackInfo, "Track Info")
             .clicked()
         {
-            change_kmp_edit_mode::<TrackInfo>(world);
+            *world.resource_mut::<KmpEditMode>() = KmpEditMode::TrackInfo;
         }
     });
 }
 
-fn show_point_outliner<T: Component + ToKmpSection>(ui: &mut Ui, world: &mut World) {
+fn show_point_outliner<T: Component>(ui: &mut Ui, world: &mut World) {
     show_header::<T>(ui, world, false);
 }
 
-fn show_path_outliner<T: Component + ToKmpSection>(ui: &mut Ui, world: &mut World) {
+fn show_path_outliner<T: Component>(ui: &mut Ui, world: &mut World) {
     CollapsingState::load_with_default_open(ui.ctx(), ui.next_auto_id(), false)
         .show_header(ui, |ui| {
             show_header::<T>(ui, world, true);
         })
         .body(|ui| {
             let mut paths_to_show = Vec::new();
-            if let Some(groups) = world.get_resource::<PathGroups<T>>() {
+            if let Some(groups) = world.get_resource::<EntityPathGroups<T>>() {
                 for (i, pathgroup) in groups.iter().enumerate() {
                     paths_to_show.push((i, pathgroup.clone()));
                 }
@@ -88,13 +84,13 @@ fn show_path_outliner<T: Component + ToKmpSection>(ui: &mut Ui, world: &mut Worl
                     world,
                     i,
                     pathgroup.clone(),
-                    Icons::SECTION_COLORS[T::to_kmp_section() as usize],
+                    Icons::SECTION_COLORS[KmpEditMode::from_type::<T>() as usize],
                 );
             }
         });
 }
 
-fn show_path(ui: &mut Ui, world: &mut World, i: usize, pathgroup: PathGroup, color: Color32) {
+fn show_path(ui: &mut Ui, world: &mut World, i: usize, pathgroup: EntityPathGroup, color: Color32) {
     let mut all_visible = if !pathgroup.path.is_empty() {
         pathgroup
             .path
@@ -135,15 +131,19 @@ fn show_path(ui: &mut Ui, world: &mut World, i: usize, pathgroup: PathGroup, col
                 let Ok(mut visibility) = world.query::<&mut Visibility>().get_mut(world, *e) else {
                     continue;
                 };
-                *visibility = all_visible.to_visibility();
+                *visibility = if all_visible {
+                    Visibility::Visible
+                } else {
+                    Visibility::Hidden
+                };
             }
         }
     });
 }
 
-fn show_header<T: Component + ToKmpSection>(ui: &mut Ui, world: &mut World, path: bool) {
+fn show_header<T: Component>(ui: &mut Ui, world: &mut World, path: bool) {
     let entities: Vec<_> = world.query_filtered::<Entity, With<T>>().iter(world).collect();
-    let cur_mode = world.contains_resource::<KmpEditMode<T>>();
+    let cur_mode = world.resource::<KmpEditMode>().in_mode::<T>();
 
     ui.horizontal(|ui| {
         if !path {
@@ -156,10 +156,13 @@ fn show_header<T: Component + ToKmpSection>(ui: &mut Ui, world: &mut World, path
             } else {
                 Icons::cube_group(ui.ctx(), ICON_SIZE)
             }
-            .tint(Icons::SECTION_COLORS[T::to_kmp_section() as usize]),
+            .tint(Icons::SECTION_COLORS[KmpEditMode::from_type::<T>() as usize]),
         );
-        if ui.selectable_label(cur_mode, T::to_kmp_section().to_string()).clicked() {
-            change_kmp_edit_mode::<T>(world);
+        if ui
+            .selectable_label(cur_mode, KmpEditMode::from_type::<T>().to_string())
+            .clicked()
+        {
+            world.resource_mut::<KmpEditMode>().set_mode::<T>();
         }
 
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {

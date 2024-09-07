@@ -11,13 +11,8 @@ use crate::{
         kmp::components::{RespawnPoint, RoutePoint},
     },
 };
-use bevy::{
-    ecs::system::{SystemParam, SystemState},
-    math::vec2,
-    prelude::*,
-    render::render_resource::Extent3d,
-};
-use bevy_egui::egui::{self, show_tooltip_at_pointer, Color32, Id, Margin, Response, Rounding, Sense, Stroke, Ui};
+use bevy::{ecs::system::SystemState, math::vec2, prelude::*, render::render_resource::Extent3d};
+use bevy_egui::egui::{self, show_tooltip_at_pointer, Color32, Margin, Response, Rounding, Sense, Stroke, Ui};
 use transform_gizmo_bevy::{config::TransformPivotPoint, GizmoOptions, GizmoOrientation};
 
 pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {

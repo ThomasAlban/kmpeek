@@ -10,11 +10,10 @@ use crate::{
             components::{
                 AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint, KmpCamera,
                 KmpSelectablePoint, MaxConnectedPath, Object, RespawnPoint, RoutePoint, Spawn, Spawner, StartPoint,
-                TrackInfo,
             },
             ordering::RefreshOrdering,
             path::{is_checkpoint, KmpPathNode, RecalcPaths},
-            sections::{KmpEditMode, ToKmpSection},
+            sections::KmpEditMode,
         },
     },
 };
@@ -60,20 +59,20 @@ pub struct CreatePoint {
 pub struct JustCreatedPoint(pub Entity);
 
 // responsible for consuming 'create point' events and creating the relevant point depending on what edit mode we are in
-fn create_point<T: Component + ToKmpSection + Spawn + Default + Clone>(
+fn create_point<T: Component + Spawn + Default + Clone>(
     mut commands: Commands,
-    mode: Option<Res<KmpEditMode<T>>>,
+    mode: Res<KmpEditMode>,
     mut ev_create_point: EventReader<CreatePoint>,
     mut ev_just_created_point: EventWriter<JustCreatedPoint>,
 ) {
-    if mode.is_none() {
+    if !mode.in_mode::<T>() {
         return;
     }
     let Some(create_pt) = ev_create_point.read().next() else {
         return;
     };
     let pos = create_pt.position;
-    let entity = Spawner::<T>::default().pos(pos).spawn_command(&mut commands);
+    let entity = Spawner::<T>::builder().pos(pos).build().spawn_command(&mut commands);
     // we send this event which is recieved by the Select system, so it knows to add the Selected component
     // we can't add it now, because then in the select system it will just be deselected again
     // the select system has to run after this so that we know which previous points we have to link to this one
@@ -81,9 +80,9 @@ fn create_point<T: Component + ToKmpSection + Spawn + Default + Clone>(
     ev_just_created_point.send(JustCreatedPoint(entity));
 }
 
-fn create_path<T: Component + ToKmpSection + Spawn + Default + Clone + MaxConnectedPath>(
+fn create_path<T: Component + Spawn + Default + Clone + MaxConnectedPath>(
     mut commands: Commands,
-    mode: Option<Res<KmpEditMode<T>>>,
+    mode: Res<KmpEditMode>,
     q_selected_pt: Query<Entity, (With<T>, With<Selected>)>,
     q_kmp_path_node: Query<&KmpPathNode>,
     mut q_cp: GetSelectedCheckpoints,
@@ -91,7 +90,7 @@ fn create_path<T: Component + ToKmpSection + Spawn + Default + Clone + MaxConnec
     mut ev_recalc_paths: EventWriter<RecalcPaths>,
     mut ev_just_created_point: EventWriter<JustCreatedPoint>,
 ) {
-    if mode.is_none() {
+    if !mode.in_mode::<T>() {
         return;
     }
     let Some(create_pt) = ev_create_point.read().next() else {
@@ -109,12 +108,18 @@ fn create_path<T: Component + ToKmpSection + Spawn + Default + Clone + MaxConnec
         return;
     }
 
-    ev_recalc_paths.send(RecalcPaths::all());
-    let entity = Spawner::<T>::default()
+    ev_recalc_paths.send_default();
+    let entity = Spawner::<T>::builder()
         .pos(pos)
         .prev_nodes(prev_nodes)
-        .max_connected(T::MAX_CONNECTED)
+        .max(T::MAX_CONNECTED)
+        .build()
         .spawn_command(&mut commands);
+    // let entity = Spawner::<T>::default()
+    //     .pos(pos)
+    //     .prev_nodes(prev_nodes)
+    //     .max_connected(T::MAX_CONNECTED)
+    //     .spawn_command(&mut commands);
     ev_just_created_point.send(JustCreatedPoint(entity));
 }
 
@@ -123,8 +128,7 @@ fn create_path<T: Component + ToKmpSection + Spawn + Default + Clone + MaxConnec
 fn alt_click_create_point(
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
-    track_info_mode: Option<Res<KmpEditMode<TrackInfo>>>,
-    checkpoint_mode: Option<Res<KmpEditMode<Checkpoint>>>,
+    mode: Res<KmpEditMode>,
     viewport_info: Res<ViewportInfo>,
     mut raycast: Raycast,
     cp_height: Res<CheckpointHeight>,
@@ -134,7 +138,7 @@ fn alt_click_create_point(
     q_kcl: Query<(), With<KCLModelSection>>,
     mut ev_create_pt: EventWriter<CreatePoint>,
 ) {
-    if track_info_mode.is_some() {
+    if *mode == KmpEditMode::TrackInfo {
         return;
     }
     if !viewport_info.mouse_in_viewport {
@@ -144,7 +148,8 @@ fn alt_click_create_point(
     if !keys.pressed(KeyCode::AltLeft) || !mouse_buttons.just_pressed(MouseButton::Left) {
         return;
     }
-    let Some(mouse_pos) = q_window.single().cursor_position() else {
+
+    let Some(mouse_pos) = q_window.get_single().ok().and_then(|x| x.cursor_position()) else {
         return;
     };
 
@@ -159,7 +164,7 @@ fn alt_click_create_point(
         return;
     };
 
-    let mouse_3d_pos = if checkpoint_mode.is_some() {
+    let mouse_3d_pos = if *mode == KmpEditMode::Checkpoints {
         let Some(ray) = get_ray_from_cam(cam, ndc_mouse_pos) else {
             return;
         };

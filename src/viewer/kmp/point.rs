@@ -2,7 +2,8 @@ use super::{
     meshes_materials::{KmpMeshes, PointMaterials},
     ordering::{NextOrderID, OrderId},
     routes::RouteLink,
-    FromKmp, KmpError, KmpSelectablePoint, MaybeRouteId, RespawnPoint, Spawn, Spawner,
+    KmpComponent, KmpSectionEntityIdMap, KmpSectionIdEntityMap, KmpSelectablePoint, MaybeRouteId, RespawnPoint,
+    RoutePoint, Section, Spawn, Spawner,
 };
 use crate::{
     ui::settings::AppSettings,
@@ -15,41 +16,32 @@ use crate::{
         normalize::{Normalize, NormalizeInheritParent},
     },
 };
-use bevy::{ecs::world::Command, math::vec3, prelude::*, utils::HashMap};
+use bevy::{ecs::world::Command, math::vec3, prelude::*};
 use bevy_mod_outline::{OutlineBundle, OutlineVolume};
-use std::sync::Arc;
 
-pub fn spawn_point_section<
-    T: KmpGetSection + KmpPositionPoint + KmpRotationPoint + Send + Sync + 'static + Clone + MaybeRouteId,
-    U: Component + FromKmp<T> + Clone + Spawn,
->(
-    commands: &mut Commands,
-    route_id_map: &HashMap<u8, Entity>,
-    kmp: Arc<KmpFile>,
-    kmp_errors: &mut Vec<KmpError>,
-) -> HashMap<u32, Entity> {
-    let node_entries = &T::get_section(kmp.as_ref()).entries;
-    let mut id_entity_map = HashMap::default();
+pub fn spawn_point_section<T: KmpComponent + Spawn>(world: &mut World, kmp: &KmpFile) -> KmpSectionIdEntityMap<T>
+where
+    T::KmpFormat: KmpGetSection + KmpPositionPoint + KmpRotationPoint + MaybeRouteId,
+{
+    let node_entries = &**T::KmpFormat::get_section(kmp);
+    let mut id_entity_map = KmpSectionIdEntityMap::default();
 
     for (i, node) in node_entries.iter().enumerate() {
-        let position: Vec3 = node.get_position().into();
-        let euler_rot: Vec3 = node.get_rotation().into();
-        let rotation = Quat::from_euler(
-            EulerRot::XYZ,
-            euler_rot.x.to_radians(),
-            euler_rot.y.to_radians(),
-            euler_rot.z.to_radians(),
-        );
         let maybe_route_id = node.get_route_id();
-        let maybe_route = maybe_route_id.and_then(|x| route_id_map.get(&x)).copied();
+        let maybe_route = maybe_route_id
+            .and_then(|x| world.resource::<KmpSectionIdEntityMap<RoutePoint>>().get(&(x as u32)))
+            .copied();
 
-        let entity = Spawner::<U>::new(U::from_kmp(node, kmp_errors))
-            .pos(position)
-            .rot(rotation)
+        let entity = Spawner::builder()
+            .component(T::from_kmp(node, world))
+            .pos(node.get_position())
+            .rot(node.get_rotation())
             .visible(false)
             .order_id(i as u32)
             .maybe_route(maybe_route)
-            .spawn_command(commands);
+            .build()
+            .spawn(world);
+
         id_entity_map.insert(i as u32, entity);
     }
     id_entity_map
@@ -74,7 +66,7 @@ pub fn spawn_point<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mu
         PbrBundle {
             mesh: meshes.sphere.clone(),
             material: materials.point.clone(),
-            transform: spawner.transform,
+            transform: spawner.get_transform(),
             visibility: if spawner.visible {
                 Visibility::Visible
             } else {
@@ -169,4 +161,28 @@ impl Command for AddRespawnPointPreview {
             }
         });
     }
+}
+
+pub fn save_point_section<T: KmpComponent>(world: &mut World) -> (Section<T::KmpFormat>, KmpSectionEntityIdMap<T>) {
+    let mut q = world.query::<(&T, &Transform, Entity, &OrderId)>();
+    let components: Vec<_> = q
+        .iter(world)
+        .sort::<&OrderId>()
+        .map(|(c, t, e, _)| (c.clone(), *t, e))
+        .collect();
+    let mut kmp_points = Vec::with_capacity(components.len());
+    for (component, transform, e) in components.iter() {
+        kmp_points.push(component.to_kmp(*transform, world, *e));
+    }
+    (
+        Section::new(kmp_points),
+        KmpSectionEntityIdMap::<T>::new(
+            components
+                .iter()
+                .map(|x| x.2)
+                .enumerate()
+                .map(|x| (x.1, x.0 as u8))
+                .collect(),
+        ),
+    )
 }

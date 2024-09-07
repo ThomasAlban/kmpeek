@@ -62,7 +62,7 @@ pub fn tweak_interaction(
         return;
     };
 
-    let window = q_window.single();
+    let Ok(window) = q_window.get_single() else { return };
     let Some(mouse_pos) = window.cursor_position() else {
         return;
     };

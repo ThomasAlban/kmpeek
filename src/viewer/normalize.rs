@@ -1,8 +1,8 @@
-use crate::{ui::settings::AppSettings, util::VisibilityToBool};
+use crate::ui::settings::AppSettings;
 use bevy::prelude::*;
 use derive_new::new;
 
-use super::{camera::Gizmo2dCam, kmp::checkpoints::CpArrowParent};
+use super::camera::Gizmo2dCam;
 
 pub fn normalize_plugin(app: &mut App) {
     app.add_systems(Last, update_normalize);

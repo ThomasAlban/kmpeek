@@ -4,9 +4,9 @@ mod settings;
 mod table;
 mod viewport;
 
-use super::{settings::AppSettings, util::get_egui_ctx};
-use bevy::{ecs::system::SystemParam, prelude::*};
-use bevy_egui::{egui, EguiContexts};
+use super::util::get_egui_ctx;
+use bevy::prelude::*;
+use bevy_egui::egui;
 use bevy_pkv::PkvStore;
 use edit::show_edit_tab;
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
