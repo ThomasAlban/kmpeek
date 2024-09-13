@@ -13,7 +13,6 @@ These are the things I still need to do before an alpha release. Some of these a
 - [x] Route editor
 - [ ] Saving back to KMP format
 - [ ] Object search by id/name
-- [ ] Auto updater (or at least a message if there is an update available)
 
 If you want to help test KMPeek when these things are done (before the main first release), talk to me on discord! @thomasalban
 
