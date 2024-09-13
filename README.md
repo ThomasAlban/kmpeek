@@ -20,6 +20,7 @@ If you want to help test KMPeek when these things are done (before the main firs
 
 These are things that I want to get to in subsequent updates, once an initial version is released.
 
+- Auto updater
 - Undo/Redo
 - Edit tools (such as drawing lines of points)
 - Eline control handling - converting it to a setting on enemy points
