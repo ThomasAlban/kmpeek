@@ -13,7 +13,7 @@ use crate::{
     },
 };
 use bevy::{ecs::world::Command, prelude::*};
-use bevy_mod_raycast::prelude::*;
+use bevy::picking::mesh_picking::ray_cast::*;
 
 pub fn link_unlink_plugin(app: &mut App) {
     app.add_systems(
@@ -36,7 +36,7 @@ pub fn get_pt_to_link(
     q_transform: Query<&Transform, With<KmpSelectablePoint>>,
     q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
     q_window: Query<&Window>,
-    mut raycast: Raycast,
+    mut raycast: MeshRayCast,
     viewport_info: Res<ViewportInfo>,
 ) -> Option<Entity> {
     if !mouse_buttons.just_pressed(MouseButton::Left) {

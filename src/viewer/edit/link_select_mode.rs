@@ -11,7 +11,7 @@ use crate::{
     },
 };
 use bevy::{ecs::system::SystemState, prelude::*, utils::HashMap};
-use bevy_mod_raycast::prelude::Raycast;
+use bevy::picking::mesh_picking::ray_cast::*;
 use std::marker::PhantomData;
 
 use super::select::SelectSet;
@@ -74,7 +74,7 @@ fn update_link_selection_mode<T: Component + CreateLink>(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_window: Query<&Window>,
     q_route_pt: Query<Entity, With<T>>,
-    mut raycast: Raycast,
+    mut raycast: MeshRayCast,
     q_every_other_pt: Query<Entity, (With<KmpSelectablePoint>, Without<T>)>,
 ) {
     let Some(res) = res else { return };

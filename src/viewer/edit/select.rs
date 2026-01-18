@@ -11,7 +11,7 @@ use crate::viewer::kmp::components::{KmpSelectablePoint, RespawnPoint, RoutePoin
 use crate::viewer::kmp::sections::KmpEditMode;
 use bevy::prelude::*;
 use bevy_mod_outline::*;
-use bevy_mod_raycast::prelude::*;
+use bevy::picking::mesh_picking::ray_cast::*;
 use transform_gizmo_bevy::GizmoTarget;
 
 #[derive(SystemSet, Debug, PartialEq, Eq, Hash, Clone)]
@@ -37,7 +37,7 @@ fn select(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_camera: Query<(&mut Camera, &GlobalTransform), Without<Gizmo2dCam>>,
     q_gizmos: Query<&GizmoTarget>,
-    mut raycast: Raycast,
+    mut raycast: MeshRayCast,
     q_kmp_section: Query<&KmpSelectablePoint>,
     mut commands: Commands,
     area_gizmo_opts: Res<AreaGizmoOptions>,

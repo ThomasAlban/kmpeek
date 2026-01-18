@@ -19,10 +19,7 @@ use bevy_egui::{
     egui::{self, Pos2},
     EguiContext,
 };
-use bevy_mod_raycast::{
-    immediate::{Raycast, RaycastSettings},
-    primitives::IntersectionData,
-};
+use bevy::picking::mesh_picking::ray_cast::*;
 use derive_new::new;
 
 // World <-> Ui Viewport
@@ -157,9 +154,9 @@ pub fn get_ray_from_cam(cam: (&Camera, &GlobalTransform), ndc: Vec2) -> Option<R
 pub struct RaycastFromCam<'a, 'w, 's> {
     cam: (&'a Camera, &'a GlobalTransform),
     ndc: Vec2,
-    raycast: &'a mut Raycast<'w, 's>,
+    raycast: &'a mut MeshRayCast<'w, 's>,
     #[new(default)]
-    settings: RaycastSettings<'a>,
+    settings: RayCastSettings<'a>,
 }
 impl<'a, 'w, 's> RaycastFromCam<'a, 'w, 's> {
     pub fn filter(mut self, filter: &'a impl Fn(Entity) -> bool) -> Self {
@@ -169,7 +166,7 @@ impl<'a, 'w, 's> RaycastFromCam<'a, 'w, 's> {
     pub fn ray(&self) -> Option<Ray3d> {
         get_ray_from_cam(self.cam, self.ndc)
     }
-    pub fn cast(self) -> Vec<(Entity, IntersectionData)> {
+    pub fn cast(self) -> Vec<(Entity, RayMeshHit)> {
         let Some(ray) = self.ray() else {
             return Vec::new();
         };

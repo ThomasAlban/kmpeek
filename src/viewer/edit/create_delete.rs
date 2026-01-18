@@ -17,8 +17,7 @@ use crate::{
         },
     },
 };
-use bevy::{ecs::entity::EntityHashSet, prelude::*};
-use bevy_mod_raycast::prelude::*;
+use bevy::{ecs::entity::EntityHashSet, prelude::*, picking::mesh_picking::ray_cast::*};
 
 #[derive(SystemSet, Debug, PartialEq, Eq, Hash, Clone)]
 pub struct DeleteSet;
@@ -130,7 +129,7 @@ fn alt_click_create_point(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mode: Res<KmpEditMode>,
     viewport_info: Res<ViewportInfo>,
-    mut raycast: Raycast,
+    mut raycast: MeshRayCast,
     cp_height: Res<CheckpointHeight>,
     q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
     q_window: Query<&Window>,
