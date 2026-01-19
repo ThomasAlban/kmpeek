@@ -59,24 +59,22 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
     let topdown_default = TopDownSettings::default();
 
     commands.spawn((
-        Camera3dBundle {
-            camera: Camera {
-                // render to the image
-                target: RenderTarget::Image(viewport.handle.clone()),
-                is_active: false,
-                ..default()
-            },
-            projection: Projection::Orthographic(OrthographicProjection {
-                near: topdown_default.near,
-                far: topdown_default.far,
-                scale: topdown_default.scale,
-                ..default()
-            }),
-            transform: Transform::from_translation(topdown_default.start_pos).looking_at(Vec3::ZERO, Vec3::Z),
+        Camera {
+            // render to the image
+            target: RenderTarget::Image(viewport.handle.clone()),
+            is_active: false,
             ..default()
         },
+        OrthographicProjection {
+            near: topdown_default.near,
+            far: topdown_default.far,
+            scale: topdown_default.scale,
+            ..OrthographicProjection::default_3d()
+        },
+        Transform::from_translation(topdown_default.start_pos).looking_at(Vec3::ZERO, Vec3::Z),
         TopDownCam,
         GizmoCamera,
+        Msaa::Sample4,
     ));
 }
 

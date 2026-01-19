@@ -11,7 +11,6 @@ use crate::{
     },
 };
 use bevy::{ecs::system::SystemState, prelude::*, utils::HashMap};
-use bevy::picking::mesh_picking::ray_cast::*;
 use std::marker::PhantomData;
 
 use super::select::SelectSet;
@@ -131,7 +130,7 @@ fn update_link_selection_mode<T: Component + CreateLink>(
     let entities = res.0.clone();
     let e_v_map = e_v_map.clone();
 
-    commands.add(move |world: &mut World| {
+    commands.queue(move |world: &mut World| {
         T::create_link(world, intersection_e, entities);
 
         for (e, v) in e_v_map.iter() {

@@ -1003,7 +1003,7 @@ impl<T: Component + Spawn + Clone + Default> Spawner<T> {
     pub fn spawn_command(mut self, commands: &mut Commands) -> Entity {
         let e = self.e.unwrap_or_else(|| commands.spawn_empty().id());
         self.e = Some(e);
-        commands.add(|world: &mut World| {
+        commands.queue(|world: &mut World| {
             self.spawn(world);
         });
         e

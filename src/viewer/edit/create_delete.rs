@@ -17,7 +17,7 @@ use crate::{
         },
     },
 };
-use bevy::{ecs::entity::EntityHashSet, prelude::*, picking::mesh_picking::ray_cast::*};
+use bevy::{ecs::entity::EntityHashSet, prelude::*};
 
 #[derive(SystemSet, Debug, PartialEq, Eq, Hash, Clone)]
 pub struct DeleteSet;
@@ -175,7 +175,7 @@ fn alt_click_create_point(
         let Some(kcl_intersection) = intersections.iter().find(|e| q_kcl.contains(e.0)) else {
             return;
         };
-        kcl_intersection.1.position()
+        kcl_intersection.1.point
     };
 
     ev_create_pt.send(CreatePoint { position: mouse_3d_pos });

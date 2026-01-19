@@ -654,7 +654,7 @@ impl RouteEditRowParam<'_, '_> {
                     return;
                 };
 
-                Single {
+                LinkSelectBtnType::Single {
                     index,
                     visible: all_visible,
                 }
@@ -673,7 +673,7 @@ impl RouteEditRowParam<'_, '_> {
                         indexes.push(None);
                     }
                 }
-                Multi {
+                LinkSelectBtnType::Multi {
                     indexes,
                     visible: all_visible,
                 }
@@ -690,7 +690,7 @@ impl RouteEditRowParam<'_, '_> {
 
         if route_res.view_pressed {
             match route_btn_type {
-                Single { index, visible } => {
+                LinkSelectBtnType::Single { index, visible } => {
                     let Some(path) = path_groups.get(index) else {
                         warn!("Something got fucked because the index of the route isn't found in the path groups");
                         return;

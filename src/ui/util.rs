@@ -189,7 +189,7 @@ pub mod multi_edit {
             ui.available_width()
         };
 
-        let combobox = egui::ComboBox::from_id_source(ui.next_auto_id())
+        let combobox = egui::ComboBox::from_id_salt(ui.next_auto_id())
             .selected_text(selected_text)
             .width(width);
 
@@ -241,7 +241,7 @@ pub fn combobox_enum<T>(ui: &mut Ui, value: &mut T, width: Option<f32>) -> Respo
 where
     T: strum::IntoEnumIterator + Display + PartialEq + Clone,
 {
-    let mut combobox = egui::ComboBox::from_id_source(ui.next_auto_id()).selected_text(value.to_string());
+    let mut combobox = egui::ComboBox::from_id_salt(ui.next_auto_id()).selected_text(value.to_string());
     combobox = if let Some(width) = width {
         combobox.width(width)
     } else {
@@ -265,7 +265,7 @@ pub fn svg_image<'a>(img: impl Into<ImageSource<'a>>, ctx: &Context, size: f32) 
 }
 
 pub fn image_selectable_value<Value: PartialEq>(
-    ui: &mut egui::Ui,
+    ui: &mut egui_dock::egui::Ui,
     current: &mut Value,
     selected: Value,
     img: Image,
@@ -357,7 +357,7 @@ pub fn euler_to_quat_ui(rot: Vec3, res: (Response, Response, Response), transfor
 }
 
 pub fn rotation_edit(
-    ui: &mut egui::Ui,
+    ui: &mut egui_dock::egui::Ui,
     transform: &mut Transform,
     add_contents: impl FnOnce(&mut Ui, &mut Vec3) -> (Response, Response, Response),
 ) -> bool {

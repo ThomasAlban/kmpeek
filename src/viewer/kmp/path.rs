@@ -28,7 +28,7 @@ use bevy::{
     prelude::*,
     utils::{HashMap, HashSet},
 };
-use bevy_mod_outline::{OutlineBundle, OutlineVolume};
+use bevy_mod_outline::{OutlineVolume};
 use derive_new::new;
 use std::marker::PhantomData;
 use std::{any::TypeId, fmt::Debug};
@@ -47,8 +47,8 @@ pub fn path_plugin(app: &mut App) {
             )
                 .after(DeleteSet),
         )
-        .observe(on_add_kmp_path_node)
-        .observe(on_remove_kmp_path_node);
+        .add_observer(on_add_kmp_path_node)
+        .add_observer(on_remove_kmp_path_node);
 }
 
 // represents a link between 2 nodes
@@ -339,16 +339,13 @@ pub fn spawn_path<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mut
         None => world.spawn_empty(),
     };
     entity.insert((
-        PbrBundle {
-            mesh,
-            material,
-            transform: spawner.get_transform(),
-            visibility: if spawner.visible {
-                Visibility::Visible
-            } else {
-                Visibility::Hidden
-            },
-            ..default()
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
+        spawner.get_transform(),
+        if spawner.visible {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
         },
         KmpPathNode::new(spawner.max).with_prev(spawner.prev_nodes.clone().unwrap_or_default()),
         spawner.component.clone(),
@@ -358,14 +355,11 @@ pub fn spawn_path<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mut
         TransformEditOptions::new(true, false),
         GizmoTransformable,
         Normalize::new(200., 30., BVec3::TRUE),
-        OutlineBundle {
-            outline: OutlineVolume {
+            OutlineVolume {
                 visible: false,
                 colour: outline.color,
                 width: outline.width,
-            },
-            ..default()
-        },
+            }
     ));
     entity.id()
 }
@@ -456,14 +450,11 @@ fn spawn_node_link<T: Component + Clone + ToPathType>(
     // spawn a parent component which contains a transform, and stores the entities of the nodes the node links
     let e = world
         .spawn((
-            SpatialBundle {
-                transform: parent_transform,
-                visibility: if visible {
-                    Visibility::Visible
-                } else {
-                    Visibility::Hidden
-                },
-                ..default()
+            parent_transform,
+            if visible {
+                Visibility::Visible
+            } else {
+                Visibility::Hidden
             },
             KmpPathNodeLink {
                 prev_node,
@@ -474,22 +465,16 @@ fn spawn_node_link<T: Component + Clone + ToPathType>(
         // spawn the line and arrow as children of this parent component, which will inherit its transform & visibility
         .with_children(|parent| {
             parent.spawn((
-                PbrBundle {
-                    mesh: meshes.cylinder,
-                    material: line,
-                    transform: line_transform,
-                    ..default()
-                },
+                Mesh3d(meshes.cylinder),
+                MeshMaterial3d(line),
+                line_transform,
                 // KmpSection,
                 Normalize::new(200., 30., BVec3::new(true, false, true)),
                 KmpPathNodeLinkLine,
             ));
             parent.spawn((
-                PbrBundle {
-                    mesh: meshes.frustrum,
-                    material: arrow,
-                    ..default()
-                },
+                Mesh3d(meshes.frustrum),
+                MeshMaterial3d(arrow),
                 // KmpSection,
                 Normalize::new(200., 30., BVec3::TRUE),
             ));
@@ -583,7 +568,7 @@ pub fn update_node_links<T: Component + Clone + ToPathType>(
     // spawn any links in that need to be spawned
     for node_not_linked in nodes_to_be_linked.iter() {
         let (prev_node, next_node) = *node_not_linked;
-        commands.add(move |world: &mut World| {
+        commands.queue(move |world: &mut World| {
             spawn_node_link::<T>(world, prev_node, next_node, true);
         });
     }

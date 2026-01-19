@@ -146,7 +146,7 @@ pub fn get_ray_from_cam(cam: (&Camera, &GlobalTransform), ndc: Vec2) -> Option<R
 
     (!world_near_plane.is_nan() && !world_far_plane.is_nan()).then_some(Ray3d::new(
         world_near_plane,
-        (world_far_plane - world_near_plane).normalize(),
+        Dir3::new_unchecked((world_far_plane - world_near_plane).normalize()),
     ))
 }
 
@@ -208,8 +208,8 @@ pub fn egui_has_primary_context(query: Query<(), (With<EguiContext>, With<Primar
 }
 
 pub fn try_despawn(commands: &mut Commands, entity: Entity) {
-    commands.add(move |world: &mut World| {
-        if let Some(e) = world.get_entity_mut(entity) {
+    commands.queue(move |world: &mut World| {
+        if let Ok(e) = world.get_entity_mut(entity) {
             e.despawn_recursive();
         }
     });

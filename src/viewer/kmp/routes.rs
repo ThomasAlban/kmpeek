@@ -14,12 +14,12 @@ use serde::{Deserialize, Serialize};
 
 pub fn routes_plugin(app: &mut App) {
     app.add_systems(Update, update_routes)
-        .observe(on_add_route_linked_entities)
-        .observe(on_remove_route_linked_entities)
-        .observe(on_add_route_link)
-        .observe(on_remove_route_link)
-        .observe(on_add_route_pt)
-        .observe(on_remove_route_pt);
+        .add_observer(on_add_route_linked_entities)
+        .add_observer(on_remove_route_linked_entities)
+        .add_observer(on_add_route_link)
+        .add_observer(on_remove_route_link)
+        .add_observer(on_add_route_pt)
+        .add_observer(on_remove_route_pt);
 }
 
 #[derive(Component, Default, Clone, Serialize, Deserialize, Debug, Deref, DerefMut)]
@@ -69,10 +69,10 @@ fn on_remove_route_linked_entities(
     let route_linked_es = q_route_linked_es.get(e).unwrap().clone();
     let kmp_path_node = q_kmp_path_node.get(e).unwrap().clone();
 
-    commands.add(move |world: &mut World| {
+    commands.queue(move |world: &mut World| {
         // when we delete, try to move the route start forward to the next in the path
         if let Some(next_e) = kmp_path_node.next_nodes.iter().next().copied() {
-            if world.get_entity(next_e).is_some() && world.get_entity(e).is_some() {
+            if world.get_entity(next_e).is_ok() && world.get_entity(e).is_ok() {
                 route_linked_es.move_route_start(world, e, next_e);
             }
         } else {

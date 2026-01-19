@@ -13,7 +13,6 @@ use crate::{
     },
 };
 use bevy::{ecs::world::Command, prelude::*};
-use bevy::picking::mesh_picking::ray_cast::*;
 
 pub fn link_unlink_plugin(app: &mut App) {
     app.add_systems(
@@ -82,7 +81,7 @@ fn link_points<T: Component + LinkKmpPoint + Default>(
                     continue;
                 }
             }
-            commands.add(move |world: &mut World| {
+            commands.queue(move |world: &mut World| {
                 T::link(world, selected, alt_clicked_pt);
             });
         }
@@ -139,10 +138,10 @@ pub fn unlink_points(
             continue;
         };
         for prev_node_entity in node.prev_nodes.iter().copied() {
-            commands.add(Unlink(prev_node_entity, selected));
+            commands.queue(Unlink(prev_node_entity, selected));
         }
         for next_node_entity in node.next_nodes.iter().copied() {
-            commands.add(Unlink(selected, next_node_entity));
+            commands.queue(Unlink(selected, next_node_entity));
         }
     }
     ev_recalc_paths.send(RecalcPaths::all());

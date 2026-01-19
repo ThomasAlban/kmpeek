@@ -13,7 +13,7 @@ use std::{ffi::OsStr, fs::File};
 pub fn kcl_plugin(app: &mut App) {
     app.add_event::<KclModelUpdated>().add_systems(
         Update,
-        (spawn_model.run_if(on_event::<KclFileSelected>()), update_kcl_model),
+        (spawn_model.run_if(on_event::<KclFileSelected>), update_kcl_model),
     );
 }
 
@@ -108,9 +108,8 @@ pub fn spawn_model(
         let color = settings.kcl_model.color[i];
 
         commands.spawn((
-            PbrBundle {
-                mesh: meshes.add(mesh),
-                material: materials.add(StandardMaterial {
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: color,
                     cull_mode: if settings.kcl_model.backface_culling {
                         Some(Face::Back)
@@ -124,14 +123,12 @@ pub fn spawn_model(
                         AlphaMode::Opaque
                     },
                     ..default()
-                }),
-                visibility: if settings.kcl_model.visible[i] {
+                })),
+                if settings.kcl_model.visible[i] {
                     Visibility::Inherited
                 } else {
                     Visibility::Hidden
                 },
-                ..default()
-            },
             KCLModelSection(i),
         ));
     }
@@ -139,7 +136,7 @@ pub fn spawn_model(
 }
 
 pub fn update_kcl_model(
-    mut q_kcl: Query<(&mut Visibility, &KCLModelSection, &mut Handle<StandardMaterial>), With<KCLModelSection>>,
+    mut q_kcl: Query<(&mut Visibility, &KCLModelSection, &mut MeshMaterial3d<StandardMaterial>), With<KCLModelSection>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     settings: Res<AppSettings>,
     mut ev_kcl_model_updated: EventReader<KclModelUpdated>,

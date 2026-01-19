@@ -9,7 +9,6 @@ use crate::{
     viewer::{camera::Gizmo2dCam, kcl_model::KCLModelSection, kmp::checkpoints::CheckpointHeight},
 };
 use bevy::{prelude::*, utils::HashMap};
-use bevy::picking::mesh_picking::ray_cast::*;
 
 #[derive(Component)]
 pub struct Tweakable(pub SnapTo);
@@ -140,7 +139,7 @@ pub fn tweak_interaction(
         SnapTo::Kcl => {
             let intersections =
                 raycast.cast_ray(cam_ray, &RayCastSettings::default().with_filter(&|e| q_kcl.contains(e)));
-            intersections.first().map(|x| x.1.position())
+            intersections.first().map(|x| x.1.point)
         }
         SnapTo::CheckpointPlane => {
             let dist = cam_ray.intersect_plane(Vec3::Y * checkpoint_height.0, InfinitePlane3d::default());

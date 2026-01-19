@@ -55,14 +55,14 @@ fn update_normalize(
 
         let distance = view.transform_point3(transform_cp.translation).z;
 
-        let Some(pixel_end) = camera.world_to_viewport(
+        let Ok(pixel_end) = camera.world_to_viewport(
             &GlobalTransform::default(),
             Vec3::new(normalize.size_in_world * transform_cp.scale.x, 0.0, distance),
         ) else {
             continue;
         };
 
-        let Some(pixel_root) = camera.world_to_viewport(&GlobalTransform::default(), Vec3::new(0.0, 0.0, distance))
+        let Ok(pixel_root) = camera.world_to_viewport(&GlobalTransform::default(), Vec3::new(0.0, 0.0, distance))
         else {
             continue;
         };

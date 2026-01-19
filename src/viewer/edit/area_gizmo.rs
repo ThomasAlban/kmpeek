@@ -75,14 +75,14 @@ fn draw_area_bounds(mut gizmos: Gizmos, q_areas: Query<(&mut Transform, &mut Are
                 let bottom_pos = transform.translation;
                 // draw the top ellipse
                 gizmos
-                    .ellipse(top_pos, ellipse_rot, ellipse_h_size, gizmo_color)
+                    .ellipse(Isometry3d::new(top_pos, ellipse_rot), ellipse_h_size, gizmo_color)
                     .resolution(segments);
                 // draw the bottom ellipse
                 gizmos
-                    .ellipse(bottom_pos, ellipse_rot, ellipse_h_size, gizmo_color)
+                    .ellipse(Isometry3d::new(bottom_pos, ellipse_rot), ellipse_h_size, gizmo_color)
                     .resolution(segments);
                 // draw the lines going between the top and bottom ellipses
-                ellipse_inner(ellipse_h_size, segments)
+                ellipse_inner(ellipse_h_size, segments as usize)
                     .map(|vec2| ellipse_rot * vec2.extend(0.))
                     .map(|vec3| (vec3 + bottom_pos, vec3 + top_pos))
                     .for_each(|(bottom, top)| gizmos.line(bottom, top, gizmo_color));
@@ -228,7 +228,7 @@ fn draw_area_handles(
                     // send out a ray from the mouse
                     if let Some(mouse_ray) = get_ray_from_cam(cam, mouse_ndc) {
                         // get the ray of the normal to the point we are dragging
-                        let normal_ray = Ray3d::new(pos, normal);
+                        let normal_ray = Ray3d::new(pos, Dir3::new_unchecked(normal));
                         // find the closest points on both the rays to each otther
                         let (_ray_t, normal_t) = ray_to_ray(mouse_ray, normal_ray);
                         // the new pos is the position along the normal ray that is the closest to the mouse ray

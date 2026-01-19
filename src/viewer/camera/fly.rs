@@ -76,17 +76,15 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
     let fly_default = FlySettings::default();
 
     commands.spawn((
-        Camera3dBundle {
-            camera: Camera {
-                // render to the image
-                target: RenderTarget::Image(viewport.handle.clone()),
-                ..default()
-            },
-            transform: Transform::from_translation(fly_default.start_pos).looking_at(Vec3::ZERO, Vec3::Y),
+        Camera {
+            // render to the image
+            target: RenderTarget::Image(viewport.handle.clone()),
             ..default()
         },
+        Transform::from_translation(fly_default.start_pos).looking_at(Vec3::ZERO, Vec3::Y),
         FlyCam,
         GizmoCamera,
+        Msaa::Sample4,
     ));
 }
 
@@ -107,7 +105,7 @@ fn fly_cam_move(
 
     let window = q_window.get_single().unwrap();
     // if we need to be holding the mouse to move but we aren't, return
-    if settings.camera.fly.hold_mouse_to_move && window.cursor.grab_mode == CursorGrabMode::None {
+    if settings.camera.fly.hold_mouse_to_move && window.cursor_options.grab_mode == CursorGrabMode::None {
         return;
     }
 
@@ -172,7 +170,7 @@ fn fly_cam_look(
 
     for ev in ev_mouse_motion.read() {
         let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
-        match window.cursor.grab_mode {
+        match window.cursor_options.grab_mode {
             CursorGrabMode::None => (),
             _ => {
                 // Using smallest of height or width ensures equal vertical and horizontal sensitivity

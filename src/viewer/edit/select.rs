@@ -11,7 +11,6 @@ use crate::viewer::kmp::components::{KmpSelectablePoint, RespawnPoint, RoutePoin
 use crate::viewer::kmp::sections::KmpEditMode;
 use bevy::prelude::*;
 use bevy_mod_outline::*;
-use bevy::picking::mesh_picking::ray_cast::*;
 use transform_gizmo_bevy::GizmoTarget;
 
 #[derive(SystemSet, Debug, PartialEq, Eq, Hash, Clone)]

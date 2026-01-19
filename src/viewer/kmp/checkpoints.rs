@@ -27,7 +27,7 @@ use bevy::{
     prelude::*,
     transform::TransformSystem,
 };
-use bevy_mod_outline::{OutlineBundle, OutlineVolume};
+use bevy_mod_outline::{OutlineVolume};
 use bon::builder;
 
 pub fn checkpoint_plugin(app: &mut App) {
@@ -53,8 +53,8 @@ pub fn checkpoint_plugin(app: &mut App) {
         //         dbg!(q2.iter().len());
         //     },
         // )
-        .observe(on_remove_cp_left)
-        .observe(on_remove_cp_right);
+        .add_observer(on_remove_cp_left)
+        .add_observer(on_remove_cp_right);
 }
 
 #[derive(Component)]
@@ -214,13 +214,10 @@ pub fn checkpoint_spawner(
             TransformEditOptions::new(true, true),
             GizmoTransformable,
             Normalize::new(200., 30., BVec3::TRUE),
-            OutlineBundle {
-                outline: OutlineVolume {
-                    visible: false,
-                    colour: outline.color,
-                    width: outline.width,
-                },
-                ..default()
+            OutlineVolume {
+                visible: false,
+                colour: outline.color,
+                width: outline.width,
             },
             KmpPathNode::default(),
             CheckpointMarker,
@@ -229,13 +226,10 @@ pub fn checkpoint_spawner(
 
     // spawn the left of the checkpoint
     world.entity_mut(left_e).insert((
-        PbrBundle {
-            mesh: sphere_mesh.clone(),
-            material: material.clone(),
-            transform: left_transform,
-            visibility,
-            ..default()
-        },
+        Mesh3d(sphere_mesh.clone()),
+        MeshMaterial3d(material.clone()),
+        left_transform,
+        visibility,
         cp.clone(),
         CheckpointLeft {
             right: right_e,
@@ -249,13 +243,10 @@ pub fn checkpoint_spawner(
 
     // spawn the right of the checkpoint
     world.entity_mut(right_e).insert((
-        PbrBundle {
-            mesh: sphere_mesh,
-            material: material.clone(),
-            transform: right_transform,
-            visibility,
-            ..default()
-        },
+        Mesh3d(sphere_mesh),
+        MeshMaterial3d(material.clone()),
+        right_transform,
+        visibility,
         CheckpointRight {
             left: left_e,
             line: line_e,
@@ -266,13 +257,10 @@ pub fn checkpoint_spawner(
 
     // spawn the line
     world.get_entity_mut(line_e).unwrap().insert((
-        PbrBundle {
-            mesh: cylinder_mesh,
-            material: material.clone(),
-            transform: line_transform,
-            visibility,
-            ..default()
-        },
+        Mesh3d(cylinder_mesh),
+        MeshMaterial3d(material.clone()),
+        line_transform,
+        visibility,
         Normalize::new(200., 30., BVec3::new(true, false, true)),
         CheckpointLine {
             left: left_e,
@@ -289,22 +277,16 @@ pub fn checkpoint_spawner(
         .get_entity_mut(arrow_e)
         .unwrap()
         .insert((
-            SpatialBundle {
-                visibility: Visibility::Visible,
-                transform: arrow_parent_transform,
-                ..default()
-            },
+            Visibility::Visible,
+            arrow_parent_transform,
             CpArrowParent,
             Normalize::new(200., 30., BVec3::TRUE),
         ))
         .with_children(|parent| {
             parent.spawn((
-                PbrBundle {
-                    mesh: cone_mesh,
-                    material,
-                    transform: arrow_child_transform,
-                    ..default()
-                },
+                Mesh3d(cone_mesh),
+                MeshMaterial3d(material),
+                arrow_child_transform,
                 CpArrowChild,
                 NormalizeInheritParent,
             ));
@@ -313,13 +295,10 @@ pub fn checkpoint_spawner(
     // spawn the plane
     let transform = calc_cp_plane_transform(left_pos, right_pos, height);
     world.entity_mut(plane_e).insert((
-        PbrBundle {
-            mesh: plane_mesh,
-            material: material_plane,
+            Mesh3d(plane_mesh),
+            MeshMaterial3d(material_plane),
             transform,
             visibility,
-            ..default()
-        },
         CheckpointPlane {
             left: left_e,
             right: right_e,
@@ -400,7 +379,7 @@ fn set_checkpoint_node_height(
 
 fn update_checkpoint_colors(
     q_cp_left: Query<(Ref<Checkpoint>, &CheckpointLeft, Entity)>,
-    mut q_std_mat: Query<&mut Handle<StandardMaterial>>,
+    mut q_std_mat: Query<&mut MeshMaterial3d<StandardMaterial>>,
     q_children: Query<&Children>,
     materials: Res<CheckpointMaterials>,
 ) {
@@ -422,11 +401,11 @@ fn update_checkpoint_colors(
 
         let arrow = q_children.get(cp_left.arrow).unwrap().first().unwrap();
 
-        *q_std_mat.get_mut(cp_e).unwrap() = point_material.clone();
-        *q_std_mat.get_mut(cp_left.right).unwrap() = point_material.clone();
-        *q_std_mat.get_mut(cp_left.line).unwrap() = point_material.clone();
-        *q_std_mat.get_mut(*arrow).unwrap() = point_material.clone();
-        *q_std_mat.get_mut(cp_left.plane).unwrap() = plane_material;
+        *q_std_mat.get_mut(cp_e).unwrap() = MeshMaterial3d(point_material.clone());
+        *q_std_mat.get_mut(cp_left.right).unwrap() = MeshMaterial3d(point_material.clone());
+        *q_std_mat.get_mut(cp_left.line).unwrap() = MeshMaterial3d(point_material.clone());
+        *q_std_mat.get_mut(*arrow).unwrap() = MeshMaterial3d(point_material.clone());
+        *q_std_mat.get_mut(cp_left.plane).unwrap() = MeshMaterial3d(plane_material);
     }
 }
 

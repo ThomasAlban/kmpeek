@@ -15,19 +15,17 @@ pub struct Gizmo2dCam;
 
 fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
     commands.spawn((
-        Camera2dBundle {
-            camera: Camera {
-                // render to the image
-                target: RenderTarget::Image(viewport.handle.clone()),
-                // render above the main cameras
-                order: 1,
-                // transparent
-                clear_color: ClearColorConfig::None,
-                ..default()
-            },
+        Camera {
+            // render to the image
+            target: RenderTarget::Image(viewport.handle.clone()),
+            // render above the main cameras
+            order: 1,
+            // transparent
+            clear_color: ClearColorConfig::None,
             ..default()
         },
         RenderLayers::layer(1),
         Gizmo2dCam,
+        Msaa::Sample4,
     ));
 }

@@ -80,13 +80,13 @@ fn cursor_grab(
         || (settings.camera.mode == CameraMode::TopDown
             && !mouse_buttons.pressed(settings.camera.top_down.key_bindings.mouse_button))
     {
-        window.cursor.visible = true;
-        window.cursor.grab_mode = CursorGrabMode::None;
+        window.cursor_options.visible = true;
+        window.cursor_options.grab_mode = CursorGrabMode::None;
         return;
     }
     // hide the cursor and lock its position
-    window.cursor.visible = false;
-    window.cursor.grab_mode = CursorGrabMode::Locked;
+    window.cursor_options.visible = false;
+    window.cursor_options.grab_mode = CursorGrabMode::Locked;
 }
 
 fn update_active_camera(

@@ -138,7 +138,7 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
                     near: topdown_default.near,
                     far: topdown_default.far,
                     scale: topdown_default.scale,
-                    ..default()
+                    ..OrthographicProjection::default_3d()
                 });
             }
             if ui.button("Reset Settings").clicked() {
@@ -167,7 +167,7 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
             ui.horizontal(|ui| {
                 ui.label("Mouse Button")
                     .on_hover_text_at_pointer("The mouse button that needs to be pressed to move the camera");
-                egui::ComboBox::from_id_source("Mouse Button")
+                egui::ComboBox::from_id_salt("Mouse Button")
                     .selected_text(format!("{:?}", settings.camera.fly.key_bindings.mouse_button))
                     .width(60.)
                     .show_ui(ui, |ui| {
@@ -208,7 +208,7 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
             ui.horizontal(|ui| {
                 ui.label("Mouse Button")
                     .on_hover_text_at_pointer("The mouse button that needs to be pressed to move the camera");
-                egui::ComboBox::from_id_source("Mouse Button")
+                egui::ComboBox::from_id_salt("Mouse Button")
                     .selected_text(format!("{:?}", settings.camera.orbit.key_bindings.mouse_button))
                     .width(60.)
                     .show_ui(ui, |ui| {
@@ -244,7 +244,7 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
             ui.horizontal(|ui| {
                 ui.label("Mouse Button")
                     .on_hover_text_at_pointer("The mouse button that needs to be pressed to move the camera");
-                egui::ComboBox::from_id_source("Mouse Button")
+                egui::ComboBox::from_id_salt("Mouse Button")
                     .selected_text(format!("{:?}", settings.camera.top_down.key_bindings.mouse_button))
                     .width(60.)
                     .show_ui(ui, |ui| {

@@ -70,21 +70,19 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
     let orbit_default = OrbitSettings::default();
 
     commands.spawn((
-        Camera3dBundle {
-            camera: Camera {
-                // render to the image
-                target: RenderTarget::Image(viewport.handle.clone()),
-                is_active: false,
-                ..default()
-            },
-            transform: Transform::from_translation(orbit_default.start_pos).looking_at(Vec3::ZERO, Vec3::Y),
+        Camera {
+            // render to the image
+            target: RenderTarget::Image(viewport.handle.clone()),
+            is_active: false,
             ..default()
         },
+        Transform::from_translation(orbit_default.start_pos).looking_at(Vec3::ZERO, Vec3::Y),
         OrbitCam {
             radius: OrbitSettings::default().start_pos.length(),
             ..default()
         },
         GizmoCamera,
+        Msaa::Sample4,
     ));
 }
 

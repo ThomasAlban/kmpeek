@@ -63,7 +63,7 @@ pub struct TabViewer<'a>(&'a mut World);
 impl egui_dock::TabViewer for TabViewer<'_> {
     // each tab will be distinguished by an enum which can be converted to a string using strum
     type Tab = Tab;
-    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
+    fn ui(&mut self, ui: &mut egui_dock::egui::Ui, tab: &mut Self::Tab) {
         // we can do different things inside the tab depending on its name
         match tab {
             Tab::Viewport => show_viewport_tab(ui, self.0),
@@ -74,7 +74,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
         };
     }
     // show the title of the tab - the 'Tab' type already stores its title anyway
-    fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
+    fn title(&mut self, tab: &mut Self::Tab) -> egui_dock::egui::WidgetText {
         tab.to_string().into()
     }
 }
