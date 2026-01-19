@@ -65,3 +65,6 @@ codegen-units = 1
 [lints.clippy]
 type_complexity = "allow"
 too_many_arguments = "allow"
+
+[profile.dev.package.objc2]
+debug-assertions = false

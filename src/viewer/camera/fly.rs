@@ -76,6 +76,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
     let fly_default = FlySettings::default();
 
     commands.spawn((
+        Camera3d::default(),
         Camera {
             // render to the image
             target: RenderTarget::Image(viewport.handle.clone()),

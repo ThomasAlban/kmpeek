@@ -59,6 +59,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
     let topdown_default = TopDownSettings::default();
 
     commands.spawn((
+        Camera3d::default(),
         Camera {
             // render to the image
             target: RenderTarget::Image(viewport.handle.clone()),
