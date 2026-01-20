@@ -12,7 +12,7 @@ use crate::{
         },
     },
 };
-use bevy::{ecs::world::Command, prelude::*};
+use bevy::{prelude::*};
 
 pub fn link_unlink_plugin(app: &mut App) {
     app.add_systems(

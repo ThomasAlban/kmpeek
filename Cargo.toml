@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.15", default-features = false, features = [
+bevy = { version = "0.16", default-features = false, features = [
     "bevy_render",
     "bevy_winit",
     "bevy_pbr",
@@ -19,14 +19,14 @@ bevy = { version = "0.15", default-features = false, features = [
     "bevy_gizmos",
 ] }
 
-bevy_egui = "0.31"
-bevy_mod_outline = "0.9"
-bevy_pkv = "0.12"
-transform-gizmo-bevy = "0.5"
-bevy_infinite_grid = "0.14"
+bevy_egui = "0.36"
+bevy_mod_outline = "0.10"
+bevy_pkv = "0.13"
+transform-gizmo-bevy = "0.6"
+bevy_infinite_grid = "0.15"
 
-egui_dock = { version = "0.14", features = ["serde"] }
-egui_extras = { version = "0.29.1", default-features = false, features = [
+egui_dock = { version = "0.18", features = ["serde"] }
+egui_extras = { version = "0.32", default-features = false, features = [
     "all_loaders",
 ] }
 egui_file = "0.19.0"

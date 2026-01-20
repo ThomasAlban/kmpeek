@@ -27,9 +27,9 @@ use crate::{
 };
 use anyhow::{bail, Context};
 use bevy::{
-    ecs::{entity::EntityHashMap, system::SystemState, world::Command},
+    ecs::{entity::EntityHashMap, system::SystemState},
     prelude::*,
-    utils::HashMap,
+    platform::collections::HashMap,
 };
 use derive_new::new;
 use ordering::{ordering_plugin, RefreshOrdering};

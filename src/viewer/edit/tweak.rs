@@ -138,7 +138,7 @@ pub fn tweak_interaction(
     let snap_pos = match tweak_interaction.tweak_type {
         SnapTo::Kcl => {
             let intersections =
-                raycast.cast_ray(cam_ray, &RayCastSettings::default().with_filter(&|e| q_kcl.contains(e)));
+                raycast.cast_ray(cam_ray, &MeshRayCastSettings::default().with_filter(&|e| q_kcl.contains(e)));
             intersections.first().map(|x| x.1.point)
         }
         SnapTo::CheckpointPlane => {

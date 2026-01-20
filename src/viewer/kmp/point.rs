@@ -16,7 +16,7 @@ use crate::{
         normalize::{Normalize, NormalizeInheritParent},
     },
 };
-use bevy::{ecs::world::Command, math::vec3, prelude::*};
+use bevy::{math::vec3, prelude::*};
 use bevy_mod_outline::{OutlineVolume};
 
 pub fn spawn_point_section<T: KmpComponent + Spawn>(world: &mut World, kmp: &KmpFile) -> KmpSectionIdEntityMap<T>

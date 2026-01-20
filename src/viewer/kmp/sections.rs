@@ -1,6 +1,6 @@
 use std::any::TypeId;
 
-use bevy::{ecs::system::Resource, prelude::*};
+use bevy::{ecs::resource::Resource, prelude::*};
 use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 
 use super::{

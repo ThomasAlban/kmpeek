@@ -26,7 +26,7 @@ use bevy::{
         system::{SystemParam, SystemState},
     },
     prelude::*,
-    utils::{HashMap, HashSet},
+    platform::collections::{HashMap, HashSet},
 };
 use bevy_mod_outline::{OutlineVolume};
 use derive_new::new;

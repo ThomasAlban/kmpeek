@@ -10,7 +10,7 @@ use crate::{
         },
     },
 };
-use bevy::{ecs::system::SystemState, prelude::*, utils::HashMap};
+use bevy::{ecs::system::SystemState, prelude::*, platform::collections::HashMap};
 use std::marker::PhantomData;
 
 use super::select::SelectSet;

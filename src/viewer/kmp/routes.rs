@@ -7,7 +7,7 @@ use super::{
 use bevy::{
     ecs::{entity::EntityHashSet, system::SystemParam},
     prelude::*,
-    utils::HashMap,
+    platform::collections::HashMap,
 };
 
 use serde::{Deserialize, Serialize};

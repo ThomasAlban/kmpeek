@@ -156,7 +156,7 @@ pub struct RaycastFromCam<'a, 'w, 's> {
     ndc: Vec2,
     raycast: &'a mut MeshRayCast<'w, 's>,
     #[new(default)]
-    settings: RayCastSettings<'a>,
+    settings: MeshRayCastSettings<'a>,
 }
 impl<'a, 'w, 's> RaycastFromCam<'a, 'w, 's> {
     pub fn filter(mut self, filter: &'a impl Fn(Entity) -> bool) -> Self {
