@@ -6,8 +6,8 @@ use super::{
 };
 use bevy::{
     ecs::{entity::EntityHashSet, system::SystemParam},
-    prelude::*,
     platform::collections::HashMap,
+    prelude::*,
 };
 
 use serde::{Deserialize, Serialize};
@@ -49,7 +49,7 @@ fn on_add_route_linked_entities(
     q_route_link: Query<&RouteLink>,
     mut commands: Commands,
 ) {
-    let e = trigger.entity();
+    let e = trigger.target();
     let route_linked_es = q_route_linked_es.get(e).unwrap();
 
     // make sure that all the entities we are linking to actually have the RouteLink component, if not, add it
@@ -65,7 +65,7 @@ fn on_remove_route_linked_entities(
     q_kmp_path_node: Query<&KmpPathNode>,
     mut commands: Commands,
 ) {
-    let e = trigger.entity();
+    let e = trigger.target();
     let route_linked_es = q_route_linked_es.get(e).unwrap().clone();
     let kmp_path_node = q_kmp_path_node.get(e).unwrap().clone();
 
@@ -92,7 +92,7 @@ fn on_add_route_link(
     q_route_link: Query<&RouteLink>,
     mut q_route_linked_es: Query<&mut RouteLinkedEntities>,
 ) {
-    let e = trigger.entity();
+    let e = trigger.target();
     let linked_e = q_route_link.get(e).unwrap().0;
 
     let mut route_linked_es = q_route_linked_es.get_mut(linked_e).unwrap();
@@ -104,7 +104,7 @@ fn on_remove_route_link(
     q_route_link: Query<&RouteLink>,
     mut q_route_linked_es: Query<&mut RouteLinkedEntities>,
 ) {
-    let e = trigger.entity();
+    let e = trigger.target();
     let linked_e = q_route_link.get(e).unwrap().0;
 
     let mut route_linked_es = q_route_linked_es.get_mut(linked_e).unwrap();
@@ -113,7 +113,7 @@ fn on_remove_route_link(
 }
 
 fn on_add_route_pt(trigger: Trigger<OnAdd, RoutePoint>, q_kmp_path_node: Query<&KmpPathNode>, mut commands: Commands) {
-    let e = trigger.entity();
+    let e = trigger.target();
     let kmp_path_node = q_kmp_path_node.get(e).unwrap();
 
     // if we have started a new route path, add route settings and route linked entities to it because it is the first point
@@ -130,11 +130,11 @@ fn on_remove_route_pt(
 ) {
     // we will have to add 'route settings' and 'route linked entities' components to the next entity,
     // because that entity is now the start of a new route now that we've been deleted
-    let e = trigger.entity();
+    let e = trigger.target();
     // check if there is a next entity because we might be at the end of the route
     if let Some(new_start_e) = q_kmp_path_node.get(e).unwrap().next_nodes.iter().next() {
         commands.entity(*new_start_e).insert(RouteStartBundle::default());
-        ev_recalc_paths.send(RecalcPaths::route());
+        ev_recalc_paths.write(RecalcPaths::route());
     }
 }
 

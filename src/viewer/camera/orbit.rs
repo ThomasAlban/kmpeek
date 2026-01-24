@@ -73,7 +73,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
         Camera3d::default(),
         Camera {
             // render to the image
-            target: RenderTarget::Image(viewport.handle.clone()),
+            target: RenderTarget::Image(viewport.handle.clone().into()),
             is_active: false,
             ..default()
         },
@@ -101,7 +101,7 @@ fn orbit_cam(
         return;
     }
 
-    let window = q_window.get_single().unwrap();
+    let window = q_window.single().unwrap();
 
     let mut pan = Vec2::ZERO;
     let mut rotation_move = Vec2::ZERO;
@@ -138,7 +138,7 @@ fn orbit_cam(
         orbit_button_changed = true;
     }
 
-    let (mut orbit_cam, mut transform, projection) = q_orbit_cam.single_mut();
+    let Ok((mut orbit_cam, mut transform, projection)) = q_orbit_cam.single_mut() else { return };
     let mut transform_cp = *transform;
     let mut orbit_cam_cp = *orbit_cam;
 

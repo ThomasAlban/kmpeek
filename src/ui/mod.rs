@@ -18,7 +18,7 @@ pub mod viewport;
 
 pub fn ui_plugin(app: &mut App) {
     app.add_plugins((
-        EguiPlugin,
+        EguiPlugin::default(),
         ui_state_plugin,
         docktree_plugin,
         update_ui_plugin,

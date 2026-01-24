@@ -79,7 +79,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
         Camera3d::default(),
         Camera {
             // render to the image
-            target: RenderTarget::Image(viewport.handle.clone()),
+            target: RenderTarget::Image(viewport.handle.clone().into()),
             ..default()
         },
         Transform::from_translation(fly_default.start_pos).looking_at(Vec3::ZERO, Vec3::Y),
@@ -104,13 +104,13 @@ fn fly_cam_move(
         return;
     }
 
-    let window = q_window.get_single().unwrap();
+    let window = q_window.single().unwrap();
     // if we need to be holding the mouse to move but we aren't, return
     if settings.camera.fly.hold_mouse_to_move && window.cursor_options.grab_mode == CursorGrabMode::None {
         return;
     }
 
-    let mut transform = q_fly_cam.get_single_mut().unwrap();
+    let mut transform = q_fly_cam.single_mut().unwrap();
 
     let mut velocity = Vec3::ZERO;
     let local_z = transform.local_z();
@@ -122,7 +122,7 @@ fn fly_cam_move(
     if keys.get_pressed().count() > 0 {
         // redraw the window when we're holding a button down (e.g. flying around but not moving the mouse)
         // as otherwise the window doesn't redraw
-        ev_request_redraw.send(RequestRedraw);
+        ev_request_redraw.write(RequestRedraw);
     }
 
     for key in keys.get_pressed() {
@@ -166,8 +166,8 @@ fn fly_cam_look(
         return;
     }
 
-    let window = q_window.get_single().unwrap();
-    let mut transform = q_fly_cam.get_single_mut().unwrap();
+    let window = q_window.single().unwrap();
+    let mut transform = q_fly_cam.single_mut().unwrap();
 
     for ev in ev_mouse_motion.read() {
         let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);

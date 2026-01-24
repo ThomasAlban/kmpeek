@@ -5,6 +5,8 @@ pub mod kmp_file;
 pub mod read_write_arrays;
 pub mod shapes;
 
+use bevy::ecs::change_detection::MaybeLocation;
+use bevy::picking::mesh_picking::ray_cast::*;
 use bevy::{
     ecs::{
         component::Tick,
@@ -19,7 +21,6 @@ use bevy_egui::{
     egui::{self, Pos2},
     EguiContext,
 };
-use bevy::picking::mesh_picking::ray_cast::*;
 use derive_new::new;
 
 // World <-> Ui Viewport
@@ -175,16 +176,28 @@ impl<'a, 'w, 's> RaycastFromCam<'a, 'w, 's> {
 }
 
 /// Just give me a mut, damn it! (I really am at the end of my tether)
+#[track_caller]
 pub fn give_me_a_mut<'a, T: 'a, R>(items: impl IntoIterator<Item = &'a mut T>, f: impl FnOnce(Vec<Mut<T>>) -> R) -> R {
     let mut items: Vec<_> = items.into_iter().collect();
 
     let mut ticks = Vec::with_capacity(items.len());
+    let mut locations = Vec::with_capacity(items.len());
+    
     for _ in 0..items.len() {
-        ticks.push((Tick::default(), Tick::default()))
+        ticks.push((Tick::default(), Tick::default()));
+        locations.push(MaybeLocation::caller());
     }
+    
     let mut items_mut = Vec::with_capacity(items.len());
-    for (item, ticks) in items.iter_mut().zip(ticks.iter_mut()) {
-        let m = Mut::new(*item, &mut ticks.0, &mut ticks.1, Tick::default(), Tick::default());
+    for ((item, ticks), location) in items.iter_mut().zip(ticks.iter_mut()).zip(locations.iter_mut()) {
+        let m = Mut::new(
+            *item,
+            &mut ticks.0,
+            &mut ticks.1,
+            Tick::default(),
+            Tick::default(),
+            location.as_mut(),
+        );
         items_mut.push(m);
     }
     f(items_mut)
@@ -193,7 +206,7 @@ pub fn give_me_a_mut<'a, T: 'a, R>(items: impl IntoIterator<Item = &'a mut T>, f
 pub fn iter_mut_from_entities<'a, R: QueryData>(
     entities: &EntityHashSet,
     q: &'a mut Query<(Entity, R)>,
-) -> Vec<<R as WorldQuery>::Item<'a>> {
+) -> Vec<<R as QueryData>::Item<'a>> {
     let mut items = Vec::new();
     for (e, item) in q.iter_mut() {
         if entities.contains(&e) {
@@ -210,7 +223,7 @@ pub fn egui_has_primary_context(query: Query<(), (With<EguiContext>, With<Primar
 pub fn try_despawn(commands: &mut Commands, entity: Entity) {
     commands.queue(move |world: &mut World| {
         if let Ok(e) = world.get_entity_mut(entity) {
-            e.despawn_recursive();
+            e.despawn();
         }
     });
 }

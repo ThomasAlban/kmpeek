@@ -17,6 +17,7 @@ use crate::{
     },
 };
 use bevy::{ecs::system::SystemState, prelude::*};
+use bevy::ecs::component::Mutable;
 use bevy_egui::egui::{self, emath::Numeric, Checkbox, Direction, DragValue, Layout, Response, Sense, Ui};
 use egui_extras::{Column, TableBuilder, TableRow};
 
@@ -209,7 +210,7 @@ impl ShowKmpTableTrait for BattleFinishPoint {
     fn show_row(_: &mut TableRow, _: &mut Self) {}
 }
 
-fn show_kmp_table<T: Component + PartialEq + Clone + ShowKmpTableTrait>(ui: &mut Ui, world: &mut World) {
+fn show_kmp_table<T: Component<Mutability = Mutable> + PartialEq + Clone + ShowKmpTableTrait>(ui: &mut Ui, world: &mut World) {
     if !world.resource::<KmpEditMode>().in_mode::<T>() {
         return;
     }

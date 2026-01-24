@@ -52,18 +52,18 @@ pub fn check_cmd_args(
                 // if the file is a kmp file
                 if file_ext == "kmp" {
                     // open it
-                    ev_kmp_file_selected.send(KmpFileSelected(path.into()));
+                    ev_kmp_file_selected.write(KmpFileSelected(path.into()));
                     // if there is a course.kcl in the same directory and the setting to open it is set, open the kcl as well
                     if settings.open_course_kcl_in_dir {
                         let mut course_kcl_path = path.to_owned();
                         course_kcl_path.set_file_name("course.kcl");
                         if course_kcl_path.exists() {
-                            ev_kcl_file_selected.send(KclFileSelected(course_kcl_path));
+                            ev_kcl_file_selected.write(KclFileSelected(course_kcl_path));
                         }
                     }
                 // else if the file is a kcl file, open it
                 } else if file_ext == "kcl" {
-                    ev_kcl_file_selected.send(KclFileSelected(path.into()));
+                    ev_kcl_file_selected.write(KclFileSelected(path.into()));
                 }
             }
         }

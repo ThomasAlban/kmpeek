@@ -119,7 +119,7 @@ fn draw_area_handles(
         vec3(0., 0., 0.5),
     ];
 
-    let Ok(window) = q_window.get_single() else { return };
+    let Ok(window) = q_window.single() else { return };
 
     // get the active camera
     let cam = q_cam.iter().find(|cam| cam.0.is_active).unwrap();
@@ -267,7 +267,7 @@ fn draw_area_handles(
 
         // actually render the 5 handles
         painter.color = css::RED.into();
-        let gizmo_cam = q_gizmo_cam.single();
+        let gizmo_cam = q_gizmo_cam.single().unwrap();
         for i in 0..5 {
             if is_topdown && i == 2 {
                 // skip top handle when viewing from topdown

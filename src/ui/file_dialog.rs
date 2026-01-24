@@ -58,7 +58,7 @@ pub fn show_file_dialog(world: &mut World) {
 //         if let Some((dialog, dialog_type)) = &mut self.file_dialog.0 {
 //             if dialog.show(ctx).selected() {
 //                 if let Some(path) = dialog.path() {
-//                     self.ev_file_dialog_result.send(FileDialogResult {
+//                     self.ev_file_dialog_result.write(FileDialogResult {
 //                         path: path.into(),
 //                         dialog_type: *dialog_type,
 //                     });

@@ -62,16 +62,16 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
         Camera3d::default(),
         Camera {
             // render to the image
-            target: RenderTarget::Image(viewport.handle.clone()),
+            target: RenderTarget::Image(viewport.handle.clone().into()),
             is_active: false,
             ..default()
         },
-        OrthographicProjection {
+        Projection::Orthographic(OrthographicProjection {
             near: topdown_default.near,
             far: topdown_default.far,
             scale: topdown_default.scale,
             ..OrthographicProjection::default_3d()
-        },
+        }),
         Transform::from_translation(topdown_default.start_pos).looking_at(Vec3::ZERO, Vec3::Z),
         TopDownCam,
         GizmoCamera,
@@ -92,7 +92,7 @@ fn topdown_cam(
         return;
     }
 
-    let window = q_window.get_single().unwrap();
+    let window = q_window.single().unwrap();
 
     let mut pan = Vec2::ZERO;
     let mut scroll = 0.;
@@ -108,7 +108,7 @@ fn topdown_cam(
 
     let window_size = Vec2::new(window.width(), window.height());
 
-    let (mut transform, mut projection) = q_topdown_cam.single_mut();
+    let Ok((mut transform, mut projection)) = q_topdown_cam.single_mut() else { return; };
     let mut transform_cp = *transform;
 
     if let Projection::Orthographic(projection) = &*projection {

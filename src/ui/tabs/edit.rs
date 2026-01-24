@@ -447,7 +447,7 @@ fn edit_component<D: QueryData + 'static, P: SystemParam + 'static>(
     ui: &mut Ui,
     world: &mut World,
     title: &'static str,
-    add_body: impl FnOnce(&mut Ui, &mut [<D as WorldQuery>::Item<'_>], <P as SystemParam>::Item<'_, '_>),
+    add_body: impl FnOnce(&mut Ui, &mut [<D as QueryData>::Item<'_>], <P as SystemParam>::Item<'_, '_>),
 ) {
     let mut system_state = SystemState::<(Query<D, With<Selected>>, P)>::new(world);
     {
@@ -515,7 +515,7 @@ impl<T: Component + ToPathType> PathStartBtn<'_, '_, T> {
                     PathType::Checkpoint { .. } => RecalcPaths::cp(),
                     PathType::Route => RecalcPaths::route(),
                 };
-                self.ev_recalc_paths.send(ev);
+                self.ev_recalc_paths.write(ev);
             }
         });
     }

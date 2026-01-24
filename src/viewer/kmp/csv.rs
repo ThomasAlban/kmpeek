@@ -66,7 +66,7 @@
 //                     return;
 //                 };
 //                 for (entity, _, _, _) in q.iter() {
-//                     commands.entity(entity).despawn_recursive();
+//                     commands.entity(entity).despawn();
 //                 }
 //                 commands.add(move |world: &mut World| {
 //                     let mut records = Vec::new();

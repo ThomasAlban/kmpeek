@@ -12,11 +12,11 @@ use crate::{
     },
 };
 use bevy::{ecs::system::SystemState, math::vec2, prelude::*, render::render_resource::Extent3d};
-use bevy_egui::egui::{self, show_tooltip_at_pointer, Color32, Margin, Response, Rounding, Sense, Stroke, Ui};
+use bevy_egui::egui::{self, Color32, Margin, Response, Rounding, Sense, Stroke, StrokeKind, Ui, show_tooltip_at_pointer};
 use transform_gizmo_bevy::{config::TransformPivotPoint, GizmoOptions, GizmoOrientation};
 
 pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
-    let window = world.query::<&Window>().get_single(world).unwrap();
+    let window = world.query::<&Window>().single(world).unwrap();
 
     let window_sf = window.scale_factor();
 
@@ -93,6 +93,7 @@ fn show_select_box(ui: &mut Ui, world: &mut World) {
                     width: 1.,
                     color: Color32::GRAY,
                 },
+                StrokeKind::Inside,
             );
         }
     });
@@ -113,7 +114,7 @@ fn show_overlayed_ui(ui: &mut Ui, world: &mut World) -> Vec<Response> {
     ui.allocate_ui_at_rect(vp_rect, |ui| {
         ui.style_mut().spacing.item_spacing = egui::Vec2::splat(5.);
 
-        egui::Frame::none().inner_margin(Margin::same(5.)).show(ui, |ui| {
+        egui::Frame::none().inner_margin(Margin::same(5)).show(ui, |ui| {
             // popups for things such as gizmo options, camera options, etc
             ui.horizontal(|ui| {
                 let gizmo_options_btn = ui.button("Gizmo Options");

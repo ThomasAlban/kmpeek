@@ -137,7 +137,7 @@ fn on_remove_cp_left(
     q_cp_left: Query<&CheckpointLeft>,
     mut commands: Commands,
 ) {
-    let cp_left = q_cp_left.get(trigger.entity()).unwrap();
+    let cp_left = q_cp_left.get(trigger.target()).unwrap();
     let cp_right = cp_left.right;
 
     try_despawn(&mut commands, cp_right);
@@ -151,7 +151,7 @@ fn on_remove_cp_right(
     q_cp_right: Query<&CheckpointRight>,
     mut commands: Commands,
 ) {
-    let cp_right = q_cp_right.get(trigger.entity()).unwrap();
+    let cp_right = q_cp_right.get(trigger.target()).unwrap();
     let cp_left = cp_right.left;
 
     try_despawn(&mut commands, cp_left);

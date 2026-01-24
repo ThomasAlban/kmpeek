@@ -76,7 +76,7 @@ fn create_point<T: Component + Spawn + Default + Clone>(
     // we can't add it now, because then in the select system it will just be deselected again
     // the select system has to run after this so that we know which previous points we have to link to this one
     // if it ran after, everything would already be deselected by the time we create the point
-    ev_just_created_point.send(JustCreatedPoint(entity));
+    ev_just_created_point.write(JustCreatedPoint(entity));
 }
 
 fn create_path<T: Component + Spawn + Default + Clone + MaxConnectedPath>(
@@ -107,7 +107,7 @@ fn create_path<T: Component + Spawn + Default + Clone + MaxConnectedPath>(
         return;
     }
 
-    ev_recalc_paths.send_default();
+    ev_recalc_paths.write_default();
     let entity = Spawner::<T>::builder()
         .pos(pos)
         .prev_nodes(prev_nodes)
@@ -119,7 +119,7 @@ fn create_path<T: Component + Spawn + Default + Clone + MaxConnectedPath>(
     //     .prev_nodes(prev_nodes)
     //     .max_connected(T::MAX_CONNECTED)
     //     .spawn_command(&mut commands);
-    ev_just_created_point.send(JustCreatedPoint(entity));
+    ev_just_created_point.write(JustCreatedPoint(entity));
 }
 
 // this detects whether we have alt clicked, and if we have, sends an event to the above function to actually
@@ -148,7 +148,7 @@ fn alt_click_create_point(
         return;
     }
 
-    let Some(mouse_pos) = q_window.get_single().ok().and_then(|x| x.cursor_position()) else {
+    let Some(mouse_pos) = q_window.single().ok().and_then(|x| x.cursor_position()) else {
         return;
     };
 
@@ -178,7 +178,7 @@ fn alt_click_create_point(
         kcl_intersection.1.point
     };
 
-    ev_create_pt.send(CreatePoint { position: mouse_3d_pos });
+    ev_create_pt.write(CreatePoint { position: mouse_3d_pos });
 }
 
 fn delete_point(
@@ -198,5 +198,5 @@ fn delete_point(
     for e in q_selected.iter_mut() {
         try_despawn(&mut commands, e);
     }
-    ev_refresh_ordering.send_default();
+    ev_refresh_ordering.write_default();
 }

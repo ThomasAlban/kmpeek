@@ -1,0 +1,166 @@
+    Checking kmpeek v0.1.0 (C:\Users\lenovo\Documents\GitHub\kmpeek)
+warning: unused import: `WorldQuery`
+  --> src\ui\tabs\edit.rs:27:28
+   |
+27 |         query::{QueryData, WorldQuery},
+   |                            ^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `bevy_egui::egui`
+ --> src\ui\tabs\mod.rs:9:5
+  |
+9 | use bevy_egui::egui;
+  |     ^^^^^^^^^^^^^^^
+
+warning: unused import: `WorldQuery`
+  --> src\util\mod.rs:14:28
+   |
+14 |         query::{QueryData, WorldQuery},
+   |                            ^^^^^^^^^^
+
+warning: unused import: `CameraRenderGraph`
+ --> src\viewer\camera\gizmo_2d.rs:3:23
+  |
+3 |     render::{camera::{CameraRenderGraph, RenderTarget}, view::RenderLayers},
+  |                       ^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated function `bevy_egui::egui::menu::bar`: Use `egui::MenuBar::new().ui(` instead
+  --> src\ui\menu_bar.rs:18:21
+   |
+18 |         egui::menu::bar(ui, |ui| {
+   |                     ^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated type alias `bevy_egui::egui::Rounding`: Renamed to CornerRadius
+  --> src\ui\tabs\viewport.rs:15:56
+   |
+15 | use bevy_egui::egui::{self, Color32, Margin, Response, Rounding, Sense, Stroke, StrokeKind, Ui, show_tooltip_at_pointer};
+   |                                                        ^^^^^^^^
+
+warning: use of deprecated function `bevy_egui::egui::show_tooltip_at_pointer`: Use `egui::Tooltip` instead
+  --> src\ui\tabs\viewport.rs:15:97
+   |
+15 | use bevy_egui::egui::{self, Color32, Margin, Response, Rounding, Sense, Stroke, StrokeKind, Ui, show_tooltip_at_pointer};
+   |                                                                                                 ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated function `bevy_egui::egui::show_tooltip_at_pointer`: Use `egui::Tooltip` instead
+  --> src\ui\tabs\viewport.rs:71:9
+   |
+71 |         show_tooltip_at_pointer(ui.ctx(), ui.layer_id(), ui.next_auto_id(), |ui| {
+   |         ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated function `bevy_egui::egui::show_tooltip_at_pointer`: Use `egui::Tooltip` instead
+  --> src\ui\tabs\viewport.rs:75:9
+   |
+75 |         show_tooltip_at_pointer(ui.ctx(), ui.layer_id(), ui.next_auto_id(), |ui| {
+   |         ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated type alias `bevy_egui::egui::Rounding`: Renamed to CornerRadius
+  --> src\ui\tabs\viewport.rs:90:17
+   |
+90 |                 Rounding::from(2.),
+   |                 ^^^^^^^^
+
+warning: use of deprecated constant `bevy::prelude::apply_deferred`: Use `ApplyDeferred` instead. This was previously a function but is now a marker struct System.
+  --> src\ui\viewport.rs:15:26
+   |
+15 |         (setup_viewport, apply_deferred).chain().in_set(SetupViewportSet),
+   |                          ^^^^^^^^^^^^^^
+
+warning: use of deprecated method `bevy_egui::egui::Ui::close_menu`: Use `ui.close()` or `ui.close_kind(UiKind::Menu)` instead
+  --> src\ui\menu_bar.rs:33:24
+   |
+33 |                     ui.close_menu();
+   |                        ^^^^^^^^^^
+
+warning: use of deprecated method `bevy_egui::egui::Ui::close_menu`: Use `ui.close()` or `ui.close_kind(UiKind::Menu)` instead
+  --> src\ui\menu_bar.rs:44:24
+   |
+44 |                     ui.close_menu();
+   |                        ^^^^^^^^^^
+
+warning: use of deprecated method `bevy_egui::egui::Ui::close_menu`: Use `ui.close()` or `ui.close_kind(UiKind::Menu)` instead
+  --> src\ui\menu_bar.rs:51:24
+   |
+51 |                     ui.close_menu();
+   |                        ^^^^^^^^^^
+
+warning: use of deprecated method `bevy_egui::egui::Ui::close_menu`: Use `ui.close()` or `ui.close_kind(UiKind::Menu)` instead
+  --> src\ui\menu_bar.rs:74:24
+   |
+74 |                     ui.close_menu();
+   |                        ^^^^^^^^^^
+
+warning: use of deprecated method `bevy_egui::egui::Ui::close_menu`: Use `ui.close()` or `ui.close_kind(UiKind::Menu)` instead
+  --> src\ui\menu_bar.rs:78:24
+   |
+78 |                     ui.close_menu();
+   |                        ^^^^^^^^^^
+
+warning: use of deprecated method `bevy_egui::egui::Ui::allocate_ui_at_rect`: Use `allocate_new_ui` instead
+  --> src\ui\tabs\viewport.rs:48:8
+   |
+48 |     ui.allocate_ui_at_rect(egui_viewport_rect, |ui| {
+   |        ^^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated method `bevy_egui::egui::Ui::allocate_ui_at_rect`: Use `allocate_new_ui` instead
+  --> src\ui\tabs\viewport.rs:83:8
+   |
+83 |     ui.allocate_ui_at_rect(vp_rect, |ui| {
+   |        ^^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated method `bevy_egui::egui::Ui::allocate_ui_at_rect`: Use `allocate_new_ui` instead
+   --> src\ui\tabs\viewport.rs:114:8
+    |
+114 |     ui.allocate_ui_at_rect(vp_rect, |ui| {
+    |        ^^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `bevy_egui::egui::Frame::none`: Use `Frame::NONE` or `Frame::new()` instead.
+   --> src\ui\tabs\viewport.rs:117:22
+    |
+117 |         egui::Frame::none().inner_margin(Margin::same(5)).show(ui, |ui| {
+    |                      ^^^^
+
+warning: use of deprecated method `bevy_egui::egui::Memory::toggle_popup`: Use Popup::toggle_id instead
+   --> src\ui\util.rs:392:33
+    |
+392 |         ui.memory_mut(|mem| mem.toggle_popup(popup_id));
+    |                                 ^^^^^^^^^^^^
+
+warning: use of deprecated method `bevy_egui::egui::Memory::is_popup_open`: Use Popup::is_id_open instead
+   --> src\ui\util.rs:396:28
+    |
+396 |     if ui.memory(|mem| mem.is_popup_open(popup_id)) {
+    |                            ^^^^^^^^^^^^^
+
+warning: use of deprecated method `bevy_egui::egui::Memory::close_popup`: Use Popup::close_id instead
+   --> src\ui\util.rs:423:37
+    |
+423 |             ui.memory_mut(|mem| mem.close_popup(popup_id));
+    |                                     ^^^^^^^^^^^
+
+warning: use of deprecated method `bevy_egui::egui::style::WidgetVisuals::rounding`: Renamed to corner_radius
+   --> src\ui\util.rs:469:42
+    |
+469 |         .rect_filled(bg_rect, bg_visuals.rounding(), bg_visuals.weak_bg_fill);
+    |                                          ^^^^^^^^
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> src\viewer\kmp\checkpoints.rs:457:16
+    |
+457 |     pub fn get(&mut self) -> EntityHashMap<Mut<Checkpoint>> {
+    |                ^^^^^^^^^                   --------------- the same lifetime is hidden here
+    |                |
+    |                the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+457 |     pub fn get(&mut self) -> EntityHashMap<Mut<'_, Checkpoint>> {
+    |                                                +++
+
+warning: `kmpeek` (bin "kmpeek") generated 25 warnings (run `cargo fix --bin "kmpeek"` to apply 4 suggestions)
+    Finished `dev` profile [optimized + debuginfo] target(s) in 14.76s

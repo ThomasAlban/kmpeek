@@ -18,7 +18,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
         Camera2d::default(),
         Camera {
             // render to the image
-            target: RenderTarget::Image(viewport.handle.clone()),
+            target: RenderTarget::Image(viewport.handle.clone().into()),
             // render above the main cameras
             order: 1,
             // transparent

@@ -25,10 +25,10 @@ use bevy::{
         entity::EntityHashMap,
         system::{SystemParam, SystemState},
     },
-    prelude::*,
     platform::collections::{HashMap, HashSet},
+    prelude::*,
 };
-use bevy_mod_outline::{OutlineVolume};
+use bevy_mod_outline::OutlineVolume;
 use derive_new::new;
 use std::marker::PhantomData;
 use std::{any::TypeId, fmt::Debug};
@@ -209,7 +209,7 @@ impl KmpPathNode {
 
 fn on_add_kmp_path_node(trigger: Trigger<OnAdd, KmpPathNode>, mut q_kmp_path_node: Query<&mut KmpPathNode>) {
     // on adding this component, ensure that the next/prev nodes also all hold references to the current node
-    let e = trigger.entity();
+    let e = trigger.target();
 
     let cur_node = q_kmp_path_node.get(e).unwrap();
 
@@ -234,7 +234,7 @@ fn on_remove_kmp_path_node(
     q_is_item_path_pt: Query<(), With<ItemPathPoint>>,
     q_is_checkpoint: Query<(), With<Checkpoint>>,
 ) {
-    let e = trigger.entity();
+    let e = trigger.target();
 
     let cur_node = q_kmp_path_node.get(e).unwrap();
     let next_nodes = cur_node.get_next();
@@ -249,12 +249,12 @@ fn on_remove_kmp_path_node(
         prev_node.next_nodes.remove(&e);
     }
     if q_is_enemy_path_pt.get(e).is_ok() {
-        ev_recalc_paths.send(RecalcPaths::enemy());
+        ev_recalc_paths.write(RecalcPaths::enemy());
     } else if q_is_item_path_pt.get(e).is_ok() {
-        ev_recalc_paths.send(RecalcPaths::item());
+        ev_recalc_paths.write(RecalcPaths::item());
     } else if q_is_checkpoint.get(e).is_ok() {
         // don't need to check for cp right as we'll be despawning that one anyway in the same swoop
-        ev_recalc_paths.send(RecalcPaths::cp());
+        ev_recalc_paths.write(RecalcPaths::cp());
     }
 }
 
@@ -355,11 +355,11 @@ pub fn spawn_path<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mut
         TransformEditOptions::new(true, false),
         GizmoTransformable,
         Normalize::new(200., 30., BVec3::TRUE),
-            OutlineVolume {
-                visible: false,
-                colour: outline.color,
-                width: outline.width,
-            }
+        OutlineVolume {
+            visible: false,
+            colour: outline.color,
+            width: outline.width,
+        },
     ));
     entity.id()
 }
@@ -560,8 +560,8 @@ pub fn update_node_links<T: Component + Clone + ToPathType>(
         *parent_transform = new_parent_transform;
 
         // find the child of the kmp node link that has KmpNodeLinkLine, and set its transform
-        if let Some(child) = children.iter().find(|x| q_line.get(**x).is_ok()) {
-            let mut line_transform = q_transform.get_mut(*child).unwrap();
+        if let Some(child) = children.iter().find(|x| q_line.get(*x).is_ok()) {
+            let mut line_transform = q_transform.get_mut(child).unwrap();
             *line_transform = new_line_transform;
         }
     }
@@ -662,7 +662,7 @@ impl<'w, 's, T: Component> TraversePath<'w, 's, T> {
         }
         let first = self
             .q_start
-            .get_single()
+            .single()
             .ok()
             .and_then(|x| nodes_to_handle.remove(&x).map(|y| (x, y)));
 

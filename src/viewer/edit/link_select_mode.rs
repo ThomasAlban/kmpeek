@@ -10,7 +10,7 @@ use crate::{
         },
     },
 };
-use bevy::{ecs::system::SystemState, prelude::*, platform::collections::HashMap};
+use bevy::{ecs::system::SystemState, platform::collections::HashMap, prelude::*};
 use std::marker::PhantomData;
 
 use super::select::SelectSet;
@@ -110,7 +110,7 @@ fn update_link_selection_mode<T: Component + CreateLink>(
 
     commands.remove_resource::<LinkSelectMode<T>>();
 
-    let Some(mouse_pos) = q_window.get_single().ok().and_then(|x| x.cursor_position()) else {
+    let Some(mouse_pos) = q_window.single().ok().and_then(|x| x.cursor_position()) else {
         reset_visibilities();
         return;
     };

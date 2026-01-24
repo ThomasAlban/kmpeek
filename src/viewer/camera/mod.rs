@@ -59,6 +59,7 @@ fn add_ambient_light(mut commands: Commands) {
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
         brightness: 1000.,
+        affects_lightmapped_meshes: true,
     });
 }
 
@@ -71,7 +72,7 @@ fn cursor_grab(
     if !viewport_info.mouse_in_viewport {
         return;
     }
-    let mut window = q_window.get_single_mut().unwrap();
+    let mut window = q_window.single_mut().unwrap();
 
     if (settings.camera.mode == CameraMode::Fly
         && !mouse_buttons.pressed(settings.camera.fly.key_bindings.mouse_button))
@@ -96,9 +97,9 @@ fn update_active_camera(
     mut ev_camera_mode_changed: EventReader<CameraModeChanged>,
 ) {
     for ev in ev_camera_mode_changed.read() {
-        let mut fly_cam = q_fly_cam.get_single_mut().unwrap();
-        let mut orbit_cam = q_orbit_cam.get_single_mut().unwrap();
-        let mut topdown_cam = q_topdown_cam.get_single_mut().unwrap();
+        let mut fly_cam = q_fly_cam.single_mut().unwrap();
+        let mut orbit_cam = q_orbit_cam.single_mut().unwrap();
+        let mut topdown_cam = q_topdown_cam.single_mut().unwrap();
 
         match ev.0 {
             CameraMode::Fly => {

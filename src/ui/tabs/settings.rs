@@ -31,9 +31,9 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
         mut ev_kcl_model_updated,
     ) = ss.get_mut(world);
 
-    let mut fly_cam = q_fly_cam.single_mut();
-    let mut orbit_cam = q_orbit_cam.single_mut();
-    let mut topdown_cam = q_topdown_cam.single_mut();
+    let mut fly_cam = q_fly_cam.single_mut().unwrap();
+    let mut orbit_cam = q_orbit_cam.single_mut().unwrap();
+    let mut topdown_cam = q_topdown_cam.single_mut().unwrap();
 
     egui::CollapsingHeader::new("KMP Viewer")
         .default_open(true)
@@ -121,7 +121,7 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
                 }
             });
             if settings.kcl_model != kcl_model_settings_before {
-                ev_kcl_model_updated.send_default();
+                ev_kcl_model_updated.write_default();
             }
         });
 

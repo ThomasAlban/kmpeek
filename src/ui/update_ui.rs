@@ -22,7 +22,7 @@ pub struct KmpFileSelected(pub PathBuf);
 pub struct KclFileSelected(pub PathBuf);
 
 fn setup_ui_images(mut contexts: EguiContexts) {
-    egui_extras::install_image_loaders(contexts.ctx_mut());
+    egui_extras::install_image_loaders(contexts.ctx_mut().unwrap());
 }
 
 fn update_ui(world: &mut World) {

@@ -12,6 +12,7 @@ pub mod settings;
 use self::{
     checkpoints::{checkpoint_plugin, spawn_checkpoint_section},
     components::*,
+    components::Spawn,
     meshes_materials::setup_kmp_meshes_materials,
     path::{spawn_enemy_item_path_section, RecalcPaths},
     point::{spawn_point_section, AddRespawnPointPreview},
@@ -28,8 +29,8 @@ use crate::{
 use anyhow::{bail, Context};
 use bevy::{
     ecs::{entity::EntityHashMap, system::SystemState},
-    prelude::*,
     platform::collections::HashMap,
+    prelude::*,
 };
 use derive_new::new;
 use ordering::{ordering_plugin, RefreshOrdering};
@@ -79,16 +80,16 @@ pub fn open_kmp_kcl(
         if let DialogType::OpenKmpKcl = dialog_type {
             if let Some(file_ext) = path.extension() {
                 if file_ext == "kmp" {
-                    ev_kmp_file_selected.send(KmpFileSelected(path.into()));
+                    ev_kmp_file_selected.write(KmpFileSelected(path.into()));
                     if settings.open_course_kcl_in_dir {
                         let mut course_kcl_path = path.to_owned();
                         course_kcl_path.set_file_name("course.kcl");
                         if course_kcl_path.exists() {
-                            ev_kcl_file_selected.send(KclFileSelected(course_kcl_path));
+                            ev_kcl_file_selected.write(KclFileSelected(course_kcl_path));
                         }
                     }
                 } else if file_ext == "kcl" {
-                    ev_kcl_file_selected.send(KclFileSelected(path.into()));
+                    ev_kcl_file_selected.write(KclFileSelected(path.into()));
                 }
             }
         }
@@ -133,7 +134,7 @@ pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
         .iter(world)
         .collect();
     for e in entities {
-        world.entity_mut(e).despawn_recursive();
+        world.entity_mut(e).despawn();
     }
     world.remove_resource::<EntityPathGroups<EnemyPathPoint>>();
     world.remove_resource::<EntityPathGroups<ItemPathPoint>>();
@@ -301,7 +302,7 @@ fn update_visible_on_mode_change<T: Component>(
     if !mode.is_changed() {
         return;
     }
-    ev_set_sect_visibility.send(SetSectionVisibility::new(mode.in_mode::<T>()));
+    ev_set_sect_visibility.write(SetSectionVisibility::new(mode.in_mode::<T>()));
 }
 
 /// Utility function for calculating the transform a cylinder should have in order to join 2 points

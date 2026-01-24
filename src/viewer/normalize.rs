@@ -34,7 +34,7 @@ fn update_normalize(
     settings: Res<AppSettings>,
     q_window: Query<&Window>,
 ) {
-    let Ok(window) = q_window.get_single() else { return };
+    let Ok(window) = q_window.single() else { return };
 
     let (camera_position, camera) = {
         let q_cam = p.p0();
@@ -90,7 +90,7 @@ fn update_normalize(
         gt.set_if_neq(transform_cp.into());
 
         let Some(children) = children else { continue };
-        let children: Vec<_> = children.iter().copied().collect();
+        let children: Vec<Entity> = children.to_vec();
         children_to_deal_with.push((*gt, children));
     }
 

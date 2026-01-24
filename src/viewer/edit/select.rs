@@ -58,7 +58,7 @@ fn select(
         return;
     }
 
-    let Some(mouse_pos) = q_window.get_single().ok().and_then(|x| x.cursor_position()) else {
+    let Some(mouse_pos) = q_window.single().ok().and_then(|x| x.cursor_position()) else {
         return;
     };
 
@@ -158,7 +158,7 @@ fn select_box(
         return;
     }
 
-    let Ok(window) = q_window.get_single() else { return };
+    let Ok(window) = q_window.single() else { return };
     let Some(mouse_pos) = window.cursor_position() else {
         return;
     };

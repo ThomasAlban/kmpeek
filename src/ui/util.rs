@@ -14,7 +14,7 @@ use std::{fmt::Display, hash::Hash};
 pub fn get_egui_ctx(world: &mut World) -> Context {
     let mut system_state = SystemState::<Query<&mut EguiContext, With<PrimaryWindow>>>::new(world);
     let mut q = system_state.get_mut(world);
-    q.single_mut().get_mut().clone()
+    q.single_mut().unwrap().get_mut().clone()
 }
 
 #[derive(Clone, Copy)]
@@ -420,7 +420,7 @@ pub fn button_triggered_popup<R>(
         let clicked_elsewhere = r.clicked_elsewhere() && btn.clicked_elsewhere();
 
         if ui.input(|i| i.key_pressed(egui::Key::Escape)) || clicked_elsewhere {
-            ui.memory_mut(|mem| mem.close_popup());
+            ui.memory_mut(|mem| mem.close_popup(popup_id));
         }
     }
     res
@@ -466,7 +466,7 @@ pub fn link_select_btn(
 
     // paint the background
     ui.painter()
-        .rect_filled(bg_rect, bg_visuals.rounding, bg_visuals.weak_bg_fill);
+        .rect_filled(bg_rect, bg_visuals.rounding(), bg_visuals.weak_bg_fill);
 
     let mut next_icon_hb_rect = Rect::from_min_size(
         bg_rect.right_top() - vec2(ui.spacing().button_padding.x + icon_hb_size.x, 0.),

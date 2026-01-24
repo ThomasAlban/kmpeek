@@ -12,7 +12,7 @@ use crate::{
         },
     },
 };
-use bevy::{prelude::*};
+use bevy::prelude::*;
 
 pub fn link_unlink_plugin(app: &mut App) {
     app.add_systems(
@@ -47,7 +47,7 @@ pub fn get_pt_to_link(
     if q_selected.is_empty() {
         return None;
     }
-    let mouse_pos = q_window.get_single().ok()?.cursor_position()?;
+    let mouse_pos = q_window.single().ok()?.cursor_position()?;
 
     let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
     let ndc_mouse_pos = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
@@ -85,7 +85,7 @@ fn link_points<T: Component + LinkKmpPoint + Default>(
                 T::link(world, selected, alt_clicked_pt);
             });
         }
-        ev_recalc_paths.send(RecalcPaths::all());
+        ev_recalc_paths.write(RecalcPaths::all());
     }
 }
 
@@ -144,5 +144,5 @@ pub fn unlink_points(
             commands.queue(Unlink(selected, next_node_entity));
         }
     }
-    ev_recalc_paths.send(RecalcPaths::all());
+    ev_recalc_paths.write(RecalcPaths::all());
 }
