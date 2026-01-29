@@ -259,8 +259,7 @@ where
 pub fn svg_image<'a>(img: impl Into<ImageSource<'a>>, ctx: &Context, size: f32) -> Image<'a> {
     let img = egui::Image::new(img);
     // scale up the svg image by the window scale factor so it doesn't look blurry on lower resolution screens
-    img.load_for_size(ctx, egui::Vec2::splat(size) * ctx.pixels_per_point())
-        .unwrap();
+    img.load_for_size(ctx, egui::Vec2::splat(size) * ctx.pixels_per_point()).unwrap();
     img
 }
 

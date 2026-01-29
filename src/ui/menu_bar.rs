@@ -15,7 +15,7 @@ pub fn show_menu_bar(world: &mut World) {
     let ctx = &get_egui_ctx(world);
 
     egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-        egui::menu::bar(ui, |ui| {
+        egui::MenuBar::new().ui(ui, |ui| {
             let mut sc_btn = "Ctrl";
             if cfg!(target_os = "macos") {
                 sc_btn = "Cmd";
@@ -30,7 +30,7 @@ pub fn show_menu_bar(world: &mut World) {
 
                     file_dialog.open_kmp_kcl();
 
-                    ui.close_menu();
+                    ui.close();
                 }
                 if !world.contains_resource::<KmpFilePath>() {
                     ui.disable();
@@ -41,14 +41,14 @@ pub fn show_menu_bar(world: &mut World) {
                     .clicked()
                 {
                     world.send_event(SaveFile);
-                    ui.close_menu();
+                    ui.close();
                 }
 
                 if ui
                     .add(Button::new("Save as...").shortcut_text(format!("{sc_btn}+Shift+S")))
                     .clicked()
                 {
-                    ui.close_menu();
+                    ui.close();
                 }
             });
             ui.menu_button("Edit", |ui| {
@@ -71,11 +71,11 @@ pub fn show_menu_bar(world: &mut World) {
             ui.menu_button("Window", |ui| {
                 if ui.button("Save Tab Layout").clicked() {
                     world.send_event_default::<SaveDockTree>();
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui.button("Reset Tab Layout").clicked() {
                     world.send_event_default::<ResetDockTree>();
-                    ui.close_menu();
+                    ui.close();
                 }
                 // toggle each tab on or off
                 let mut tree = world.resource_mut::<DockTree>();

@@ -12,7 +12,7 @@ use crate::{
     },
 };
 use bevy::{ecs::system::SystemState, math::vec2, prelude::*, render::render_resource::Extent3d};
-use bevy_egui::egui::{self, Color32, Margin, Response, Rounding, Sense, Stroke, StrokeKind, Ui, show_tooltip_at_pointer};
+use bevy_egui::egui::{self, Color32, Margin, Response, CornerRadius, Sense, Stroke, StrokeKind, Ui, show_tooltip_at_pointer};
 use transform_gizmo_bevy::{config::TransformPivotPoint, GizmoOptions, GizmoOrientation};
 
 pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
@@ -87,7 +87,7 @@ fn show_select_box(ui: &mut Ui, world: &mut World) {
             let select_box = select_box.to_egui_rect();
             painter.rect(
                 select_box,
-                Rounding::from(2.),
+                CornerRadius::from(2.),
                 Color32::from_rgba_unmultiplied(200, 200, 200, 15),
                 Stroke {
                     width: 1.,

@@ -11,7 +11,7 @@ use bevy::{
     ecs::{
         component::Tick,
         entity::EntityHashSet,
-        query::{QueryData, WorldQuery},
+        query::QueryData,
     },
     math::vec2,
     prelude::*,

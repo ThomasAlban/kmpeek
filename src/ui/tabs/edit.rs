@@ -24,7 +24,7 @@ use crate::{
 use bevy::{
     ecs::{
         entity::EntityHashSet,
-        query::{QueryData, WorldQuery},
+        query::QueryData,
         system::{SystemParam, SystemState},
     },
     log::warn,
