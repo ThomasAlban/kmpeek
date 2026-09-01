@@ -197,7 +197,7 @@ fn show_overlayed_ui(ui: &mut Ui, world: &mut World) -> Vec<Response> {
                     });
                 });
                 if let Some(ev_camera_mode_change) = ev_camera_mode_change {
-                    world.send_event(ev_camera_mode_change);
+                    world.write_message(ev_camera_mode_change);
                 }
                 if let Some(r) = r {
                     responses.push(r);

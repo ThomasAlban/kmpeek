@@ -7,7 +7,7 @@ use bevy::{
     input::mouse::{MouseMotion, MouseWheel},
     math::vec3,
     prelude::*,
-    render::camera::RenderTarget,
+    camera::RenderTarget,
 };
 use serde::{Deserialize, Serialize};
 use transform_gizmo_bevy::GizmoCamera;
@@ -89,8 +89,8 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
 
 fn orbit_cam(
     q_window: Query<&mut Window>,
-    mut ev_mouse_motion: EventReader<MouseMotion>,
-    mut ev_mouse_scroll: EventReader<MouseWheel>,
+    mut ev_mouse_motion: MessageReader<MouseMotion>,
+    mut ev_mouse_scroll: MessageReader<MouseWheel>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut q_orbit_cam: Query<(&mut OrbitCam, &mut Transform, &Projection)>,
     keys: Res<ButtonInput<KeyCode>>,

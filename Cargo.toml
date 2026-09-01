@@ -4,33 +4,37 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.16", default-features = false, features = [
+bevy = { version = "0.17", default-features = false, features = [
     "bevy_render",
     "bevy_winit",
     "bevy_pbr",
+    "bevy_anti_alias",
+    "bevy_post_process",
+    "bevy_core_pipeline",
     "bevy_picking",
     "bevy_mesh_picking_backend",
     "multi_threaded",
     "file_watcher",
     "tonemapping_luts",
     "ktx2",
-    "zstd",
+    "zstd_rust",
     "serialize",
     "bevy_gizmos",
     "track_location",
+    "dynamic_linking",
 ] }
 
-bevy_egui = "0.36"
-bevy_mod_outline = "0.10"
-bevy_pkv = "0.13"
-transform-gizmo-bevy = "0.6"
-bevy_infinite_grid = "0.15"
+bevy_egui = "0.38.1"
+bevy_mod_outline = "0.11"
+bevy_pkv = "0.14"
+# there was no official 0.17 so i had to manually look at commits
+transform-gizmo-bevy = { git = "https://github.com/urholaukkarinen/transform-gizmo", rev = "5bc2dd19b6287098eb00463cd7e3bf619fd436b3" }
+bevy_infinite_grid = "0.17"
+bevy_vector_shapes = "0.11.1"
 
-egui_dock = { version = "0.17", features = ["serde"] }
-egui_extras = { version = "0.32", default-features = false, features = [
-    "all_loaders",
-] }
-egui_file = "0.23"
+egui_dock = { version = "0.18", features = ["serde"] }
+egui_extras = { version = "0.33", default-features = false, features = ["all_loaders"] }
+egui_file = "0.25"
 
 binrw = "0.14.0"
 bytemuck = "1.13.1"
@@ -41,7 +45,6 @@ serde = { version = "1.0.163", features = ["derive"] }
 serde_json = "1.0.96"
 strum = "0.26.1"
 strum_macros = "0.26.1"
-bevy_vector_shapes = "0.10.0"
 csv = "1.3.0"
 derive-new = "0.6.0"
 bon = "1.2.1"

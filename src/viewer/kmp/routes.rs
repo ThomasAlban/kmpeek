@@ -126,7 +126,7 @@ fn on_remove_route_pt(
     trigger: Trigger<OnRemove, RoutePoint>,
     mut commands: Commands,
     q_kmp_path_node: Query<&KmpPathNode>,
-    mut ev_recalc_paths: EventWriter<RecalcPaths>,
+    mut ev_recalc_paths: MessageWriter<RecalcPaths>,
 ) {
     // we will have to add 'route settings' and 'route linked entities' components to the next entity,
     // because that entity is now the start of a new route now that we've been deleted

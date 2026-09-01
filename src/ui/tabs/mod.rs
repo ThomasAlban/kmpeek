@@ -86,6 +86,9 @@ pub fn show_dock_area(world: &mut World) {
 
     world.resource_scope(|world, mut tree: Mut<DockTree>| {
         // show the actual dock area
+        println!("screen: {:?}", ctx.screen_rect());
+        println!("content: {:?}", ctx.content_rect());
+        println!("available: {:?}", ctx.available_rect());
         DockArea::new(&mut tree).style(style).show(ctx, &mut TabViewer(world));
     });
 }

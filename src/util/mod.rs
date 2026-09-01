@@ -203,10 +203,10 @@ pub fn give_me_a_mut<'a, T: 'a, R>(items: impl IntoIterator<Item = &'a mut T>, f
     f(items_mut)
 }
 
-pub fn iter_mut_from_entities<'a, R: QueryData>(
+pub fn iter_mut_from_entities<'a, 'w, 's, R: QueryData>(
     entities: &EntityHashSet,
-    q: &'a mut Query<(Entity, R)>,
-) -> Vec<<R as QueryData>::Item<'a>> {
+    q: &'a mut Query<'w, 's, (Entity, R)>,
+) -> Vec<<R as QueryData>::Item<'a, 'a>> {
     let mut items = Vec::new();
     for (e, item) in q.iter_mut() {
         if entities.contains(&e) {

@@ -25,7 +25,7 @@ use bevy::{
     },
     math::vec3,
     prelude::*,
-    transform::TransformSystem,
+    transform::TransformSystems,
 };
 use bevy_mod_outline::{OutlineVolume};
 use bon::builder;
@@ -43,7 +43,7 @@ pub fn checkpoint_plugin(app: &mut App) {
         )
         .add_systems(
             PostUpdate,
-            set_checkpoint_node_height.after(TransformSystem::TransformPropagate),
+            set_checkpoint_node_height.after(TransformSystems::Propagate),
         )
         // .add_systems(
         //     Update,

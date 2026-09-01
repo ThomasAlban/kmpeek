@@ -3,8 +3,8 @@
 
 use bevy::math::Vec3;
 use bevy::prelude::Vec2;
-use bevy::render::mesh::{Indices, Mesh};
-use bevy::render::render_asset::RenderAssetUsages;
+use bevy::mesh::{Indices, Mesh};
+use bevy::asset::RenderAssetUsages;
 use bevy::render::render_resource::PrimitiveTopology;
 
 // When indexing a mesh we commonly find flat (occupying a 2 dimensional subspace) trapezes.

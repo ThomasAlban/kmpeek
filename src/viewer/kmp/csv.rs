@@ -25,7 +25,7 @@
 // }
 
 // pub fn csv_export_import<T: Component + Clone + Debug + ToFromCsvFormat + Spawn>(
-//     mut ev_file_dialog_result: EventReader<FileDialogResult>,
+//     mut ev_file_dialog_result: MessageReader<FileDialogResult>,
 //     mode: Option<Res<KmpEditMode<T>>>,
 //     q: Query<(Entity, &OrderID, &T, &Transform)>,
 //     mut commands: Commands,

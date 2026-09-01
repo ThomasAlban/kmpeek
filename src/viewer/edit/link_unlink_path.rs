@@ -65,7 +65,7 @@ fn link_points<T: Component + LinkKmpPoint + Default>(
     q_pts: Query<(), With<T>>,
     q_selected: Query<Entity, With<Selected>>,
     mut commands: Commands,
-    mut ev_recalc_paths: EventWriter<RecalcPaths>,
+    mut ev_recalc_paths: MessageWriter<RecalcPaths>,
     get_route_start: GetRouteStart,
 ) {
     let Some(alt_clicked_pt) = *alt_clicked_pt else {
@@ -112,7 +112,7 @@ pub fn unlink_points(
     keys: Res<ButtonInput<KeyCode>>,
     q_kmp_path_node: Query<&KmpPathNode>,
     q_selected: Query<Entity, With<Selected>>,
-    mut ev_recalc_paths: EventWriter<RecalcPaths>,
+    mut ev_recalc_paths: MessageWriter<RecalcPaths>,
 ) {
     // unlink points with the U key
     if !keys.just_pressed(KeyCode::KeyU) {

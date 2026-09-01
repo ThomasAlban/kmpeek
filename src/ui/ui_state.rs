@@ -16,19 +16,19 @@ pub fn ui_state_plugin(app: &mut App) {
         // .init_resource::<CameraSettingsOpen>()
         // .init_resource::<ShowModesCollapsed>()
         // .init_resource::<KmpVisibility>()
-        .add_event::<SaveDockTree>()
+        .add_message::<SaveDockTree>()
         .add_systems(Update, save_docktree.run_if(on_event::<SaveDockTree>))
         .add_systems(Update, reset_docktree.run_if(on_event::<ResetDockTree>))
-        .add_event::<ResetDockTree>()
+        .add_message::<ResetDockTree>()
         .add_systems(Startup, check_cmd_args.after(SetupAppSettingsSet));
 }
 
-#[derive(Event, Default)]
+#[derive(Message, Default)]
 pub struct SaveDockTree;
 pub fn save_docktree(mut pkv: ResMut<PkvStore>, tree: Res<DockTree>) {
     pkv.set("tree", tree.as_ref()).unwrap();
 }
-#[derive(Event, Default)]
+#[derive(Message, Default)]
 pub struct ResetDockTree;
 pub fn reset_docktree(mut pkv: ResMut<PkvStore>, mut tree: ResMut<DockTree>) {
     *tree = DockTree::default();
@@ -39,8 +39,8 @@ pub fn reset_docktree(mut pkv: ResMut<PkvStore>, mut tree: ResMut<DockTree>) {
 pub struct KmpFilePath(pub PathBuf);
 
 pub fn check_cmd_args(
-    mut ev_kmp_file_selected: EventWriter<KmpFileSelected>,
-    mut ev_kcl_file_selected: EventWriter<KclFileSelected>,
+    mut ev_kmp_file_selected: MessageWriter<KmpFileSelected>,
+    mut ev_kcl_file_selected: MessageWriter<KclFileSelected>,
     settings: Res<AppSettings>,
 ) {
     // if there is a command line arg of a path to a kmp or kcl, open it

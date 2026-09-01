@@ -48,7 +48,7 @@ pub fn tweak_interaction(
     mut raycast: MeshRayCast,
     checkpoint_height: Res<CheckpointHeight>,
     q_kcl: Query<(), With<KCLModelSection>>,
-    mut ev_just_created_point: EventReader<JustCreatedPoint>,
+    mut ev_just_created_point: MessageReader<JustCreatedPoint>,
 ) {
     if *edit_mode != EditMode::Tweak || !viewport_info.mouse_in_viewport || q_selected.is_empty() {
         return;

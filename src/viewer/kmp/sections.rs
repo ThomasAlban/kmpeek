@@ -111,17 +111,17 @@ macro_rules! add_for_all_components {
         )
     };
     (@event $app:expr, $ev:ident) => {
-        $app.add_event::<$ev<StartPoint>>()
-            .add_event::<$ev<EnemyPathPoint>>()
-            .add_event::<$ev<ItemPathPoint>>()
-            .add_event::<$ev<Checkpoint>>()
-            .add_event::<$ev<RespawnPoint>>()
-            .add_event::<$ev<Object>>()
-            .add_event::<$ev<RoutePoint>>()
-            .add_event::<$ev<AreaPoint>>()
-            .add_event::<$ev<KmpCamera>>()
-            .add_event::<$ev<CannonPoint>>()
-            .add_event::<$ev<BattleFinishPoint>>()
+        $app.add_message::<$ev<StartPoint>>()
+            .add_message::<$ev<EnemyPathPoint>>()
+            .add_message::<$ev<ItemPathPoint>>()
+            .add_message::<$ev<Checkpoint>>()
+            .add_message::<$ev<RespawnPoint>>()
+            .add_message::<$ev<Object>>()
+            .add_message::<$ev<RoutePoint>>()
+            .add_message::<$ev<AreaPoint>>()
+            .add_message::<$ev<KmpCamera>>()
+            .add_message::<$ev<CannonPoint>>()
+            .add_message::<$ev<BattleFinishPoint>>()
     };
     (@plugin $app:expr, $plugin:ident) => {
         $app.add_plugins((

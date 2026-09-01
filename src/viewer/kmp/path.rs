@@ -34,7 +34,7 @@ use std::marker::PhantomData;
 use std::{any::TypeId, fmt::Debug};
 
 pub fn path_plugin(app: &mut App) {
-    app.add_event::<RecalcPaths>()
+    app.add_message::<RecalcPaths>()
         .add_systems(
             Update,
             (
@@ -229,7 +229,7 @@ fn on_add_kmp_path_node(trigger: Trigger<OnAdd, KmpPathNode>, mut q_kmp_path_nod
 fn on_remove_kmp_path_node(
     trigger: Trigger<OnRemove, KmpPathNode>,
     mut q_kmp_path_node: Query<&mut KmpPathNode>,
-    mut ev_recalc_paths: EventWriter<RecalcPaths>,
+    mut ev_recalc_paths: MessageWriter<RecalcPaths>,
     q_is_enemy_path_pt: Query<(), With<EnemyPathPoint>>,
     q_is_item_path_pt: Query<(), With<ItemPathPoint>>,
     q_is_checkpoint: Query<(), With<Checkpoint>>,
@@ -574,7 +574,7 @@ pub fn update_node_links<T: Component + Clone + ToPathType>(
     }
 }
 
-#[derive(Event, Default)]
+#[derive(Message, Default)]
 pub struct RecalcPaths {
     pub do_enemy: bool,
     pub do_item: bool,
@@ -617,7 +617,7 @@ impl RecalcPaths {
 }
 
 pub fn traverse_paths(
-    mut ev_recalc_paths: EventReader<RecalcPaths>,
+    mut ev_recalc_paths: MessageReader<RecalcPaths>,
     mut commands: Commands,
     mut p: ParamSet<(
         TraversePath<EnemyPathPoint>,

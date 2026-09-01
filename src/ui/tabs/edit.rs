@@ -447,7 +447,7 @@ fn edit_component<D: QueryData + 'static, P: SystemParam + 'static>(
     ui: &mut Ui,
     world: &mut World,
     title: &'static str,
-    add_body: impl FnOnce(&mut Ui, &mut [<D as QueryData>::Item<'_>], <P as SystemParam>::Item<'_, '_>),
+    add_body: impl FnOnce(&mut Ui, &mut [<D as QueryData>::Item<'_, '_>], <P as SystemParam>::Item<'_, '_>),
 ) {
     let mut system_state = SystemState::<(Query<D, With<Selected>>, P)>::new(world);
     {
@@ -494,7 +494,7 @@ fn edit_component_entities<PEntities: SystemParam + 'static, P: SystemParam + 's
 struct PathStartBtn<'w, 's, T: Component + ToPathType> {
     commands: Commands<'w, 's>,
     q_path_start: Query<'w, 's, Entity, (With<PathOverallStart>, With<T>)>,
-    ev_recalc_paths: EventWriter<'w, RecalcPaths>,
+    ev_recalc_paths: MessageWriter<'w, RecalcPaths>,
 }
 impl<T: Component + ToPathType> PathStartBtn<'_, '_, T> {
     fn show(&mut self, ui: &mut Ui, items: impl IntoIterator<Item = Entity>) {

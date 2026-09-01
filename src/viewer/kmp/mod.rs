@@ -48,7 +48,7 @@ pub fn kmp_plugin(app: &mut App) {
         section_plugin,
         routes_plugin,
     ))
-    .add_event::<SaveFile>()
+    .add_message::<SaveFile>()
     .add_systems(Startup, setup_kmp_meshes_materials.after(SetupAppSettingsSet))
     .add_systems(
         Update,
@@ -65,15 +65,15 @@ pub fn kmp_plugin(app: &mut App) {
     );
 
     add_for_all_components!(@event app, SetSectionVisibility);
-    app.add_event::<SetSectionVisibility<TrackInfo>>();
+    app.add_message::<SetSectionVisibility<TrackInfo>>();
     add_for_all_components!(@system app, update_visible_on_mode_change);
     add_for_all_components!(@system app, set_section_visibility);
 }
 
 pub fn open_kmp_kcl(
-    mut ev_file_dialog: EventReader<FileDialogResult>,
-    mut ev_kmp_file_selected: EventWriter<KmpFileSelected>,
-    mut ev_kcl_file_selected: EventWriter<KclFileSelected>,
+    mut ev_file_dialog: MessageReader<FileDialogResult>,
+    mut ev_kmp_file_selected: MessageWriter<KmpFileSelected>,
+    mut ev_kcl_file_selected: MessageWriter<KclFileSelected>,
     settings: ResMut<AppSettings>,
 ) {
     for FileDialogResult { path, dialog_type } in ev_file_dialog.read() {
@@ -112,7 +112,7 @@ pub struct KmpError {
 pub struct KmpSectionIdEntityMap<T: Component>(#[deref] pub HashMap<u32, Entity>, PhantomData<T>);
 
 pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
-    let mut ss = SystemState::<EventReader<KmpFileSelected>>::new(world);
+    let mut ss = SystemState::<MessageReader<KmpFileSelected>>::new(world);
     let mut ev_kmp_file_selected = ss.get(world);
     let Some(ev) = ev_kmp_file_selected.read().next() else {
         return Ok(());
@@ -191,13 +191,13 @@ pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
     // --- FINISH POINTS ---
     spawn_point_section::<BattleFinishPoint>(world, &kmp);
 
-    world.send_event(RecalcPaths::all());
+    world.write_message(RecalcPaths::all());
 
     world.remove_resource::<KmpErrors>();
     world.remove_resource::<KmpSectionIdEntityMap<RoutePoint>>();
     world.remove_resource::<KmpSectionIdEntityMap<RespawnPoint>>();
 
-    world.send_event(RefreshOrdering);
+    world.write_message(RefreshOrdering);
 
     Ok(())
 }
@@ -211,7 +211,7 @@ fn handle_open_kmp_errors(In(result): In<anyhow::Result<()>>) {
 #[derive(Resource, Deref, DerefMut, Clone, Default, new)]
 pub struct KmpSectionEntityIdMap<T: Component>(#[deref] pub EntityHashMap<u8>, PhantomData<T>);
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct SaveFile;
 
 pub fn save_kmp(world: &mut World) -> anyhow::Result<()> {
@@ -278,11 +278,11 @@ fn handle_save_kmp_errors(In(result): In<anyhow::Result<()>>) {
     }
 }
 
-#[derive(Event, Deref, new)]
+#[derive(Message, Deref, new)]
 pub struct SetSectionVisibility<T>(#[deref] pub bool, PhantomData<T>);
 
 fn set_section_visibility<T: Component>(
-    mut ev_set_sect_visibility: EventReader<SetSectionVisibility<T>>,
+    mut ev_set_sect_visibility: MessageReader<SetSectionVisibility<T>>,
     mut q: Query<&mut Visibility, (With<KmpSelectablePoint>, With<T>)>,
 ) {
     let Some(ev) = ev_set_sect_visibility.read().next() else {
@@ -297,7 +297,7 @@ fn set_section_visibility<T: Component>(
 
 fn update_visible_on_mode_change<T: Component>(
     mode: Res<KmpEditMode>,
-    mut ev_set_sect_visibility: EventWriter<SetSectionVisibility<T>>,
+    mut ev_set_sect_visibility: MessageWriter<SetSectionVisibility<T>>,
 ) {
     if !mode.is_changed() {
         return;

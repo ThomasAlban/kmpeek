@@ -23,8 +23,8 @@ use bevy::{ecs::entity::EntityHashSet, prelude::*};
 pub struct DeleteSet;
 
 pub fn create_delete_plugin(app: &mut App) {
-    app.add_event::<CreatePoint>()
-        .add_event::<JustCreatedPoint>()
+    app.add_message::<CreatePoint>()
+        .add_message::<JustCreatedPoint>()
         .add_systems(
             Update,
             (
@@ -49,20 +49,20 @@ pub fn create_delete_plugin(app: &mut App) {
         .add_systems(Update, delete_point.in_set(DeleteSet).after(SelectSet));
 }
 
-#[derive(Event, Default)]
+#[derive(Message, Default)]
 pub struct CreatePoint {
     pub position: Vec3,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct JustCreatedPoint(pub Entity);
 
 // responsible for consuming 'create point' events and creating the relevant point depending on what edit mode we are in
 fn create_point<T: Component + Spawn + Default + Clone>(
     mut commands: Commands,
     mode: Res<KmpEditMode>,
-    mut ev_create_point: EventReader<CreatePoint>,
-    mut ev_just_created_point: EventWriter<JustCreatedPoint>,
+    mut ev_create_point: MessageReader<CreatePoint>,
+    mut ev_just_created_point: MessageWriter<JustCreatedPoint>,
 ) {
     if !mode.in_mode::<T>() {
         return;
@@ -85,9 +85,9 @@ fn create_path<T: Component + Spawn + Default + Clone + MaxConnectedPath>(
     q_selected_pt: Query<Entity, (With<T>, With<Selected>)>,
     q_kmp_path_node: Query<&KmpPathNode>,
     mut q_cp: GetSelectedCheckpoints,
-    mut ev_create_point: EventReader<CreatePoint>,
-    mut ev_recalc_paths: EventWriter<RecalcPaths>,
-    mut ev_just_created_point: EventWriter<JustCreatedPoint>,
+    mut ev_create_point: MessageReader<CreatePoint>,
+    mut ev_recalc_paths: MessageWriter<RecalcPaths>,
+    mut ev_just_created_point: MessageWriter<JustCreatedPoint>,
 ) {
     if !mode.in_mode::<T>() {
         return;
@@ -135,7 +135,7 @@ fn alt_click_create_point(
     q_window: Query<&Window>,
     q_kmp_pt: Query<(), With<KmpSelectablePoint>>,
     q_kcl: Query<(), With<KCLModelSection>>,
-    mut ev_create_pt: EventWriter<CreatePoint>,
+    mut ev_create_pt: MessageWriter<CreatePoint>,
 ) {
     if *mode == KmpEditMode::TrackInfo {
         return;
@@ -186,7 +186,7 @@ fn delete_point(
     mut q_selected: Query<Entity, With<Selected>>,
     mut commands: Commands,
     viewport_info: Res<ViewportInfo>,
-    mut ev_refresh_ordering: EventWriter<RefreshOrdering>,
+    mut ev_refresh_ordering: MessageWriter<RefreshOrdering>,
 ) {
     if !viewport_info.mouse_in_viewport && !viewport_info.mouse_in_table {
         return;

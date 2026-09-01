@@ -40,7 +40,7 @@ pub fn show_menu_bar(world: &mut World) {
                     .add(Button::new("Save").shortcut_text(format!("{sc_btn}+S")))
                     .clicked()
                 {
-                    world.send_event(SaveFile);
+                    world.write_message(SaveFile);
                     ui.close();
                 }
 
@@ -70,11 +70,11 @@ pub fn show_menu_bar(world: &mut World) {
 
             ui.menu_button("Window", |ui| {
                 if ui.button("Save Tab Layout").clicked() {
-                    world.send_event_default::<SaveDockTree>();
+                    world.write_message_default::<SaveDockTree>();
                     ui.close();
                 }
                 if ui.button("Reset Tab Layout").clicked() {
-                    world.send_event_default::<ResetDockTree>();
+                    world.write_message_default::<ResetDockTree>();
                     ui.close();
                 }
                 // toggle each tab on or off

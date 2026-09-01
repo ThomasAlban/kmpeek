@@ -2,3 +2,5 @@
 .DS_Store
 /.vscode
 trace*
+.cargo/config.toml
+log.txt

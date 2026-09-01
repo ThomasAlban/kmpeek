@@ -174,7 +174,7 @@ fn show_header<T: Component>(ui: &mut Ui, world: &mut World, path: bool) {
                 false
             };
             if view_icon_btn(ui, &mut all_visible).changed() {
-                world.send_event(SetSectionVisibility::<T>::new(all_visible));
+                world.write_message(SetSectionVisibility::<T>::new(all_visible));
             }
         });
     });

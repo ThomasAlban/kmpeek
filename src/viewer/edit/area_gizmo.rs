@@ -11,8 +11,8 @@ use bevy::{
     color::palettes::css,
     math::{vec2, vec3, DVec3},
     prelude::*,
-    render::view::RenderLayers,
-    transform::TransformSystem,
+    camera::visibility::RenderLayers,
+    transform::TransformSystems,
 };
 use bevy_vector_shapes::{
     painter::{ShapeConfig, ShapePainter},
@@ -32,8 +32,8 @@ pub fn area_gizmo_plugin(app: &mut App) {
     })
     .init_resource::<AreaGizmoOptions>()
     .add_systems(Update, draw_area_bounds)
-    // drawing handles after TransformPropagate fixes an issue where they would lag behind the camera position for 1 frame
-    .add_systems(PostUpdate, draw_area_handles.after(TransformSystem::TransformPropagate));
+    // drawing handles after Propagate fixes an issue where they would lag behind the camera position for 1 frame
+    .add_systems(PostUpdate, draw_area_handles.after(TransformSystems::Propagate));
 }
 
 #[derive(Resource, Default)]

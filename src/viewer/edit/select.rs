@@ -41,7 +41,7 @@ fn select(
     mut commands: Commands,
     area_gizmo_opts: Res<AreaGizmoOptions>,
     q_selected: Query<Entity, With<Selected>>,
-    mut ev_just_created_point: EventReader<JustCreatedPoint>,
+    mut ev_just_created_point: MessageReader<JustCreatedPoint>,
 
     route_selection_mode: Option<Res<LinkSelectMode<RoutePoint>>>,
     respawn_selection_mode: Option<Res<LinkSelectMode<RespawnPoint>>>,

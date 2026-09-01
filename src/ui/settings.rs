@@ -54,7 +54,7 @@ pub fn setup_app_settings(mut commands: Commands, mut pkv: ResMut<PkvStore>) {
 }
 
 pub fn export_import_app_settings(
-    mut ev_file_dialog: EventReader<FileDialogResult>,
+    mut ev_file_dialog: MessageReader<FileDialogResult>,
     mut settings: ResMut<AppSettings>,
 ) {
     for FileDialogResult { path, dialog_type } in ev_file_dialog.read() {

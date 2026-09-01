@@ -1,6 +1,7 @@
 use bevy::{
     prelude::*,
-    render::{camera::RenderTarget, view::RenderLayers},
+    camera::visibility::RenderLayers,
+    camera::RenderTarget,
 };
 
 use crate::ui::viewport::{SetupViewportSet, ViewportImage};

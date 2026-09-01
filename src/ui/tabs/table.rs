@@ -29,7 +29,7 @@ pub fn show_table_tab(ui: &mut Ui, world: &mut World) {
             ui.heading(world.resource::<KmpEditMode>().to_string());
             ui.add_space(10.);
             if ui.button("+").clicked() {
-                world.send_event_default::<CreatePoint>();
+                world.write_message_default::<CreatePoint>();
             }
         });
     }

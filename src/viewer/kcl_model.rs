@@ -4,20 +4,22 @@ use crate::{
 };
 use bevy::{
     prelude::*,
-    render::{mesh::PrimitiveTopology, render_asset::RenderAssetUsages, render_resource::Face},
+    mesh::PrimitiveTopology,
+    asset::RenderAssetUsages,
+    render::render_resource::Face,
 };
 
 use serde::{Deserialize, Serialize};
 use std::{ffi::OsStr, fs::File};
 
 pub fn kcl_plugin(app: &mut App) {
-    app.add_event::<KclModelUpdated>().add_systems(
+    app.add_message::<KclModelUpdated>().add_systems(
         Update,
         (spawn_model.run_if(on_event::<KclFileSelected>), update_kcl_model),
     );
 }
 
-#[derive(Event, Default)]
+#[derive(Message, Default)]
 pub struct KclModelUpdated;
 
 #[derive(Resource, Serialize, Deserialize, Clone, PartialEq)]
@@ -78,7 +80,7 @@ pub fn spawn_model(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut q_model: Query<Entity, With<KCLModelSection>>,
-    mut ev_kcl_file_selected: EventReader<KclFileSelected>,
+    mut ev_kcl_file_selected: MessageReader<KclFileSelected>,
     settings: Res<AppSettings>,
 ) {
     let Some(ev) = ev_kcl_file_selected.read().next() else {
@@ -139,7 +141,7 @@ pub fn update_kcl_model(
     mut q_kcl: Query<(&mut Visibility, &KCLModelSection, &mut MeshMaterial3d<StandardMaterial>), With<KCLModelSection>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     settings: Res<AppSettings>,
-    mut ev_kcl_model_updated: EventReader<KclModelUpdated>,
+    mut ev_kcl_model_updated: MessageReader<KclModelUpdated>,
 ) {
     // don't run this function unless the kcl model needs to be updated
     if ev_kcl_model_updated.is_empty() {

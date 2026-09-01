@@ -9,16 +9,16 @@ use std::path::PathBuf;
 pub struct UpdateUiSet;
 
 pub fn update_ui_plugin(app: &mut App) {
-    app.add_event::<KmpFileSelected>()
-        .add_event::<KclFileSelected>()
-        .add_systems(EguiPrimaryContextPass, setup_ui_images)
+    app.add_message::<KmpFileSelected>()
+        .add_message::<KclFileSelected>()
+        .add_systems(EguiPrimaryContextPass, setup_ui_images.before(UpdateUiSet))
         .add_systems(EguiPrimaryContextPass, update_ui.in_set(UpdateUiSet));
 }
 
-#[derive(Event, Deref, DerefMut)]
+#[derive(Message, Deref, DerefMut)]
 pub struct KmpFileSelected(pub PathBuf);
 
-#[derive(Event, Deref, DerefMut)]
+#[derive(Message, Deref, DerefMut)]
 pub struct KclFileSelected(pub PathBuf);
 
 fn setup_ui_images(mut contexts: EguiContexts) {

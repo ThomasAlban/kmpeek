@@ -2,7 +2,7 @@ use bevy::{
     prelude::*,
     render::render_resource::{Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages},
 };
-use bevy_egui::{egui::TextureId, EguiUserTextures};
+use bevy_egui::{EguiTextureHandle, EguiUserTextures, egui::TextureId};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 pub struct SetupViewportSet;
@@ -12,7 +12,7 @@ pub fn viewport_plugin(app: &mut App) {
         Startup,
         // this makes sure all the 'Commands' are completed before moving onto other startup systems
         // so that other startup systems can make use of the Viewport image handle
-        (setup_viewport, apply_deferred).chain().in_set(SetupViewportSet),
+        (setup_viewport, ApplyDeferred).chain().in_set(SetupViewportSet),
     );
 }
 
@@ -56,7 +56,7 @@ fn setup_viewport(
 
     // create a handle to the image
     let handle = images.add(image);
-    let tex_id = egui_user_textures.add_image(handle.clone());
+    let tex_id = egui_user_textures.add_image(EguiTextureHandle::Strong(handle.clone()));
 
     commands.insert_resource(ViewportImage { handle, tex_id });
 }

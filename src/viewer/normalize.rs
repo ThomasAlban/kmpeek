@@ -42,7 +42,7 @@ fn update_normalize(
         (res.0.to_owned(), res.1.to_owned())
     };
 
-    let view = camera_position.compute_matrix().inverse();
+    let view = camera_position.to_matrix().inverse();
 
     let mut children_to_deal_with = Vec::new();
 

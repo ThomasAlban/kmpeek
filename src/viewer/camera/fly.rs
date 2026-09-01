@@ -4,11 +4,7 @@ use crate::ui::{
     viewport::{SetupViewportSet, ViewportImage, ViewportInfo},
 };
 use bevy::{
-    input::mouse::MouseMotion,
-    math::vec3,
-    prelude::*,
-    render::camera::RenderTarget,
-    window::{CursorGrabMode, RequestRedraw},
+    input::mouse::MouseMotion, math::vec3, prelude::*, camera::RenderTarget, window::{CursorGrabMode, CursorOptions, RequestRedraw},
 };
 use serde::{Deserialize, Serialize};
 use transform_gizmo_bevy::GizmoCamera;
@@ -92,8 +88,9 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
 fn fly_cam_move(
     keys: Res<ButtonInput<KeyCode>>,
     q_window: Query<&Window>,
+    mut q_cursor_options: Query<&mut CursorOptions>,
     mut q_fly_cam: Query<&mut Transform, With<FlyCam>>,
-    mut ev_request_redraw: EventWriter<RequestRedraw>,
+    mut ev_request_redraw: MessageWriter<RequestRedraw>,
     settings: Res<AppSettings>,
     viewport_info: Res<ViewportInfo>,
 ) {
@@ -105,8 +102,9 @@ fn fly_cam_move(
     }
 
     let window = q_window.single().unwrap();
+    let cursor: &mut CursorOptions = &mut q_cursor_options.single_mut().unwrap();
     // if we need to be holding the mouse to move but we aren't, return
-    if settings.camera.fly.hold_mouse_to_move && window.cursor_options.grab_mode == CursorGrabMode::None {
+    if settings.camera.fly.hold_mouse_to_move && cursor.grab_mode == CursorGrabMode::None {
         return;
     }
 
@@ -157,7 +155,8 @@ fn fly_cam_move(
 
 fn fly_cam_look(
     q_window: Query<&Window>,
-    mut ev_mouse_motion: EventReader<MouseMotion>,
+    mut q_cursor_options: Query<&mut CursorOptions>,
+    mut ev_mouse_motion: MessageReader<MouseMotion>,
     mut q_fly_cam: Query<&mut Transform, With<FlyCam>>,
     settings: Res<AppSettings>,
     viewport_info: Res<ViewportInfo>,
@@ -167,11 +166,12 @@ fn fly_cam_look(
     }
 
     let window = q_window.single().unwrap();
+    let cursor: &mut CursorOptions = &mut q_cursor_options.single_mut().unwrap();
     let mut transform = q_fly_cam.single_mut().unwrap();
 
     for ev in ev_mouse_motion.read() {
         let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
-        match window.cursor_options.grab_mode {
+        match cursor.grab_mode {
             CursorGrabMode::None => (),
             _ => {
                 // Using smallest of height or width ensures equal vertical and horizontal sensitivity

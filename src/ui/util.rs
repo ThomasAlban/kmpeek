@@ -8,11 +8,11 @@ use bevy_egui::egui::{self, pos2, vec2, Rect, Response, TextStyle, Ui, WidgetTex
 use bevy_egui::egui::{
     Align, Align2, Area, CollapsingResponse, Color32, Context, Image, ImageButton, ImageSource, Order, Sense, Vec2,
 };
-use bevy_egui::EguiContext;
+use bevy_egui::{EguiContext, PrimaryEguiContext};
 use std::{fmt::Display, hash::Hash};
 
 pub fn get_egui_ctx(world: &mut World) -> Context {
-    let mut system_state = SystemState::<Query<&mut EguiContext, With<PrimaryWindow>>>::new(world);
+    let mut system_state = SystemState::<Query<&mut EguiContext, With<PrimaryEguiContext>>>::new(world);
     let mut q = system_state.get_mut(world);
     q.single_mut().unwrap().get_mut().clone()
 }

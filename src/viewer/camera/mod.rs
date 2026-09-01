@@ -6,7 +6,7 @@ pub use self::{
     topdown::{TopDownCam, TopDownSettings},
 };
 use crate::ui::{settings::AppSettings, update_ui::UpdateUiSet, viewport::ViewportInfo};
-use bevy::{prelude::*, window::CursorGrabMode};
+use bevy::{prelude::*, window::{CursorGrabMode, CursorOptions}};
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString, IntoStaticStr};
 
@@ -23,7 +23,7 @@ pub fn camera_plugin(app: &mut App) {
         gizmo_2d_cam_plugin,
     ))
     .configure_sets(Update, UpdateCameraSet.before(UpdateUiSet))
-    .add_event::<CameraModeChanged>()
+    .add_message::<CameraModeChanged>()
     .add_systems(Startup, add_ambient_light)
     .add_systems(Update, (cursor_grab, update_active_camera));
 }
@@ -44,7 +44,7 @@ impl Default for CameraMode {
     }
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct CameraModeChanged(pub CameraMode);
 
 #[derive(Default, Serialize, Deserialize)]
@@ -66,6 +66,7 @@ fn add_ambient_light(mut commands: Commands) {
 fn cursor_grab(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut q_window: Query<&mut Window>,
+    mut q_cursor_options: Query<&mut CursorOptions>,
     settings: Res<AppSettings>,
     viewport_info: Res<ViewportInfo>,
 ) {
@@ -73,6 +74,7 @@ fn cursor_grab(
         return;
     }
     let mut window = q_window.single_mut().unwrap();
+    let cursor: &mut CursorOptions = &mut q_cursor_options.single_mut().unwrap();
 
     if (settings.camera.mode == CameraMode::Fly
         && !mouse_buttons.pressed(settings.camera.fly.key_bindings.mouse_button))
@@ -81,20 +83,20 @@ fn cursor_grab(
         || (settings.camera.mode == CameraMode::TopDown
             && !mouse_buttons.pressed(settings.camera.top_down.key_bindings.mouse_button))
     {
-        window.cursor_options.visible = true;
-        window.cursor_options.grab_mode = CursorGrabMode::None;
+        cursor.visible = true;
+        cursor.grab_mode = CursorGrabMode::None;
         return;
     }
     // hide the cursor and lock its position
-    window.cursor_options.visible = false;
-    window.cursor_options.grab_mode = CursorGrabMode::Locked;
+    cursor.visible = false;
+    cursor.grab_mode = CursorGrabMode::Locked;
 }
 
 fn update_active_camera(
     mut q_fly_cam: Query<(Entity, &mut Camera), (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>)>,
     mut q_orbit_cam: Query<(Entity, &mut Camera), (With<OrbitCam>, Without<FlyCam>, Without<TopDownCam>)>,
     mut q_topdown_cam: Query<(Entity, &mut Camera), (With<TopDownCam>, Without<FlyCam>, Without<OrbitCam>)>,
-    mut ev_camera_mode_changed: EventReader<CameraModeChanged>,
+    mut ev_camera_mode_changed: MessageReader<CameraModeChanged>,
 ) {
     for ev in ev_camera_mode_changed.read() {
         let mut fly_cam = q_fly_cam.single_mut().unwrap();

@@ -19,7 +19,7 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
         Query<&mut Transform, (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>)>,
         Query<&mut Transform, (Without<FlyCam>, With<OrbitCam>, Without<TopDownCam>)>,
         Query<(&mut Transform, &'static mut Projection), (Without<FlyCam>, Without<OrbitCam>, With<TopDownCam>)>,
-        EventWriter<KclModelUpdated>,
+        MessageWriter<KclModelUpdated>,
     )>::new(world);
     let (
         mut settings,
