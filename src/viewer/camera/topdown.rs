@@ -1,4 +1,4 @@
-use super::{CameraMode, UpdateCameraSet};
+use super::{CameraMode, EditorCamera, UpdateCameraSet};
 use crate::ui::{
     settings::AppSettings,
     viewport::{SetupViewportSet, ViewportImage, ViewportInfo},
@@ -74,6 +74,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
         }),
         Transform::from_translation(topdown_default.start_pos).looking_at(Vec3::ZERO, Vec3::Z),
         TopDownCam,
+        EditorCamera,
         GizmoCamera,
         Msaa::Sample4,
     ));

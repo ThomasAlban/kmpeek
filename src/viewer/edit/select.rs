@@ -6,7 +6,7 @@ use crate::ui::keybinds::{Modifier, ModifiersPressed};
 use crate::ui::update_ui::UpdateUiSet;
 use crate::ui::viewport::ViewportInfo;
 use crate::util::{ui_viewport_to_ndc, world_to_ui_viewport, RaycastFromCam};
-use crate::viewer::camera::Gizmo2dCam;
+use crate::viewer::camera::EditorCamera;
 use crate::viewer::kmp::components::{KmpSelectablePoint, RespawnPoint, RoutePoint};
 use crate::viewer::kmp::sections::KmpEditMode;
 use bevy::prelude::*;
@@ -34,7 +34,7 @@ fn select(
     q_window: Query<&Window>,
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
-    q_camera: Query<(&mut Camera, &GlobalTransform), Without<Gizmo2dCam>>,
+    q_camera: Query<(&mut Camera, &GlobalTransform), With<EditorCamera>>,
     q_gizmos: Query<&GizmoTarget>,
     mut raycast: MeshRayCast,
     q_kmp_section: Query<&KmpSelectablePoint>,
@@ -149,7 +149,7 @@ fn select_box(
     edit_mode: Res<EditMode>,
     viewport_info: Res<ViewportInfo>,
     q_selectable: Query<(&Transform, Entity, &Visibility, Has<Selected>), With<KmpSelectablePoint>>,
-    q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
+    q_camera: Query<(&Camera, &GlobalTransform), With<EditorCamera>>,
     mut commands: Commands,
     mut select_box: ResMut<SelectBox>,
     mut initial_mouse_pos: Local<Vec2>,

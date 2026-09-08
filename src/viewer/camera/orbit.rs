@@ -1,4 +1,4 @@
-use super::{CameraMode, UpdateCameraSet};
+use super::{CameraMode, EditorCamera, UpdateCameraSet};
 use crate::ui::{
     settings::AppSettings,
     viewport::{SetupViewportSet, ViewportImage, ViewportInfo},
@@ -82,6 +82,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
             radius: OrbitSettings::default().start_pos.length(),
             ..default()
         },
+        EditorCamera,
         GizmoCamera,
         Msaa::Sample4,
     ));

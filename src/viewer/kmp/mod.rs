@@ -11,8 +11,8 @@ pub mod settings;
 
 use self::{
     checkpoints::{checkpoint_plugin, spawn_checkpoint_section},
-    components::*,
     components::Spawn,
+    components::*,
     meshes_materials::setup_kmp_meshes_materials,
     path::{spawn_enemy_item_path_section, RecalcPaths},
     point::{spawn_point_section, AddRespawnPointPreview},
@@ -22,7 +22,7 @@ use crate::{
         file_dialog::{DialogType, FileDialogResult},
         settings::{AppSettings, SetupAppSettingsSet},
         ui_state::KmpFilePath,
-        update_ui::{KclFileSelected, KmpFileSelected},
+        update_ui::{FileLoadSet, KclFileSelected, KmpFileSelected},
     },
     util::kmp_file::*,
 };
@@ -52,15 +52,16 @@ pub fn kmp_plugin(app: &mut App) {
     .add_systems(Startup, setup_kmp_meshes_materials.after(SetupAppSettingsSet))
     .add_systems(
         Update,
-        (save_kmp.pipe(handle_save_kmp_errors)).run_if(on_event::<SaveFile>),
+        (save_kmp.pipe(handle_save_kmp_errors)).run_if(on_message::<SaveFile>),
     )
     .add_systems(
         Update,
         (
             open_kmp
                 .pipe(handle_open_kmp_errors)
-                .run_if(on_event::<KmpFileSelected>),
-            open_kmp_kcl,
+                .run_if(on_message::<KmpFileSelected>)
+                .in_set(FileLoadSet::Load),
+            open_kmp_kcl.in_set(FileLoadSet::Select),
         ),
     );
 

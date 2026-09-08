@@ -6,7 +6,10 @@ pub use self::{
     topdown::{TopDownCam, TopDownSettings},
 };
 use crate::ui::{settings::AppSettings, update_ui::UpdateUiSet, viewport::ViewportInfo};
-use bevy::{prelude::*, window::{CursorGrabMode, CursorOptions}};
+use bevy::{
+    prelude::*,
+    window::{CursorGrabMode, CursorOptions},
+};
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString, IntoStaticStr};
 
@@ -28,20 +31,19 @@ pub fn camera_plugin(app: &mut App) {
     .add_systems(Update, (cursor_grab, update_active_camera));
 }
 
+#[derive(Component)]
+pub struct EditorCamera;
+
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct UpdateCameraSet;
 
-#[derive(PartialEq, Clone, Copy, Serialize, Deserialize, Debug, IntoStaticStr, EnumString, Display)]
+#[derive(PartialEq, Clone, Copy, Serialize, Deserialize, Default, Debug, IntoStaticStr, EnumString, Display)]
 pub enum CameraMode {
+    #[default]
     Fly,
     Orbit,
     #[strum(serialize = "Top Down")]
     TopDown,
-}
-impl Default for CameraMode {
-    fn default() -> Self {
-        Self::Fly
-    }
 }
 
 #[derive(Message)]
@@ -65,7 +67,7 @@ fn add_ambient_light(mut commands: Commands) {
 
 fn cursor_grab(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
-    mut q_window: Query<&mut Window>,
+    // mut q_window: Query<&mut Window>,
     mut q_cursor_options: Query<&mut CursorOptions>,
     settings: Res<AppSettings>,
     viewport_info: Res<ViewportInfo>,
@@ -73,7 +75,7 @@ fn cursor_grab(
     if !viewport_info.mouse_in_viewport {
         return;
     }
-    let mut window = q_window.single_mut().unwrap();
+    // let mut window = q_window.single_mut().unwrap();
     let cursor: &mut CursorOptions = &mut q_cursor_options.single_mut().unwrap();
 
     if (settings.camera.mode == CameraMode::Fly
@@ -93,9 +95,9 @@ fn cursor_grab(
 }
 
 fn update_active_camera(
-    mut q_fly_cam: Query<(Entity, &mut Camera), (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>)>,
-    mut q_orbit_cam: Query<(Entity, &mut Camera), (With<OrbitCam>, Without<FlyCam>, Without<TopDownCam>)>,
-    mut q_topdown_cam: Query<(Entity, &mut Camera), (With<TopDownCam>, Without<FlyCam>, Without<OrbitCam>)>,
+    mut q_fly_cam: Query<&mut Camera, (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>)>,
+    mut q_orbit_cam: Query<&mut Camera, (With<OrbitCam>, Without<FlyCam>, Without<TopDownCam>)>,
+    mut q_topdown_cam: Query<&mut Camera, (With<TopDownCam>, Without<FlyCam>, Without<OrbitCam>)>,
     mut ev_camera_mode_changed: MessageReader<CameraModeChanged>,
 ) {
     for ev in ev_camera_mode_changed.read() {
@@ -103,22 +105,13 @@ fn update_active_camera(
         let mut orbit_cam = q_orbit_cam.single_mut().unwrap();
         let mut topdown_cam = q_topdown_cam.single_mut().unwrap();
 
-        match ev.0 {
-            CameraMode::Fly => {
-                fly_cam.1.is_active = true;
-                orbit_cam.1.is_active = false;
-                topdown_cam.1.is_active = false;
-            }
-            CameraMode::Orbit => {
-                fly_cam.1.is_active = false;
-                orbit_cam.1.is_active = true;
-                topdown_cam.1.is_active = false;
-            }
-            CameraMode::TopDown => {
-                fly_cam.1.is_active = false;
-                orbit_cam.1.is_active = false;
-                topdown_cam.1.is_active = true;
-            }
-        }
+        let active_states = match ev.0 {
+            CameraMode::Fly => (true, false, false),
+            CameraMode::Orbit => (false, true, false),
+            CameraMode::TopDown => (false, false, true),
+        };
+        fly_cam.is_active = active_states.0;
+        orbit_cam.is_active = active_states.1;
+        topdown_cam.is_active = active_states.2;
     }
 }

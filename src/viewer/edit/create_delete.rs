@@ -3,7 +3,7 @@ use crate::{
     ui::viewport::ViewportInfo,
     util::{get_ray_from_cam, try_despawn, ui_viewport_to_ndc, RaycastFromCam},
     viewer::{
-        camera::Gizmo2dCam,
+        camera::EditorCamera,
         kcl_model::KCLModelSection,
         kmp::{
             checkpoints::{CheckpointHeight, GetSelectedCheckpoints},
@@ -12,7 +12,7 @@ use crate::{
                 KmpSelectablePoint, MaxConnectedPath, Object, RespawnPoint, RoutePoint, Spawn, Spawner, StartPoint,
             },
             ordering::RefreshOrdering,
-            path::{is_checkpoint, KmpPathNode, RecalcPaths},
+            path::{is_checkpoint, KmpPathNode, RecalcPaths, ToPathType},
             sections::KmpEditMode,
         },
     },
@@ -79,14 +79,13 @@ fn create_point<T: Component + Spawn + Default + Clone>(
     ev_just_created_point.write(JustCreatedPoint(entity));
 }
 
-fn create_path<T: Component + Spawn + Default + Clone + MaxConnectedPath>(
+fn create_path<T: Component + Spawn + Default + Clone + MaxConnectedPath + ToPathType>(
     mut commands: Commands,
     mode: Res<KmpEditMode>,
     q_selected_pt: Query<Entity, (With<T>, With<Selected>)>,
     q_kmp_path_node: Query<&KmpPathNode>,
     mut q_cp: GetSelectedCheckpoints,
     mut ev_create_point: MessageReader<CreatePoint>,
-    mut ev_recalc_paths: MessageWriter<RecalcPaths>,
     mut ev_just_created_point: MessageWriter<JustCreatedPoint>,
 ) {
     if !mode.in_mode::<T>() {
@@ -102,18 +101,26 @@ fn create_path<T: Component + Spawn + Default + Clone + MaxConnectedPath>(
         q_selected_pt.iter().collect()
     };
 
-    // if any prev points are at max linking capacity, then return
-    if q_kmp_path_node.iter_many(&prev_nodes).any(|x| x.at_max_next()) {
+    // The new node must be able to reference every selected predecessor, and
+    // every predecessor must have room for one more outgoing edge.
+    if prev_nodes.len() > T::MAX_CONNECTED as usize
+        || q_kmp_path_node.iter_many(&prev_nodes).any(|node| node.at_max_next())
+    {
         return;
     }
 
-    ev_recalc_paths.write_default();
+    let path_type = T::to_path_type();
     let entity = Spawner::<T>::builder()
         .pos(pos)
         .prev_nodes(prev_nodes)
         .max(T::MAX_CONNECTED)
         .build()
         .spawn_command(&mut commands);
+    // Recalculate only after the deferred spawn has inserted the node and linked
+    // it to its selected predecessors.
+    commands.queue(move |world: &mut World| {
+        world.write_message(RecalcPaths::for_path_type(path_type));
+    });
     // let entity = Spawner::<T>::default()
     //     .pos(pos)
     //     .prev_nodes(prev_nodes)
@@ -131,7 +138,7 @@ fn alt_click_create_point(
     viewport_info: Res<ViewportInfo>,
     mut raycast: MeshRayCast,
     cp_height: Res<CheckpointHeight>,
-    q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
+    q_camera: Query<(&Camera, &GlobalTransform), With<EditorCamera>>,
     q_window: Query<&Window>,
     q_kmp_pt: Query<(), With<KmpSelectablePoint>>,
     q_kcl: Query<(), With<KCLModelSection>>,

@@ -9,7 +9,7 @@ use bevy::{
 use serde::{Deserialize, Serialize};
 use transform_gizmo_bevy::GizmoCamera;
 
-use super::{CameraMode, UpdateCameraSet};
+use super::{CameraMode, EditorCamera, UpdateCameraSet};
 
 pub fn fly_cam_plugin(app: &mut App) {
     app.add_systems(Startup, camera_setup.after(SetupViewportSet))
@@ -80,6 +80,7 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
         },
         Transform::from_translation(fly_default.start_pos).looking_at(Vec3::ZERO, Vec3::Y),
         FlyCam,
+        EditorCamera,
         GizmoCamera,
         Msaa::Sample4,
     ));

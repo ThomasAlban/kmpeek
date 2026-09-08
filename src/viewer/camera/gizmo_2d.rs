@@ -1,8 +1,4 @@
-use bevy::{
-    prelude::*,
-    camera::visibility::RenderLayers,
-    camera::RenderTarget,
-};
+use bevy::{camera::visibility::RenderLayers, camera::RenderTarget, prelude::*};
 
 use crate::ui::viewport::{SetupViewportSet, ViewportImage};
 
@@ -16,7 +12,7 @@ pub struct Gizmo2dCam;
 
 fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
     commands.spawn((
-        Camera2d::default(),
+        Camera2d,
         Camera {
             // render to the image
             target: RenderTarget::Image(viewport.handle.clone().into()),

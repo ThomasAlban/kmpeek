@@ -18,7 +18,12 @@ pub mod viewport;
 
 pub fn ui_plugin(app: &mut App) {
     app.add_plugins((
-        EguiPlugin::default(),
+        EguiPlugin {
+            // bevy_egui 0.38 enables experimental bindless textures by default,
+            // but Bevy 0.17's bindless support is incomplete on Metal.
+            bindless_mode_array_size: None,
+            ..Default::default()
+        },
         ui_state_plugin,
         docktree_plugin,
         update_ui_plugin,

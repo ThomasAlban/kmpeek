@@ -6,7 +6,7 @@ use super::{
 use crate::{
     ui::viewport::ViewportInfo,
     util::{get_ray_from_cam, ui_viewport_to_ndc, RaycastFromCam},
-    viewer::{camera::Gizmo2dCam, kcl_model::KCLModelSection, kmp::checkpoints::CheckpointHeight},
+    viewer::{camera::EditorCamera, kcl_model::KCLModelSection, kmp::checkpoints::CheckpointHeight},
 };
 use bevy::{prelude::*, platform::collections::hash_map::HashMap};
 
@@ -44,7 +44,7 @@ pub fn tweak_interaction(
     viewport_info: Res<ViewportInfo>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_window: Query<&Window>,
-    q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
+    q_camera: Query<(&Camera, &GlobalTransform), With<EditorCamera>>,
     mut raycast: MeshRayCast,
     checkpoint_height: Res<CheckpointHeight>,
     q_kcl: Query<(), With<KCLModelSection>>,

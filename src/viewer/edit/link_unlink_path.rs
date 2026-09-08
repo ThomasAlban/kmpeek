@@ -3,12 +3,11 @@ use crate::{
     ui::viewport::ViewportInfo,
     util::{ui_viewport_to_ndc, RaycastFromCam},
     viewer::{
-        camera::Gizmo2dCam,
+        camera::EditorCamera,
         kmp::{
             checkpoints::{get_both_cp_nodes, CheckpointRight},
             components::{Checkpoint, CheckpointMarker, EnemyPathPoint, ItemPathPoint, KmpSelectablePoint, RoutePoint},
-            path::{is_route_pt, KmpPathNode, RecalcPaths},
-            routes::GetRouteStart,
+            path::{KmpPathNode, RecalcPaths},
         },
     },
 };
@@ -33,7 +32,7 @@ pub fn get_pt_to_link(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_selected: Query<Entity, With<Selected>>,
     q_transform: Query<&Transform, With<KmpSelectablePoint>>,
-    q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
+    q_camera: Query<(&Camera, &GlobalTransform), With<EditorCamera>>,
     q_window: Query<&Window>,
     mut raycast: MeshRayCast,
     viewport_info: Res<ViewportInfo>,
@@ -65,45 +64,94 @@ fn link_points<T: Component + LinkKmpPoint + Default>(
     q_pts: Query<(), With<T>>,
     q_selected: Query<Entity, With<Selected>>,
     mut commands: Commands,
-    mut ev_recalc_paths: MessageWriter<RecalcPaths>,
-    get_route_start: GetRouteStart,
 ) {
     let Some(alt_clicked_pt) = *alt_clicked_pt else {
         return;
     };
 
     if q_pts.contains(alt_clicked_pt) {
-        for selected in q_selected.iter().filter(|e| q_pts.contains(*e)) {
-            // we need to check we are not linking to our own route start to create a circle
-            if is_route_pt::<T>() {
-                let route_start_e = get_route_start.get_entity(selected);
-                if route_start_e == alt_clicked_pt {
-                    continue;
-                }
-            }
+        let links: Vec<_> = q_selected
+            .iter()
+            .filter(|selected| q_pts.contains(*selected))
+            .map(|selected| (selected, alt_clicked_pt))
+            .collect();
+
+        if !links.is_empty() {
             commands.queue(move |world: &mut World| {
-                T::link(world, selected, alt_clicked_pt);
+                let mut added = Vec::new();
+                for (previous, next) in links {
+                    if T::link(world, previous, next) {
+                        added.push((previous, next));
+                    } else {
+                        // Treat one Option-click as a transaction: if any edge is
+                        // invalid, roll back every edge added by this click.
+                        for (added_previous, added_next) in added {
+                            T::unlink(world, added_previous, added_next);
+                        }
+                        return;
+                    }
+                }
+                world.write_message(T::recalc_paths());
             });
         }
-        ev_recalc_paths.write(RecalcPaths::all());
     }
 }
 
 trait LinkKmpPoint {
-    fn link(world: &mut World, prev_e: Entity, next_e: Entity) {
-        KmpPathNode::link_nodes(prev_e, next_e, world);
+    fn link(world: &mut World, prev_e: Entity, next_e: Entity) -> bool {
+        KmpPathNode::link_nodes(prev_e, next_e, world)
+    }
+
+    fn unlink(world: &mut World, prev_e: Entity, next_e: Entity) -> bool {
+        KmpPathNode::unlink_nodes(prev_e, next_e, world)
+    }
+
+    fn recalc_paths() -> RecalcPaths;
+}
+impl LinkKmpPoint for EnemyPathPoint {
+    fn recalc_paths() -> RecalcPaths {
+        RecalcPaths::enemy()
     }
 }
-impl LinkKmpPoint for EnemyPathPoint {}
-impl LinkKmpPoint for ItemPathPoint {}
-impl LinkKmpPoint for RoutePoint {}
+impl LinkKmpPoint for ItemPathPoint {
+    fn recalc_paths() -> RecalcPaths {
+        RecalcPaths::item()
+    }
+}
+impl LinkKmpPoint for RoutePoint {
+    fn recalc_paths() -> RecalcPaths {
+        RecalcPaths::route()
+    }
+}
 impl LinkKmpPoint for CheckpointMarker {
-    fn link(world: &mut World, prev_e: Entity, next_e: Entity) {
+    fn link(world: &mut World, prev_e: Entity, next_e: Entity) -> bool {
         let (prev_left, prev_right) = get_both_cp_nodes(world, prev_e);
         let (next_left, next_right) = get_both_cp_nodes(world, next_e);
 
-        KmpPathNode::link_nodes(prev_left, next_left, world);
-        KmpPathNode::link_nodes(prev_right, next_right, world);
+        let left_changed = KmpPathNode::link_nodes(prev_left, next_left, world);
+        let right_changed = KmpPathNode::link_nodes(prev_right, next_right, world);
+        if left_changed != right_changed {
+            if left_changed {
+                KmpPathNode::unlink_nodes(prev_left, next_left, world);
+            }
+            if right_changed {
+                KmpPathNode::unlink_nodes(prev_right, next_right, world);
+            }
+            return false;
+        }
+        left_changed
+    }
+
+    fn unlink(world: &mut World, prev_e: Entity, next_e: Entity) -> bool {
+        let (prev_left, prev_right) = get_both_cp_nodes(world, prev_e);
+        let (next_left, next_right) = get_both_cp_nodes(world, next_e);
+        let left_changed = KmpPathNode::unlink_nodes(prev_left, next_left, world);
+        let right_changed = KmpPathNode::unlink_nodes(prev_right, next_right, world);
+        left_changed || right_changed
+    }
+
+    fn recalc_paths() -> RecalcPaths {
+        RecalcPaths::cp()
     }
 }
 
@@ -112,7 +160,6 @@ pub fn unlink_points(
     keys: Res<ButtonInput<KeyCode>>,
     q_kmp_path_node: Query<&KmpPathNode>,
     q_selected: Query<Entity, With<Selected>>,
-    mut ev_recalc_paths: MessageWriter<RecalcPaths>,
 ) {
     // unlink points with the U key
     if !keys.just_pressed(KeyCode::KeyU) {
@@ -122,13 +169,24 @@ pub fn unlink_points(
     struct Unlink(Entity, Entity);
     impl Command for Unlink {
         fn apply(self, world: &mut World) {
-            if world.entity(self.0).contains::<Checkpoint>() || world.entity(self.1).contains::<CheckpointRight>() {
+            if world.get::<KmpPathNode>(self.0).is_none() || world.get::<KmpPathNode>(self.1).is_none() {
+                return;
+            }
+
+            let changed = if world.get::<Checkpoint>(self.0).is_some()
+                || world.get::<CheckpointRight>(self.1).is_some()
+            {
                 let (prev_left, prev_right) = get_both_cp_nodes(world, self.0);
                 let (next_left, next_right) = get_both_cp_nodes(world, self.1);
-                KmpPathNode::unlink_nodes(prev_left, next_left, world);
-                KmpPathNode::unlink_nodes(prev_right, next_right, world);
+                let left_changed = KmpPathNode::unlink_nodes(prev_left, next_left, world);
+                let right_changed = KmpPathNode::unlink_nodes(prev_right, next_right, world);
+                left_changed || right_changed
             } else {
-                KmpPathNode::unlink_nodes(self.0, self.1, world);
+                KmpPathNode::unlink_nodes(self.0, self.1, world)
+            };
+
+            if changed {
+                world.write_message(RecalcPaths::all());
             }
         }
     }
@@ -144,5 +202,4 @@ pub fn unlink_points(
             commands.queue(Unlink(selected, next_node_entity));
         }
     }
-    ev_recalc_paths.write(RecalcPaths::all());
 }

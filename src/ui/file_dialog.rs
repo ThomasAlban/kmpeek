@@ -1,7 +1,7 @@
 use super::util::get_egui_ctx;
 use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::egui::Align2;
-use egui_file::FileDialog;
+use egui_file::{FileDialog, State as FileDialogState};
 use std::path::PathBuf;
 
 pub fn file_dialog_plugin(app: &mut App) {
@@ -32,16 +32,34 @@ pub fn show_file_dialog(world: &mut World) {
     let ctx = &get_egui_ctx(world);
 
     world.resource_scope(|world, mut file_dialog: Mut<FileDialogRes>| {
+        let mut result = None;
+        let mut close_dialog = false;
+
         if let Some((dialog, dialog_type)) = &mut file_dialog.0 {
-            let dialog_type = *dialog_type;
-            if dialog.show(ctx).selected() {
-                if let Some(path) = dialog.path() {
-                    world.write_message(FileDialogResult {
+            dialog.show(ctx);
+            match dialog.state() {
+                FileDialogState::Selected => {
+                    result = dialog.path().map(|path| FileDialogResult {
                         path: path.into(),
-                        dialog_type,
+                        dialog_type: *dialog_type,
                     });
+                    close_dialog = true;
                 }
+                FileDialogState::Cancelled | FileDialogState::Closed => {
+                    close_dialog = true;
+                }
+                FileDialogState::Open => {}
             }
+        }
+
+        if close_dialog {
+            file_dialog.0 = None;
+            // The dialog can close during the first egui pass. Rerun the UI so
+            // its transitional closing pass is never presented to the user.
+            ctx.request_discard("file dialog closed");
+        }
+        if let Some(result) = result {
+            world.write_message(result);
         }
     });
 }

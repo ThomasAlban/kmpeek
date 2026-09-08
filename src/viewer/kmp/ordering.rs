@@ -15,7 +15,7 @@ pub fn ordering_plugin(app: &mut App) {
 
 fn setup_ordering<T: Component>(app: &mut App) {
     app.init_resource::<NextOrderID<T>>()
-        .add_systems(Update, refresh_order::<T>.run_if(on_event::<RefreshOrdering>));
+        .add_systems(Update, refresh_order::<T>.run_if(on_message::<RefreshOrdering>));
 }
 
 #[derive(Component, Default, PartialEq, Eq, PartialOrd, Ord, Deref, DerefMut)]

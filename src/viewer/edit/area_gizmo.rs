@@ -2,16 +2,16 @@ use crate::{
     ui::viewport::ViewportInfo,
     util::{get_ray_from_cam, ui_viewport_to_ndc, world_to_ui_viewport},
     viewer::{
-        camera::{Gizmo2dCam, TopDownCam},
+        camera::{EditorCamera, Gizmo2dCam, TopDownCam},
         edit::select::Selected,
         kmp::components::{AreaPoint, AreaShape},
     },
 };
 use bevy::{
+    camera::visibility::RenderLayers,
     color::palettes::css,
     math::{vec2, vec3, DVec3},
     prelude::*,
-    camera::visibility::RenderLayers,
     transform::TransformSystems,
 };
 use bevy_vector_shapes::{
@@ -95,7 +95,7 @@ fn draw_area_bounds(mut gizmos: Gizmos, q_areas: Query<(&mut Transform, &mut Are
 // these are drawn using the 2d gizmo camera which renders above the main camera
 fn draw_area_handles(
     mut q_areas: Query<(Entity, &mut Transform, &mut AreaPoint), With<Selected>>,
-    q_cam: Query<(&Camera, &GlobalTransform, Has<TopDownCam>), (Without<Selected>, Without<Gizmo2dCam>)>,
+    q_cam: Query<(&Camera, &GlobalTransform, Has<TopDownCam>), (With<EditorCamera>, Without<Selected>)>,
     q_gizmo_cam: Query<(&Camera, &GlobalTransform), With<Gizmo2dCam>>,
     viewport_info: Res<ViewportInfo>,
     q_window: Query<&Window>,
@@ -316,16 +316,10 @@ pub fn ray_to_ray(a_ray: Ray3d, b_ray: Ray3d) -> (f64, f64) {
     let d = adir.dot(w);
     let e = bdir.dot(w);
     let dot = 1.0 - b * b;
-    let ta;
-    let tb;
 
     if dot < 1e-8 {
-        ta = 0.0;
-        tb = e;
+        (0.0, e)
     } else {
-        ta = (b * e - d) / dot;
-        tb = (e - b * d) / dot;
+        ((b * e - d) / dot, (e - b * d) / dot)
     }
-
-    (ta, tb)
 }

@@ -1,13 +1,11 @@
 use crate::{
-    ui::{settings::AppSettings, update_ui::KclFileSelected},
+    ui::{
+        settings::AppSettings,
+        update_ui::{FileLoadSet, KclFileSelected},
+    },
     util::{kcl_file::Kcl, try_despawn},
 };
-use bevy::{
-    prelude::*,
-    mesh::PrimitiveTopology,
-    asset::RenderAssetUsages,
-    render::render_resource::Face,
-};
+use bevy::{asset::RenderAssetUsages, mesh::PrimitiveTopology, prelude::*, render::render_resource::Face};
 
 use serde::{Deserialize, Serialize};
 use std::{ffi::OsStr, fs::File};
@@ -15,7 +13,12 @@ use std::{ffi::OsStr, fs::File};
 pub fn kcl_plugin(app: &mut App) {
     app.add_message::<KclModelUpdated>().add_systems(
         Update,
-        (spawn_model.run_if(on_event::<KclFileSelected>), update_kcl_model),
+        (
+            spawn_model
+                .run_if(on_message::<KclFileSelected>)
+                .in_set(FileLoadSet::Load),
+            update_kcl_model,
+        ),
     );
 }
 
@@ -110,27 +113,27 @@ pub fn spawn_model(
         let color = settings.kcl_model.color[i];
 
         commands.spawn((
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(materials.add(StandardMaterial {
-                    base_color: color,
-                    cull_mode: if settings.kcl_model.backface_culling {
-                        Some(Face::Back)
-                    } else {
-                        None
-                    },
-                    double_sided: !settings.kcl_model.backface_culling,
-                    alpha_mode: if color.alpha() < 1. {
-                        AlphaMode::Blend
-                    } else {
-                        AlphaMode::Opaque
-                    },
-                    ..default()
-                })),
-                if settings.kcl_model.visible[i] {
-                    Visibility::Inherited
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: color,
+                cull_mode: if settings.kcl_model.backface_culling {
+                    Some(Face::Back)
                 } else {
-                    Visibility::Hidden
+                    None
                 },
+                double_sided: !settings.kcl_model.backface_culling,
+                alpha_mode: if color.alpha() < 1. {
+                    AlphaMode::Blend
+                } else {
+                    AlphaMode::Opaque
+                },
+                ..default()
+            })),
+            if settings.kcl_model.visible[i] {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            },
             KCLModelSection(i),
         ));
     }

@@ -6,7 +6,6 @@ mod viewport;
 
 use super::util::get_egui_ctx;
 use bevy::prelude::*;
-use bevy_egui::egui;
 use bevy_pkv::PkvStore;
 use edit::show_edit_tab;
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
@@ -85,10 +84,9 @@ pub fn show_dock_area(world: &mut World) {
     let style = Style::from_egui(ctx.style().as_ref());
 
     world.resource_scope(|world, mut tree: Mut<DockTree>| {
-        // show the actual dock area
-        println!("screen: {:?}", ctx.screen_rect());
-        println!("content: {:?}", ctx.content_rect());
-        println!("available: {:?}", ctx.available_rect());
-        DockArea::new(&mut tree).style(style).show(ctx, &mut TabViewer(world));
+        let available = ctx.available_rect();
+        if available.width() > 1.0 && available.height() > 1.0 {
+            DockArea::new(&mut tree).style(style).show(ctx, &mut TabViewer(world));
+        }
     });
 }

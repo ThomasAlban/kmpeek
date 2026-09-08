@@ -27,7 +27,7 @@ use bevy::{
     prelude::*,
     transform::TransformSystems,
 };
-use bevy_mod_outline::{OutlineVolume};
+use bevy_mod_outline::OutlineVolume;
 use bon::builder;
 
 pub fn checkpoint_plugin(app: &mut App) {
@@ -132,12 +132,8 @@ impl Default for CheckpointHeight {
     }
 }
 
-fn on_remove_cp_left(
-    trigger: Trigger<OnRemove, CheckpointLeft>,
-    q_cp_left: Query<&CheckpointLeft>,
-    mut commands: Commands,
-) {
-    let cp_left = q_cp_left.get(trigger.target()).unwrap();
+fn on_remove_cp_left(trigger: On<Remove, CheckpointLeft>, q_cp_left: Query<&CheckpointLeft>, mut commands: Commands) {
+    let cp_left = q_cp_left.get(trigger.event().entity).unwrap();
     let cp_right = cp_left.right;
 
     try_despawn(&mut commands, cp_right);
@@ -147,11 +143,11 @@ fn on_remove_cp_left(
 }
 
 fn on_remove_cp_right(
-    trigger: Trigger<OnRemove, CheckpointRight>,
+    trigger: On<Remove, CheckpointRight>,
     q_cp_right: Query<&CheckpointRight>,
     mut commands: Commands,
 ) {
-    let cp_right = q_cp_right.get(trigger.target()).unwrap();
+    let cp_right = q_cp_right.get(trigger.event().entity).unwrap();
     let cp_left = cp_right.left;
 
     try_despawn(&mut commands, cp_left);
@@ -277,7 +273,7 @@ pub fn checkpoint_spawner(
         .get_entity_mut(arrow_e)
         .unwrap()
         .insert((
-            Visibility::Visible,
+            visibility,
             arrow_parent_transform,
             CpArrowParent,
             Normalize::new(200., 30., BVec3::TRUE),
@@ -295,10 +291,10 @@ pub fn checkpoint_spawner(
     // spawn the plane
     let transform = calc_cp_plane_transform(left_pos, right_pos, height);
     world.entity_mut(plane_e).insert((
-            Mesh3d(plane_mesh),
-            MeshMaterial3d(material_plane),
-            transform,
-            visibility,
+        Mesh3d(plane_mesh),
+        MeshMaterial3d(material_plane),
+        transform,
+        visibility,
         CheckpointPlane {
             left: left_e,
             right: right_e,
@@ -454,7 +450,7 @@ pub struct GetSelectedCheckpoints<'w, 's> {
     q_cp_right: Query<'w, 's, &'static mut CheckpointRight, With<Selected>>,
 }
 impl GetSelectedCheckpoints<'_, '_> {
-    pub fn get(&mut self) -> EntityHashMap<Mut<Checkpoint>> {
+    pub fn get(&mut self) -> EntityHashMap<Mut<'_, Checkpoint>> {
         let cp_left_of_right: EntityHashSet = self.q_cp_right.iter().map(|x| x.left).collect();
         let mut cps: EntityHashMap<Mut<Checkpoint>> = EntityHashMap::default();
         for (cp_l, e, selected) in self.q_cp_left.iter_mut() {

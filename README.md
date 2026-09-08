@@ -6,9 +6,9 @@ An in-progress 3D KMP editor for Mario Kart Wii. The goal is for it to be the ul
 
 ## Bevy migration
 
-Since the project is old, first thing im doing with my fork is to update every single depency, so it's runnable atleast.
+Since the project is old, first thing I'm doing with my fork is updating every single depency, so it's runnable at least.
 
-To speed up compile times, I've added a `.cargo/config.toml` file to add a custom linker, but i've gitignored it also because i'm on linux. if you want, add it yourself
+To speed up compile times, I've added a `.cargo/config.toml` file to add a custom linker, but I've gitignored it also because I'm on linux. if you want, add it yourself.
 
 ## Alpha Release
 

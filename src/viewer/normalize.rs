@@ -2,7 +2,7 @@ use crate::ui::settings::AppSettings;
 use bevy::prelude::*;
 use derive_new::new;
 
-use super::camera::Gizmo2dCam;
+use super::camera::EditorCamera;
 
 pub fn normalize_plugin(app: &mut App) {
     app.add_systems(Last, update_normalize);
@@ -27,7 +27,7 @@ pub struct NormalizeInheritParent;
 // of entities which follow the transform of the parent but aren't necesssarily normalized
 fn update_normalize(
     mut p: ParamSet<(
-        Query<(&GlobalTransform, &Camera), Without<Gizmo2dCam>>,
+        Query<(&GlobalTransform, &Camera), With<EditorCamera>>,
         Query<(&mut GlobalTransform, &Normalize, Option<&Children>)>,
         Query<(&mut GlobalTransform, &Transform, &ViewVisibility), With<NormalizeInheritParent>>,
     )>,
@@ -38,7 +38,9 @@ fn update_normalize(
 
     let (camera_position, camera) = {
         let q_cam = p.p0();
-        let res = q_cam.iter().find(|x| x.1.is_active).unwrap();
+        let Some(res) = q_cam.iter().find(|x| x.1.is_active) else {
+            return;
+        };
         (res.0.to_owned(), res.1.to_owned())
     };
 

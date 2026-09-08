@@ -4,3 +4,4 @@
 trace*
 .cargo/config.toml
 log.txt
+.juggler/

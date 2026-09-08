@@ -44,12 +44,12 @@ pub struct RouteStartBundle {
 }
 
 fn on_add_route_linked_entities(
-    trigger: Trigger<OnAdd, RouteLinkedEntities>,
+    trigger: On<Add, RouteLinkedEntities>,
     q_route_linked_es: Query<&RouteLinkedEntities>,
     q_route_link: Query<&RouteLink>,
     mut commands: Commands,
 ) {
-    let e = trigger.target();
+    let e = trigger.event().entity;
     let route_linked_es = q_route_linked_es.get(e).unwrap();
 
     // make sure that all the entities we are linking to actually have the RouteLink component, if not, add it
@@ -60,12 +60,12 @@ fn on_add_route_linked_entities(
     }
 }
 fn on_remove_route_linked_entities(
-    trigger: Trigger<OnRemove, RouteLinkedEntities>,
+    trigger: On<Remove, RouteLinkedEntities>,
     q_route_linked_es: Query<&RouteLinkedEntities>,
     q_kmp_path_node: Query<&KmpPathNode>,
     mut commands: Commands,
 ) {
-    let e = trigger.target();
+    let e = trigger.event().entity;
     let route_linked_es = q_route_linked_es.get(e).unwrap().clone();
     let kmp_path_node = q_kmp_path_node.get(e).unwrap().clone();
 
@@ -88,11 +88,11 @@ fn on_remove_route_linked_entities(
 pub struct RouteLink(pub Entity);
 
 fn on_add_route_link(
-    trigger: Trigger<OnAdd, RouteLink>,
+    trigger: On<Add, RouteLink>,
     q_route_link: Query<&RouteLink>,
     mut q_route_linked_es: Query<&mut RouteLinkedEntities>,
 ) {
-    let e = trigger.target();
+    let e = trigger.event().entity;
     let linked_e = q_route_link.get(e).unwrap().0;
 
     let mut route_linked_es = q_route_linked_es.get_mut(linked_e).unwrap();
@@ -100,11 +100,11 @@ fn on_add_route_link(
     route_linked_es.insert(e);
 }
 fn on_remove_route_link(
-    trigger: Trigger<OnRemove, RouteLink>,
+    trigger: On<Remove, RouteLink>,
     q_route_link: Query<&RouteLink>,
     mut q_route_linked_es: Query<&mut RouteLinkedEntities>,
 ) {
-    let e = trigger.target();
+    let e = trigger.event().entity;
     let linked_e = q_route_link.get(e).unwrap().0;
 
     let mut route_linked_es = q_route_linked_es.get_mut(linked_e).unwrap();
@@ -112,8 +112,8 @@ fn on_remove_route_link(
     route_linked_es.remove(&e);
 }
 
-fn on_add_route_pt(trigger: Trigger<OnAdd, RoutePoint>, q_kmp_path_node: Query<&KmpPathNode>, mut commands: Commands) {
-    let e = trigger.target();
+fn on_add_route_pt(trigger: On<Add, RoutePoint>, q_kmp_path_node: Query<&KmpPathNode>, mut commands: Commands) {
+    let e = trigger.event().entity;
     let kmp_path_node = q_kmp_path_node.get(e).unwrap();
 
     // if we have started a new route path, add route settings and route linked entities to it because it is the first point
@@ -123,14 +123,14 @@ fn on_add_route_pt(trigger: Trigger<OnAdd, RoutePoint>, q_kmp_path_node: Query<&
 }
 
 fn on_remove_route_pt(
-    trigger: Trigger<OnRemove, RoutePoint>,
+    trigger: On<Remove, RoutePoint>,
     mut commands: Commands,
     q_kmp_path_node: Query<&KmpPathNode>,
     mut ev_recalc_paths: MessageWriter<RecalcPaths>,
 ) {
     // we will have to add 'route settings' and 'route linked entities' components to the next entity,
     // because that entity is now the start of a new route now that we've been deleted
-    let e = trigger.target();
+    let e = trigger.event().entity;
     // check if there is a next entity because we might be at the end of the route
     if let Some(new_start_e) = q_kmp_path_node.get(e).unwrap().next_nodes.iter().next() {
         commands.entity(*new_start_e).insert(RouteStartBundle::default());
@@ -214,7 +214,11 @@ pub struct GetRouteStart<'w, 's> {
 }
 impl GetRouteStart<'_, '_> {
     pub fn get_entity(&self, mut cur_e: Entity) -> Entity {
-        while let Some(prev_e) = self.q.get(cur_e).ok().and_then(|x| x.1.prev_nodes.iter().next()) {
+        let mut visited = EntityHashSet::default();
+        while visited.insert(cur_e) {
+            let Some(prev_e) = self.q.get(cur_e).ok().and_then(|x| x.1.prev_nodes.iter().next()) else {
+                break;
+            };
             cur_e = *prev_e;
         }
         cur_e

@@ -11,8 +11,16 @@ use crate::{
         kmp::components::{RespawnPoint, RoutePoint},
     },
 };
-use bevy::{ecs::system::SystemState, math::vec2, prelude::*, render::render_resource::Extent3d};
-use bevy_egui::egui::{self, Color32, Margin, Response, CornerRadius, Sense, Stroke, StrokeKind, Ui, show_tooltip_at_pointer};
+use bevy::{
+    ecs::system::SystemState,
+    math::vec2,
+    prelude::*,
+    render::render_resource::Extent3d,
+    window::RequestRedraw,
+};
+use bevy_egui::egui::{
+    self, Color32, CornerRadius, Margin, PopupAnchor, Response, Sense, Stroke, StrokeKind, Tooltip, Ui, UiBuilder,
+};
 use transform_gizmo_bevy::{config::TransformPivotPoint, GizmoOptions, GizmoOrientation};
 
 pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
@@ -20,32 +28,42 @@ pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
 
     let window_sf = window.scale_factor();
 
-    let mut ss = SystemState::<(Res<ViewportImage>, ResMut<Assets<Image>>, ResMut<ViewportInfo>)>::new(world);
-    let (viewport, mut image_assets, mut viewport_info) = ss.get_mut(world);
-
-    let viewport_image = image_assets.get_mut(viewport.handle.id()).unwrap();
+    let mut ss = SystemState::<(
+        Res<ViewportImage>,
+        ResMut<Assets<Image>>,
+        ResMut<ViewportInfo>,
+        MessageWriter<RequestRedraw>,
+    )>::new(world);
+    let (viewport, mut image_assets, mut viewport_info, mut redraw) = ss.get_mut(world);
 
     let viewport_top_left = vec2(ui.next_widget_position().x, ui.next_widget_position().y);
-    // make sure we don't go above 2000 because otherwise igpus may run out of memory especially when multiplying by a window scale factor above 1
-    // this fixes a weird error I experienced on windows where for one frame the viewport image size would be strangely large and crash the igpu
-    let viewport_bottom_right = vec2(ui.max_rect().max.x, ui.max_rect().max.y).min(Vec2::splat(2000.));
-
-    let viewport_rect = Rect::from_corners(viewport_top_left, viewport_bottom_right);
+    // Cap the texture dimensions because unexpectedly large images can exhaust
+    // integrated GPUs, especially on high-DPI displays.
+    let viewport_size = (vec2(ui.max_rect().max.x, ui.max_rect().max.y) - viewport_top_left)
+        .max(Vec2::ONE)
+        .min(Vec2::splat(2000.));
+    let viewport_rect = Rect::from_corners(viewport_top_left, viewport_top_left + viewport_size);
     let egui_viewport_rect = viewport_rect.to_egui_rect();
 
-    // resize the viewport if needed
-    if viewport_image.size() != (viewport_rect.size().as_uvec2() * window_sf as u32) {
+    let physical_size = (viewport_size * window_sf).round().as_uvec2().max(UVec2::ONE);
+
+    // Accessing an asset mutably marks it as modified, which causes Bevy to
+    // reprepare the GPU image. Only do that when the texture actually changed size.
+    let current_size = image_assets.get(viewport.handle.id()).unwrap().size();
+    if current_size != physical_size {
         let size = Extent3d {
-            width: viewport_rect.size().x as u32 * window_sf as u32,
-            height: viewport_rect.size().y as u32 * window_sf as u32,
+            width: physical_size.x,
+            height: physical_size.y,
             ..default()
         };
-        viewport_image.resize(size);
+        image_assets.get_mut(viewport.handle.id()).unwrap().resize(size);
+        // The resized target is rendered later in this frame. Request one more
+        // frame so egui can display those contents in reactive desktop mode.
+        redraw.write(RequestRedraw);
     }
 
     // show the viewport image
-
-    ui.allocate_ui_at_rect(egui_viewport_rect, |ui| {
+    ui.scope_builder(UiBuilder::new().max_rect(egui_viewport_rect), |ui| {
         // make the image sense clicks and drags, so that any events that aren't consumed by buttons above it are consumed by this
         // so we don't start dragging around the window when trying to select stuff etc
         ui.add(
@@ -68,11 +86,11 @@ pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
 
     // show the route hover label if needed
     if world.contains_resource::<LinkSelectMode<RoutePoint>>() {
-        show_tooltip_at_pointer(ui.ctx(), ui.layer_id(), ui.next_auto_id(), |ui| {
+        Tooltip::always_open(ui.ctx().clone(), ui.layer_id(), ui.next_auto_id(), PopupAnchor::Pointer).show(|ui| {
             ui.label("Select a Route (ESC to cancel)");
         });
     } else if world.contains_resource::<LinkSelectMode<RespawnPoint>>() {
-        show_tooltip_at_pointer(ui.ctx(), ui.layer_id(), ui.next_auto_id(), |ui| {
+        Tooltip::always_open(ui.ctx().clone(), ui.layer_id(), ui.next_auto_id(), PopupAnchor::Pointer).show(|ui| {
             ui.label("Select a Respawn (ESC to cancel)");
         });
     }
@@ -80,7 +98,7 @@ pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
 
 fn show_select_box(ui: &mut Ui, world: &mut World) {
     let vp_rect = world.resource::<ViewportInfo>().viewport_rect.to_egui_rect();
-    ui.allocate_ui_at_rect(vp_rect, |ui| {
+    ui.scope_builder(UiBuilder::new().max_rect(vp_rect), |ui| {
         ui.set_clip_rect(vp_rect);
         let painter = ui.painter();
         if let Some(select_box) = world.resource::<SelectBox>().0 {
@@ -111,10 +129,10 @@ fn show_overlayed_ui(ui: &mut Ui, world: &mut World) -> Vec<Response> {
 
     let mut responses = Vec::new();
     // viewport overlayed ui
-    ui.allocate_ui_at_rect(vp_rect, |ui| {
+    ui.scope_builder(UiBuilder::new().max_rect(vp_rect), |ui| {
         ui.style_mut().spacing.item_spacing = egui::Vec2::splat(5.);
 
-        egui::Frame::none().inner_margin(Margin::same(5)).show(ui, |ui| {
+        egui::Frame::new().inner_margin(Margin::same(5)).show(ui, |ui| {
             // popups for things such as gizmo options, camera options, etc
             ui.horizontal(|ui| {
                 let gizmo_options_btn = ui.button("Gizmo Options");

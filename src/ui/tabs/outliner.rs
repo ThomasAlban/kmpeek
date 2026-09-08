@@ -102,7 +102,8 @@ fn show_path(ui: &mut Ui, world: &mut World, i: usize, pathgroup: EntityPathGrou
     ui.horizontal(|ui| {
         ui.add_space(10.);
         ui.add_sized([ICON_SIZE, ICON_SIZE], Icons::path(ui.ctx(), ICON_SIZE).tint(color));
-        let label = ui.add(
+        let label = ui.add_enabled(
+            all_visible,
             egui::Label::new(format!("Path {i}"))
                 .selectable(false)
                 .sense(egui::Sense::click()),

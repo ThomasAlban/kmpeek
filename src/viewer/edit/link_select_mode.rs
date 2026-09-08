@@ -2,7 +2,7 @@ use crate::{
     ui::viewport::ViewportInfo,
     util::{ui_viewport_to_ndc, RaycastFromCam},
     viewer::{
-        camera::Gizmo2dCam,
+        camera::EditorCamera,
         kmp::{
             checkpoints::CheckpointRespawnLink,
             components::{KmpSelectablePoint, RespawnPoint, RoutePoint},
@@ -68,7 +68,7 @@ fn update_link_selection_mode<T: Component + CreateLink>(
     // saves the visibility state of everything before we went into route selection mode
     mut e_v_map: Local<HashMap<Entity, Visibility>>,
     mut commands: Commands,
-    q_camera: Query<(&mut Camera, &GlobalTransform), Without<Gizmo2dCam>>,
+    q_camera: Query<(&mut Camera, &GlobalTransform), With<EditorCamera>>,
     viewport_info: Res<ViewportInfo>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_window: Query<&Window>,

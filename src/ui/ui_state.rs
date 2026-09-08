@@ -17,8 +17,8 @@ pub fn ui_state_plugin(app: &mut App) {
         // .init_resource::<ShowModesCollapsed>()
         // .init_resource::<KmpVisibility>()
         .add_message::<SaveDockTree>()
-        .add_systems(Update, save_docktree.run_if(on_event::<SaveDockTree>))
-        .add_systems(Update, reset_docktree.run_if(on_event::<ResetDockTree>))
+        .add_systems(Update, save_docktree.run_if(on_message::<SaveDockTree>))
+        .add_systems(Update, reset_docktree.run_if(on_message::<ResetDockTree>))
         .add_message::<ResetDockTree>()
         .add_systems(Startup, check_cmd_args.after(SetupAppSettingsSet));
 }

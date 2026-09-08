@@ -615,17 +615,23 @@ impl KmpComponent for RouteSettings {
 
         let mut q = world.query::<(&RoutePoint, &Transform)>();
 
-        //  travel along the route, pushing each route point to 'points' as we go
+        // Travel along the route, stopping if malformed data contains a cycle
+        // or a stale entity reference.
         let mut cur_e = e;
-        while let Some(e) = world
-            .entity(cur_e)
-            .get::<KmpPathNode>()
-            .and_then(|x| x.next_nodes.iter().next())
+        let mut visited = EntityHashSet::from_iter([e]);
+        while let Some(next_e) = world
+            .get::<KmpPathNode>(cur_e)
+            .and_then(|path| path.next_nodes.iter().next())
             .copied()
         {
-            let data = q.get(world, e).unwrap();
-            points.push((data.0.clone(), *data.1, e));
-            cur_e = e;
+            if !visited.insert(next_e) {
+                break;
+            }
+            let Ok((route_point, transform)) = q.get(world, next_e) else {
+                break;
+            };
+            points.push((route_point.clone(), *transform, next_e));
+            cur_e = next_e;
         }
         // convert each route point to storage format
         let points: Vec<PotiPoint> = points
