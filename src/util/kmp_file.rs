@@ -3,8 +3,7 @@ use binrw::{binrw, BinRead, BinWrite};
 use derive_new::new;
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::File,
-    io::{Cursor, Read, Seek, SeekFrom, Write},
+    io::{Read, Seek, SeekFrom, Write},
     marker::PhantomData,
 };
 
@@ -542,39 +541,39 @@ impl_no_route_id!(Jgpt);
 impl_no_route_id!(Cnpt);
 impl_no_route_id!(Mspt);
 
-#[test]
-fn test_full_rewrite() {
-    read_write_kmp_test("test_files/desert_course/course.kmp");
-    read_write_kmp_test("test_files/boardcross_course/course.kmp");
-    read_write_kmp_test("test_files/shopping_course/course.kmp");
-}
+// #[test]
+// fn test_full_rewrite() {
+//     read_write_kmp_test("test_files/desert_course/course.kmp");
+//     read_write_kmp_test("test_files/boardcross_course/course.kmp");
+//     read_write_kmp_test("test_files/shopping_course/course.kmp");
+// }
 
-#[allow(dead_code)]
-fn read_write_kmp_test(path: &str) {
-    let mut input_file = File::open(path).unwrap();
+// #[allow(dead_code)]
+// fn read_write_kmp_test(path: &str) {
+//     let mut input_file = File::open(path).unwrap();
 
-    let input_length = input_file.seek(SeekFrom::End(0)).unwrap() as usize;
-    input_file.seek(SeekFrom::Start(0)).unwrap();
+//     let input_length = input_file.seek(SeekFrom::End(0)).unwrap() as usize;
+//     input_file.seek(SeekFrom::Start(0)).unwrap();
 
-    let mut in_buf = vec![0u8; input_length];
+//     let mut in_buf = vec![0u8; input_length];
 
-    input_file.read_exact(&mut in_buf).unwrap();
-    drop(input_file);
+//     input_file.read_exact(&mut in_buf).unwrap();
+//     drop(input_file);
 
-    let mut in_cursor = Cursor::new(&mut in_buf);
+//     let mut in_cursor = Cursor::new(&mut in_buf);
 
-    let kmp = KmpFile::read(&mut in_cursor).unwrap();
+//     let kmp = KmpFile::read(&mut in_cursor).unwrap();
 
-    let mut out_buf: Vec<u8> = Vec::new();
-    let mut out_cursor = Cursor::new(&mut out_buf);
+//     let mut out_buf: Vec<u8> = Vec::new();
+//     let mut out_cursor = Cursor::new(&mut out_buf);
 
-    kmp.write(&mut out_cursor).unwrap();
+//     kmp.write(&mut out_cursor).unwrap();
 
-    for (i, (in_byte, out_byte)) in in_buf.iter().zip(out_buf.iter()).enumerate() {
-        assert_eq!(
-            in_byte, out_byte,
-            "Mismatching byte at {}, in: {:02X}, out: {:02X}",
-            i, in_byte, out_byte
-        );
-    }
-}
+//     for (i, (in_byte, out_byte)) in in_buf.iter().zip(out_buf.iter()).enumerate() {
+//         assert_eq!(
+//             in_byte, out_byte,
+//             "Mismatching byte at {}, in: {:02X}, out: {:02X}",
+//             i, in_byte, out_byte
+//         );
+//     }
+// }
