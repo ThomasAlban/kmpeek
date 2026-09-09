@@ -1,6 +1,7 @@
 use super::area_gizmo::AreaGizmoOptions;
 use super::create_delete::JustCreatedPoint;
 use super::link_select_mode::LinkSelectMode;
+use super::transform_gizmo::TransformGizmoState;
 use super::EditMode;
 use crate::ui::keybinds::{Modifier, ModifiersPressed};
 use crate::ui::update_ui::UpdateUiSet;
@@ -11,7 +12,6 @@ use crate::viewer::kmp::components::{KmpSelectablePoint, RespawnPoint, RoutePoin
 use crate::viewer::kmp::sections::KmpEditMode;
 use bevy::prelude::*;
 use bevy_mod_outline::*;
-use transform_gizmo_bevy::GizmoTarget;
 
 #[derive(SystemSet, Debug, PartialEq, Eq, Hash, Clone)]
 pub struct SelectSet;
@@ -35,7 +35,7 @@ fn select(
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_camera: Query<(&mut Camera, &GlobalTransform), With<EditorCamera>>,
-    q_gizmos: Query<&GizmoTarget>,
+    transform_gizmo: Res<TransformGizmoState>,
     mut raycast: MeshRayCast,
     q_kmp_section: Query<&KmpSelectablePoint>,
     mut commands: Commands,
@@ -51,7 +51,7 @@ fn select(
         || !mouse_buttons.just_pressed(MouseButton::Left)
         || (ev_just_created_point.is_empty() && (keys.pressed(KeyCode::AltLeft)) || keys.pressed(KeyCode::AltRight))
         || area_gizmo_opts.mouse_hovering
-        || q_gizmos.iter().any(|x| x.is_focused())
+        || transform_gizmo.is_focused
         || route_selection_mode.is_some()
         || respawn_selection_mode.is_some()
     {

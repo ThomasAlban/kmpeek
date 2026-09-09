@@ -1,10 +1,29 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
+pub const DEFAULT_GIZMO_SIZE: f32 = 100.0;
+pub const MIN_GIZMO_SIZE: f32 = 50.0;
+pub const MAX_GIZMO_SIZE: f32 = 200.0;
+pub const DEFAULT_GIZMO_LINE_WIDTH: f32 = 6.0;
+pub const MIN_GIZMO_LINE_WIDTH: f32 = 1.0;
+pub const MAX_GIZMO_LINE_WIDTH: f32 = 16.0;
+
+fn default_gizmo_size() -> f32 {
+    DEFAULT_GIZMO_SIZE
+}
+
+fn default_gizmo_line_width() -> f32 {
+    DEFAULT_GIZMO_LINE_WIDTH
+}
+
 #[derive(Resource, Serialize, Deserialize)]
 pub struct KmpModelSettings {
     //pub normalize: bool,
     pub point_scale: f32,
+    #[serde(default = "default_gizmo_size")]
+    pub gizmo_size: f32,
+    #[serde(default = "default_gizmo_line_width")]
+    pub gizmo_line_width: f32,
     pub color: KmpModelColors,
     pub outline: OutlineSettings,
     pub checkpoint_height: f32,
@@ -14,6 +33,8 @@ impl Default for KmpModelSettings {
         KmpModelSettings {
             //normalize: true,
             point_scale: 1.,
+            gizmo_size: DEFAULT_GIZMO_SIZE,
+            gizmo_line_width: DEFAULT_GIZMO_LINE_WIDTH,
             color: KmpModelColors::default(),
             outline: OutlineSettings::default(),
             checkpoint_height: 10000.,
@@ -141,5 +162,23 @@ impl Default for OutlineSettings {
             color: Color::srgba(1.0, 1.0, 1.0, 0.3),
             width: 7.0,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_gizmo_visual_settings_use_defaults() {
+        let mut serialized = serde_json::to_value(KmpModelSettings::default()).unwrap();
+        let object = serialized.as_object_mut().unwrap();
+        object.remove("gizmo_size");
+        object.remove("gizmo_line_width");
+
+        let settings: KmpModelSettings = serde_json::from_value(serialized).unwrap();
+
+        assert_eq!(settings.gizmo_size, DEFAULT_GIZMO_SIZE);
+        assert_eq!(settings.gizmo_line_width, DEFAULT_GIZMO_LINE_WIDTH);
     }
 }

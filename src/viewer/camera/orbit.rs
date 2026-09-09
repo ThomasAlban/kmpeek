@@ -10,7 +10,6 @@ use bevy::{
     prelude::*,
 };
 use serde::{Deserialize, Serialize};
-use transform_gizmo_bevy::GizmoCamera;
 
 pub fn orbit_cam_plugin(app: &mut App) {
     app.add_systems(Startup, camera_setup.after(SetupViewportSet))
@@ -83,7 +82,6 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
             ..default()
         },
         EditorCamera,
-        GizmoCamera,
         Msaa::Sample4,
     ));
 }

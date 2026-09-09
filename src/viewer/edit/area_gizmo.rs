@@ -3,7 +3,7 @@ use crate::{
     util::{get_ray_from_cam, ui_viewport_to_ndc, world_to_ui_viewport},
     viewer::{
         camera::{EditorCamera, Gizmo2dCam, TopDownCam},
-        edit::select::Selected,
+        edit::{select::Selected, transform_gizmo::TransformGizmoState},
         kmp::components::{AreaPoint, AreaShape},
     },
 };
@@ -20,7 +20,6 @@ use bevy_vector_shapes::{
     Shape2dPlugin,
 };
 use std::f32::consts::{PI, TAU};
-use transform_gizmo_bevy::GizmoTarget;
 
 pub fn area_gizmo_plugin(app: &mut App) {
     app.add_plugins(Shape2dPlugin {
@@ -103,7 +102,7 @@ fn draw_area_handles(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut current_interaction: Local<Option<AreaGizmoInteraction>>,
     mut initial_mouse_pos: Local<Vec2>,
-    q_transform_gizmos: Query<&GizmoTarget>,
+    transform_gizmo: Res<TransformGizmoState>,
     mut painter: ShapePainter,
 ) {
     const HANDLE_RADIUS: f32 = 12.;
@@ -204,7 +203,7 @@ fn draw_area_handles(
         }
 
         // if the mouse button is pressed and we aren't interacting with any transform gizmos
-        if mouse_buttons.pressed(MouseButton::Left) && !q_transform_gizmos.iter().any(|x| x.is_focused()) {
+        if mouse_buttons.pressed(MouseButton::Left) && !transform_gizmo.is_focused {
             if let (
                 Some(AreaGizmoInteraction {
                     area_entity: e,

@@ -1,6 +1,6 @@
 use super::{file_dialog::show_file_dialog, menu_bar::show_menu_bar, tabs::show_dock_area};
-use bevy::{camera::visibility::RenderLayers, prelude::*, window::PrimaryWindow};
-use bevy_egui::{EguiContexts, EguiGlobalSettings, EguiPrimaryContextPass, PrimaryEguiContext};
+use bevy::{camera::visibility::RenderLayers, prelude::*, transform::TransformSystems, window::PrimaryWindow};
+use bevy_egui::{EguiContexts, EguiGlobalSettings, EguiPostUpdateSet, EguiPrimaryContextPass, PrimaryEguiContext};
 use std::path::PathBuf;
 
 #[derive(SystemSet, Hash, PartialEq, Eq, Clone, Debug)]
@@ -13,18 +13,22 @@ pub enum FileLoadSet {
 }
 
 pub fn update_ui_plugin(app: &mut App) {
-    app.configure_sets(Update, (FileLoadSet::Select, FileLoadSet::Load).chain())
-        .add_message::<KmpFileSelected>()
-        .add_message::<KclFileSelected>()
-        .add_systems(Startup, setup_primary_egui_camera)
-        .add_systems(
-            EguiPrimaryContextPass,
-            setup_ui_images.before(UpdateUiSet).run_if(ui_is_ready),
-        )
-        .add_systems(
-            EguiPrimaryContextPass,
-            update_ui.in_set(UpdateUiSet).run_if(ui_is_ready),
-        );
+    app.configure_sets(
+        PostUpdate,
+        EguiPostUpdateSet::EndPass.after(TransformSystems::Propagate),
+    )
+    .configure_sets(Update, (FileLoadSet::Select, FileLoadSet::Load).chain())
+    .add_message::<KmpFileSelected>()
+    .add_message::<KclFileSelected>()
+    .add_systems(Startup, setup_primary_egui_camera)
+    .add_systems(
+        EguiPrimaryContextPass,
+        setup_ui_images.before(UpdateUiSet).run_if(ui_is_ready),
+    )
+    .add_systems(
+        EguiPrimaryContextPass,
+        update_ui.in_set(UpdateUiSet).run_if(ui_is_ready),
+    );
 }
 
 fn setup_primary_egui_camera(mut commands: Commands, mut settings: ResMut<EguiGlobalSettings>) {
@@ -44,10 +48,7 @@ fn setup_primary_egui_camera(mut commands: Commands, mut settings: ResMut<EguiGl
     ));
 }
 
-fn ui_is_ready(
-    windows: Query<(), With<PrimaryWindow>>,
-    contexts: Query<(), With<PrimaryEguiContext>>,
-) -> bool {
+fn ui_is_ready(windows: Query<(), With<PrimaryWindow>>, contexts: Query<(), With<PrimaryEguiContext>>) -> bool {
     !windows.is_empty() && !contexts.is_empty()
 }
 

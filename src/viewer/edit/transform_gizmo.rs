@@ -1,79 +1,225 @@
 use super::{select::Selected, EditMode};
 use crate::{
-    ui::viewport::ViewportInfo,
-    viewer::kmp::checkpoints::{CheckpointLeft, CheckpointRight},
+    ui::settings::AppSettings,
+    viewer::{
+        camera::EditorCamera,
+        kmp::{
+            checkpoints::{CheckpointLeft, CheckpointRight},
+            settings::{
+                DEFAULT_GIZMO_LINE_WIDTH, DEFAULT_GIZMO_SIZE, MAX_GIZMO_LINE_WIDTH, MAX_GIZMO_SIZE,
+                MIN_GIZMO_LINE_WIDTH, MIN_GIZMO_SIZE,
+            },
+        },
+    },
 };
-use bevy::prelude::*;
-use transform_gizmo_bevy::{enum_set, GizmoMode, GizmoOptions, GizmoTarget, GizmoVisuals};
+use bevy::{
+    ecs::{entity::EntityHashMap, system::SystemState},
+    math::{DQuat, DVec3},
+    prelude::*,
+};
+use bevy_egui::egui::{self, epaint::Vertex, Mesh, PointerButton, Rgba, Sense, Ui};
+use transform_gizmo::{
+    enum_set,
+    math::{Rect as GizmoRect, Transform as GizmoTransform},
+    Gizmo, GizmoConfig, GizmoInteraction, GizmoMode, GizmoVisuals,
+};
 
 #[derive(Component)]
 pub struct GizmoTransformable;
 
-pub fn transform_gizmo_plugin(app: &mut App) {
-    app.add_plugins(transform_gizmo_bevy::prelude::TransformGizmoPlugin)
-        .insert_resource(GizmoOptions {
-            gizmo_modes: GizmoMode::all_translate(),
-            visuals: GizmoVisuals {
-                gizmo_size: 125.,
-                stroke_width: 8.,
-                ..default()
-            },
-            ..default()
-        })
-        .add_systems(Update, update_gizmo);
+#[derive(Resource)]
+pub struct TransformGizmoState {
+    gizmo: Gizmo,
+    individual_gizmos: EntityHashMap<Gizmo>,
+    pub config: GizmoConfig,
+    pub group_targets: bool,
+    pub is_focused: bool,
+    enabled: bool,
 }
 
-fn update_gizmo(
-    mut commands: Commands,
+impl Default for TransformGizmoState {
+    fn default() -> Self {
+        Self {
+            gizmo: Gizmo::default(),
+            individual_gizmos: EntityHashMap::default(),
+            config: GizmoConfig {
+                modes: GizmoMode::all_translate(),
+                visuals: GizmoVisuals {
+                    gizmo_size: DEFAULT_GIZMO_SIZE,
+                    stroke_width: DEFAULT_GIZMO_LINE_WIDTH,
+                    ..default()
+                },
+                ..default()
+            },
+            group_targets: true,
+            is_focused: false,
+            enabled: false,
+        }
+    }
+}
+
+pub fn transform_gizmo_plugin(app: &mut App) {
+    app.init_resource::<TransformGizmoState>()
+        .add_systems(Update, update_gizmo_options);
+}
+
+fn update_gizmo_options(
     edit_mode: Res<EditMode>,
     q_selected_cp: Query<(), (With<Selected>, Or<(With<CheckpointLeft>, With<CheckpointRight>)>)>,
-    q_selectable: Query<(Entity, Has<Selected>, Has<GizmoTarget>), With<GizmoTransformable>>,
-    mut gizmo_options: ResMut<GizmoOptions>,
-    viewport_info: Res<ViewportInfo>,
+    mut state: ResMut<TransformGizmoState>,
+    settings: Res<AppSettings>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
-    // update gizmo viewport
-    gizmo_options.viewport_rect = Some(viewport_info.viewport_rect);
+    let checkpoint_selected = !q_selected_cp.is_empty();
+    state.enabled = matches!(*edit_mode, EditMode::Translate | EditMode::Rotate);
+    state.config.modes = if *edit_mode == EditMode::Translate && checkpoint_selected {
+        enum_set!(GizmoMode::TranslateX | GizmoMode::TranslateZ | GizmoMode::TranslateXZ)
+    } else if *edit_mode == EditMode::Rotate && checkpoint_selected {
+        enum_set!(GizmoMode::RotateY)
+    } else if *edit_mode == EditMode::Translate {
+        GizmoMode::all_translate()
+    } else if *edit_mode == EditMode::Rotate {
+        GizmoMode::all_rotate()
+    } else {
+        state.config.modes
+    };
+    state.config.visuals.gizmo_size = if settings.kmp_model.gizmo_size.is_finite() {
+        settings.kmp_model.gizmo_size.clamp(MIN_GIZMO_SIZE, MAX_GIZMO_SIZE)
+    } else {
+        DEFAULT_GIZMO_SIZE
+    };
+    state.config.visuals.stroke_width = if settings.kmp_model.gizmo_line_width.is_finite() {
+        settings
+            .kmp_model
+            .gizmo_line_width
+            .clamp(MIN_GIZMO_LINE_WIDTH, MAX_GIZMO_LINE_WIDTH)
+    } else {
+        DEFAULT_GIZMO_LINE_WIDTH
+    };
+    state.config.snapping = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
+}
 
-    // update gizmo mode
-    if edit_mode.is_changed() {
-        match *edit_mode {
-            EditMode::Translate => gizmo_options.gizmo_modes = GizmoMode::all_translate(),
-            EditMode::Rotate => gizmo_options.gizmo_modes = GizmoMode::all_rotate(),
-            _ => (),
-        };
-        // if we have checkpoints selected
-        if !q_selected_cp.is_empty() {
-            match *edit_mode {
-                EditMode::Translate => {
-                    gizmo_options.gizmo_modes =
-                        enum_set!(GizmoMode::TranslateX | GizmoMode::TranslateZ | GizmoMode::TranslateXZ)
+pub fn show_transform_gizmo(ui: &mut Ui, viewport: egui::Rect, world: &mut World) {
+    let mut system_state = SystemState::<(
+        ResMut<TransformGizmoState>,
+        Query<(Entity, &mut Transform), (With<Selected>, With<GizmoTransformable>)>,
+        Query<(&Camera, &GlobalTransform), With<EditorCamera>>,
+    )>::new(world);
+    let (mut state, mut q_targets, q_camera) = system_state.get_mut(world);
+
+    if !state.enabled {
+        state.is_focused = false;
+        return;
+    }
+
+    let Some((camera, camera_transform)) = q_camera.iter().find(|(camera, _)| camera.is_active) else {
+        state.is_focused = false;
+        return;
+    };
+
+    if viewport.width() <= 1.0 || viewport.height() <= 1.0 {
+        state.is_focused = false;
+        return;
+    }
+
+    let targets = q_targets
+        .iter_mut()
+        .map(|(entity, transform)| {
+            (
+                entity,
+                GizmoTransform {
+                    translation: transform.translation.as_dvec3().into(),
+                    rotation: transform.rotation.as_dquat().into(),
+                    scale: transform.scale.as_dvec3().into(),
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+    if targets.is_empty() {
+        state.is_focused = false;
+        return;
+    }
+
+    let mut config = state.config;
+    config.view_matrix = camera_transform.to_matrix().inverse().as_dmat4().into();
+    config.projection_matrix = camera.clip_from_view().as_dmat4().into();
+    config.viewport = GizmoRect::from_min_max(viewport.min, viewport.max);
+    config.pixels_per_point = ui.ctx().pixels_per_point();
+
+    let cursor_pos = ui.input(|input| input.pointer.hover_pos()).unwrap_or_default();
+    let interaction_response = ui.interact(
+        egui::Rect::from_center_size(cursor_pos, egui::Vec2::splat(1.0)),
+        ui.id().with("transform_gizmo_interaction"),
+        Sense::click_and_drag(),
+    );
+    let interaction = GizmoInteraction {
+        cursor_pos: (cursor_pos.x, cursor_pos.y),
+        hovered: viewport.contains(cursor_pos) && interaction_response.hovered(),
+        drag_started: ui.input(|input| input.pointer.button_pressed(PointerButton::Primary)),
+        dragging: ui.input(|input| input.pointer.button_down(PointerButton::Primary)),
+    };
+
+    if state.group_targets {
+        state.gizmo.update_config(config);
+        let target_transforms = targets.iter().map(|(_, transform)| *transform).collect::<Vec<_>>();
+        let result = state.gizmo.update(interaction, &target_transforms);
+        state.is_focused = state.gizmo.is_focused();
+        paint_gizmo(ui, viewport, &state.gizmo);
+
+        if let Some((_, updated_transforms)) = result {
+            for ((entity, _), updated) in targets.into_iter().zip(updated_transforms) {
+                apply_gizmo_transform(&mut q_targets, entity, updated);
+            }
+        }
+    } else {
+        let mut focused = false;
+        for (entity, target) in &targets {
+            let gizmo = state.individual_gizmos.entry(*entity).or_default();
+            gizmo.update_config(config);
+            let result = gizmo.update(interaction, &[*target]);
+            focused |= gizmo.is_focused();
+            paint_gizmo(ui, viewport, gizmo);
+
+            if let Some((_, updated_transforms)) = result {
+                if let Some(updated) = updated_transforms.into_iter().next() {
+                    apply_gizmo_transform(&mut q_targets, *entity, updated);
                 }
-                EditMode::Rotate => gizmo_options.gizmo_modes = enum_set!(GizmoMode::RotateY),
-                _ => (),
-            };
+            }
         }
+        state
+            .individual_gizmos
+            .retain(|entity, _| targets.iter().any(|(target, _)| target == entity));
+        state.is_focused = focused;
     }
-    // update gizmo targets
-    let mut remove_all_targets = false;
-    if *edit_mode != EditMode::Translate && *edit_mode != EditMode::Rotate {
-        if edit_mode.is_changed() {
-            remove_all_targets = true;
-        } else {
-            return;
-        }
-    }
-    for (e, is_selected, is_gizmo_target) in q_selectable.iter() {
-        if remove_all_targets {
-            commands.entity(e).remove::<GizmoTarget>();
-            continue;
-        }
-        if is_selected && !is_gizmo_target {
-            commands.entity(e).insert(GizmoTarget::default());
-        } else if !is_selected && is_gizmo_target {
-            commands.entity(e).remove::<GizmoTarget>();
-        }
-    }
-    // update whether snapping is enabled
-    gizmo_options.snapping = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
+}
+
+fn paint_gizmo(ui: &Ui, viewport: egui::Rect, gizmo: &Gizmo) {
+    let draw_data = gizmo.draw();
+    egui::Painter::new(ui.ctx().clone(), ui.layer_id(), viewport).add(Mesh {
+        indices: draw_data.indices,
+        vertices: draw_data
+            .vertices
+            .into_iter()
+            .zip(draw_data.colors)
+            .map(|(position, [r, g, b, a])| Vertex {
+                pos: position.into(),
+                uv: egui::Pos2::default(),
+                color: Rgba::from_rgba_premultiplied(r, g, b, a).into(),
+            })
+            .collect(),
+        ..default()
+    });
+}
+
+fn apply_gizmo_transform(
+    q_targets: &mut Query<(Entity, &mut Transform), (With<Selected>, With<GizmoTransformable>)>,
+    entity: Entity,
+    updated: GizmoTransform,
+) {
+    let Ok((_, mut transform)) = q_targets.get_mut(entity) else {
+        return;
+    };
+    transform.translation = DVec3::from(updated.translation).as_vec3();
+    transform.rotation = DQuat::from(updated.rotation).as_quat();
+    transform.scale = DVec3::from(updated.scale).as_vec3();
 }

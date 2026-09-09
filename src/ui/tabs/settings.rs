@@ -4,6 +4,7 @@ use crate::{
     viewer::{
         camera::{CameraSettings, FlyCam, FlySettings, OrbitCam, OrbitSettings, TopDownCam, TopDownSettings},
         kcl_model::KclModelUpdated,
+        kmp::settings::{MAX_GIZMO_LINE_WIDTH, MAX_GIZMO_SIZE, MIN_GIZMO_LINE_WIDTH, MIN_GIZMO_SIZE},
     },
 };
 use bevy::{ecs::system::SystemState, prelude::*};
@@ -45,6 +46,23 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
             ui.add(
                 egui::Slider::new(&mut settings.kmp_model.point_scale, 0.01..=2.)
                     .text("Point Scale"),
+            );
+            ui.add(
+                egui::Slider::new(
+                    &mut settings.kmp_model.gizmo_size,
+                    MIN_GIZMO_SIZE..=MAX_GIZMO_SIZE,
+                )
+                .text("Transform Gizmo Size")
+                .suffix(" px"),
+            );
+            ui.add(
+                egui::Slider::new(
+                    &mut settings.kmp_model.gizmo_line_width,
+                    MIN_GIZMO_LINE_WIDTH..=MAX_GIZMO_LINE_WIDTH,
+                )
+                .text("Transform Gizmo Line Width")
+                .suffix(" px")
+                .step_by(0.5),
             );
             ui.checkbox(
                 &mut settings.open_course_kcl_in_dir,

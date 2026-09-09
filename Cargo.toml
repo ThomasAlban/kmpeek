@@ -21,14 +21,15 @@ bevy = { version = "0.17", default-features = false, features = [
     "serialize",
     "bevy_gizmos",
     "track_location",
-    "dynamic_linking",
+    # "dynamic_linking",
 ] }
 
 bevy_egui = "0.38.1"
 bevy_mod_outline = "0.11"
 bevy_pkv = "0.14"
 # there was no official 0.17 so i had to manually look at commits
-transform-gizmo-bevy = { git = "https://github.com/urholaukkarinen/transform-gizmo", rev = "5bc2dd19b6287098eb00463cd7e3bf619fd436b3" }
+# KMPeek integrates the core gizmo directly with its egui-hosted offscreen viewport.
+transform-gizmo = { git = "https://github.com/urholaukkarinen/transform-gizmo", rev = "5bc2dd19b6287098eb00463cd7e3bf619fd436b3" }
 bevy_infinite_grid = "0.17"
 bevy_vector_shapes = "0.11.1"
 
@@ -63,8 +64,6 @@ opt-level = 3
 opt-level = 3
 lto = true
 strip = true
-# Keep Cargo's default codegen-unit count: forcing one codegen unit has caused
-# release-build segmentation faults on macOS.
 
 [lints.clippy]
 type_complexity = "allow"

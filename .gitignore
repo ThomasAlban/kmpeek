@@ -5,3 +5,5 @@ trace*
 .cargo/config.toml
 log.txt
 .juggler/
+test_files/
+AGENTS.md

@@ -10,7 +10,6 @@ use bevy::{
     prelude::*,
 };
 use serde::{Deserialize, Serialize};
-use transform_gizmo_bevy::GizmoCamera;
 
 pub fn topdown_cam_plugin(app: &mut App) {
     app.add_systems(Startup, camera_setup.after(SetupViewportSet))
@@ -75,7 +74,6 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
         Transform::from_translation(topdown_default.start_pos).looking_at(Vec3::ZERO, Vec3::Z),
         TopDownCam,
         EditorCamera,
-        GizmoCamera,
         Msaa::Sample4,
     ));
 }

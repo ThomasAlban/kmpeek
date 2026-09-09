@@ -181,7 +181,7 @@ pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
 
     // the intro start index is the first byte of the additional value
     let intro_start = kmp.came.section_header.additional_value >> 8;
-    dbg!(&intro_start);
+
     if let Some(e) = camera_id_map.get(&(intro_start as u32)) {
         world.entity_mut(*e).insert(KmpCameraIntroStart);
     }

@@ -7,7 +7,12 @@ use crate::{
     util::ToEguiRect,
     viewer::{
         camera::{CameraMode, CameraModeChanged},
-        edit::{link_select_mode::LinkSelectMode, select::SelectBox, EditMode},
+        edit::{
+            link_select_mode::LinkSelectMode,
+            select::SelectBox,
+            transform_gizmo::{show_transform_gizmo, TransformGizmoState},
+            EditMode,
+        },
         kmp::components::{RespawnPoint, RoutePoint},
     },
 };
@@ -17,7 +22,7 @@ use bevy::{
 use bevy_egui::egui::{
     self, Color32, CornerRadius, Margin, PopupAnchor, Response, Sense, Stroke, StrokeKind, Tooltip, Ui, UiBuilder,
 };
-use transform_gizmo_bevy::{config::TransformPivotPoint, GizmoOptions, GizmoOrientation};
+use transform_gizmo::{config::TransformPivotPoint, GizmoOrientation};
 
 pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
     let Ok(window) = world.query::<&Window>().single(world) else {
@@ -72,8 +77,9 @@ pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
 
     // show the viewport image
     ui.scope_builder(UiBuilder::new().max_rect(egui_viewport_rect), |ui| {
-        // make the image sense clicks and drags, so that any events that aren't consumed by buttons above it are consumed by this
-        // so we don't start dragging around the window when trying to select stuff etc
+        // Register the viewport background first so it consumes otherwise-unused
+        // clicks and drags. The gizmo and overlay controls are registered later
+        // and therefore remain the topmost interactions at the pointer.
         ui.add(
             egui::Image::new(egui::load::SizedTexture::new(
                 viewport.tex_id,
@@ -85,6 +91,11 @@ pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
 
     viewport_info.mouse_in_viewport = ui.rect_contains_pointer(egui_viewport_rect);
     viewport_info.viewport_rect = viewport_rect;
+
+    ui.scope_builder(UiBuilder::new().max_rect(egui_viewport_rect), |ui| {
+        ui.set_clip_rect(egui_viewport_rect);
+        show_transform_gizmo(ui, egui_viewport_rect, world);
+    });
 
     show_select_box(ui, world);
 
@@ -127,13 +138,6 @@ fn show_select_box(ui: &mut Ui, world: &mut World) {
 
 fn show_overlayed_ui(ui: &mut Ui, world: &mut World) -> Vec<Response> {
     let vp_rect = world.resource::<ViewportInfo>().viewport_rect.to_egui_rect();
-    // let ss = SystemState::<(
-    //     Res<ViewportInfo>,
-    //     ResMut<GizmoOptions>,
-    //     ResMut<AppSettings>,
-    //     ResMut<EditMode>,
-    // )>::new(world);
-    // let (vp, mut gizmo_options, mut settings, mut edit_mode) = ss.get_mut(world);
 
     let mut responses = Vec::new();
     // viewport overlayed ui
@@ -149,9 +153,9 @@ fn show_overlayed_ui(ui: &mut Ui, world: &mut World) -> Vec<Response> {
                     ui.style_mut().spacing.button_padding = egui::Vec2::ZERO;
                     let size = 25.;
                     ui.label("Pivot:");
-                    let mut gizmo_options = world.resource_mut::<GizmoOptions>();
+                    let mut transform_gizmo = world.resource_mut::<TransformGizmoState>();
                     ui.horizontal(|ui| {
-                        let pivot = &mut gizmo_options.pivot_point;
+                        let pivot = &mut transform_gizmo.config.pivot_point;
                         image_selectable_value(
                             ui,
                             pivot,
@@ -172,7 +176,7 @@ fn show_overlayed_ui(ui: &mut Ui, world: &mut World) -> Vec<Response> {
 
                     ui.label("Orientation:");
                     ui.horizontal(|ui| {
-                        let orientation = &mut gizmo_options.gizmo_orientation;
+                        let orientation = &mut transform_gizmo.config.orientation;
                         image_selectable_value(
                             ui,
                             orientation,
@@ -191,7 +195,7 @@ fn show_overlayed_ui(ui: &mut Ui, world: &mut World) -> Vec<Response> {
                         .on_hover_text_at_pointer("Local orientation");
                     });
                     ui.horizontal(|ui| {
-                        ui.checkbox(&mut gizmo_options.group_targets, "Group targets")
+                        ui.checkbox(&mut transform_gizmo.group_targets, "Group targets")
                             .on_hover_text_at_pointer(
                                 "Use a single gizmo for all targets, rather than individual gizmos",
                             )
