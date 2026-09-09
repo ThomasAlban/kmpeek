@@ -16,6 +16,7 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
     let mut ss = SystemState::<(
         ResMut<AppSettings>,
         ResMut<PkvStore>,
+        Res<ButtonInput<KeyCode>>,
         FileDialogManager,
         Query<&mut Transform, (With<FlyCam>, Without<OrbitCam>, Without<TopDownCam>)>,
         Query<&mut Transform, (Without<FlyCam>, With<OrbitCam>, Without<TopDownCam>)>,
@@ -25,6 +26,7 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
     let (
         mut settings,
         mut pkv,
+        keys,
         mut file_dialog,
         mut q_fly_cam,
         mut q_orbit_cam,
@@ -186,30 +188,65 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
                 .on_hover_text_at_pointer(
                     "Whether or not the mouse button needs to be pressed in order to move the camera",
                 );
-            ui.horizontal(|ui| {
-                ui.label("Mouse Button")
-                    .on_hover_text_at_pointer("The mouse button that needs to be pressed to move the camera");
-                egui::ComboBox::from_id_salt("Mouse Button")
-                    .selected_text(format!("{:?}", settings.camera.fly.key_bindings.mouse_button))
-                    .width(60.)
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(
-                            &mut settings.camera.fly.key_bindings.mouse_button,
-                            MouseButton::Left,
-                            "Left",
-                        );
-                        ui.selectable_value(
-                            &mut settings.camera.fly.key_bindings.mouse_button,
-                            MouseButton::Middle,
-                            "Middle",
-                        );
-                        ui.selectable_value(
-                            &mut settings.camera.fly.key_bindings.mouse_button,
-                            MouseButton::Right,
-                            "Right",
-                        );
-                    });
-            });
+            mouse_button_row(
+                ui,
+                "fly_mouse_button",
+                "Mouse Button",
+                "The mouse button that needs to be pressed to move the camera",
+                &mut settings.camera.fly.key_bindings.mouse_button,
+            );
+            ui.separator();
+            ui.label(egui::RichText::new("Key Bindings").strong())
+                .on_hover_text("Add any number of alternative keys. Click a key to remove it.");
+            key_binding_row(
+                ui,
+                &keys,
+                CameraKeyBinding::FlyForward,
+                "Move Forward",
+                &mut settings.camera.fly.key_bindings.move_forward,
+            );
+            key_binding_row(
+                ui,
+                &keys,
+                CameraKeyBinding::FlyBackward,
+                "Move Backward",
+                &mut settings.camera.fly.key_bindings.move_backward,
+            );
+            key_binding_row(
+                ui,
+                &keys,
+                CameraKeyBinding::FlyLeft,
+                "Move Left",
+                &mut settings.camera.fly.key_bindings.move_left,
+            );
+            key_binding_row(
+                ui,
+                &keys,
+                CameraKeyBinding::FlyRight,
+                "Move Right",
+                &mut settings.camera.fly.key_bindings.move_right,
+            );
+            key_binding_row(
+                ui,
+                &keys,
+                CameraKeyBinding::FlyAscend,
+                "Ascend",
+                &mut settings.camera.fly.key_bindings.move_ascend,
+            );
+            key_binding_row(
+                ui,
+                &keys,
+                CameraKeyBinding::FlyDescend,
+                "Descend",
+                &mut settings.camera.fly.key_bindings.move_descend,
+            );
+            key_binding_row(
+                ui,
+                &keys,
+                CameraKeyBinding::FlySpeedBoost,
+                "Speed Boost",
+                &mut settings.camera.fly.key_bindings.speed_boost,
+            );
         });
         ui.collapsing("Orbit Camera", |ui| {
             ui.horizontal(|ui| {
@@ -227,30 +264,23 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
                     .on_hover_text_at_pointer("How sensitive the camera zoom is to scrolling");
                 ui.add(egui::DragValue::new(&mut settings.camera.orbit.scroll_sensitivity).speed(0.1));
             });
-            ui.horizontal(|ui| {
-                ui.label("Mouse Button")
-                    .on_hover_text_at_pointer("The mouse button that needs to be pressed to move the camera");
-                egui::ComboBox::from_id_salt("Mouse Button")
-                    .selected_text(format!("{:?}", settings.camera.orbit.key_bindings.mouse_button))
-                    .width(60.)
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(
-                            &mut settings.camera.orbit.key_bindings.mouse_button,
-                            MouseButton::Left,
-                            "Left",
-                        );
-                        ui.selectable_value(
-                            &mut settings.camera.orbit.key_bindings.mouse_button,
-                            MouseButton::Middle,
-                            "Middle",
-                        );
-                        ui.selectable_value(
-                            &mut settings.camera.orbit.key_bindings.mouse_button,
-                            MouseButton::Right,
-                            "Right",
-                        );
-                    });
-            });
+            mouse_button_row(
+                ui,
+                "orbit_mouse_button",
+                "Mouse Button",
+                "The mouse button used to rotate or pan the camera",
+                &mut settings.camera.orbit.key_bindings.mouse_button,
+            );
+            ui.separator();
+            ui.label(egui::RichText::new("Key Bindings").strong())
+                .on_hover_text("Add any number of alternative keys. Click a key to remove it.");
+            key_binding_row(
+                ui,
+                &keys,
+                CameraKeyBinding::OrbitPan,
+                "Pan Modifier",
+                &mut settings.camera.orbit.key_bindings.pan,
+            );
         });
         ui.collapsing("Top Down Camera", |ui| {
             ui.horizontal(|ui| {
@@ -263,30 +293,13 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
                     .on_hover_text_at_pointer("How sensitive the camera zoom is to scrolling");
                 ui.add(egui::DragValue::new(&mut settings.camera.top_down.scroll_sensitivity).speed(0.1));
             });
-            ui.horizontal(|ui| {
-                ui.label("Mouse Button")
-                    .on_hover_text_at_pointer("The mouse button that needs to be pressed to move the camera");
-                egui::ComboBox::from_id_salt("Mouse Button")
-                    .selected_text(format!("{:?}", settings.camera.top_down.key_bindings.mouse_button))
-                    .width(60.)
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(
-                            &mut settings.camera.top_down.key_bindings.mouse_button,
-                            MouseButton::Left,
-                            "Left",
-                        );
-                        ui.selectable_value(
-                            &mut settings.camera.top_down.key_bindings.mouse_button,
-                            MouseButton::Middle,
-                            "Middle",
-                        );
-                        ui.selectable_value(
-                            &mut settings.camera.top_down.key_bindings.mouse_button,
-                            MouseButton::Right,
-                            "Right",
-                        );
-                    });
-            });
+            mouse_button_row(
+                ui,
+                "top_down_mouse_button",
+                "Mouse Button",
+                "The mouse button used to move the camera",
+                &mut settings.camera.top_down.key_bindings.mouse_button,
+            );
         });
     });
 
@@ -314,4 +327,132 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
     });
 
     ss.apply(world);
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum CameraKeyBinding {
+    FlyForward,
+    FlyBackward,
+    FlyLeft,
+    FlyRight,
+    FlyAscend,
+    FlyDescend,
+    FlySpeedBoost,
+    OrbitPan,
+}
+
+fn key_binding_row(
+    ui: &mut Ui,
+    keys: &ButtonInput<KeyCode>,
+    binding: CameraKeyBinding,
+    label: &str,
+    key_codes: &mut Vec<KeyCode>,
+) {
+    let capture_id = egui::Id::new("camera_key_binding_capture");
+    let mut is_capturing = ui
+        .ctx()
+        .data(|data| data.get_temp::<CameraKeyBinding>(capture_id) == Some(binding));
+
+    if is_capturing {
+        if let Some(key_code) = keys.get_just_pressed().next().copied() {
+            if key_code != KeyCode::Escape && !key_codes.contains(&key_code) {
+                key_codes.push(key_code);
+            }
+            ui.ctx().data_mut(|data| data.remove::<CameraKeyBinding>(capture_id));
+            is_capturing = false;
+        }
+    }
+
+    let mut remove_index = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.add_sized([110.0, ui.spacing().interact_size.y], egui::Label::new(label));
+
+        if key_codes.is_empty() {
+            ui.label(egui::RichText::new("Unbound").italics().weak());
+        } else {
+            for (index, key_code) in key_codes.iter().enumerate() {
+                if ui
+                    .small_button(format!("{}  ×", key_code_label(*key_code)))
+                    .on_hover_text("Remove this key")
+                    .clicked()
+                {
+                    remove_index = Some(index);
+                }
+            }
+        }
+
+        if is_capturing {
+            if ui
+                .button("Press a key…")
+                .on_hover_text("Press Escape or click to cancel")
+                .clicked()
+            {
+                ui.ctx().data_mut(|data| data.remove::<CameraKeyBinding>(capture_id));
+            }
+        } else if ui.small_button("+ Add key").clicked() {
+            ui.ctx().data_mut(|data| data.insert_temp(capture_id, binding));
+        }
+    });
+
+    if let Some(index) = remove_index {
+        key_codes.remove(index);
+    }
+}
+
+fn mouse_button_row(ui: &mut Ui, id_salt: &'static str, label: &str, hover_text: &str, mouse_button: &mut MouseButton) {
+    ui.horizontal(|ui| {
+        ui.label(label).on_hover_text_at_pointer(hover_text);
+        egui::ComboBox::from_id_salt(id_salt)
+            .selected_text(mouse_button_label(*mouse_button))
+            .width(80.0)
+            .show_ui(ui, |ui| {
+                for button in [
+                    MouseButton::Left,
+                    MouseButton::Middle,
+                    MouseButton::Right,
+                    MouseButton::Back,
+                    MouseButton::Forward,
+                ] {
+                    ui.selectable_value(mouse_button, button, mouse_button_label(button));
+                }
+            });
+    });
+}
+
+fn key_code_label(key_code: KeyCode) -> String {
+    match key_code {
+        KeyCode::ShiftLeft => "Left Shift".into(),
+        KeyCode::ShiftRight => "Right Shift".into(),
+        KeyCode::ControlLeft => "Left Ctrl".into(),
+        KeyCode::ControlRight => "Right Ctrl".into(),
+        KeyCode::AltLeft => "Left Alt".into(),
+        KeyCode::AltRight => "Right Alt".into(),
+        KeyCode::SuperLeft => "Left Super".into(),
+        KeyCode::SuperRight => "Right Super".into(),
+        KeyCode::ArrowUp => "Up Arrow".into(),
+        KeyCode::ArrowDown => "Down Arrow".into(),
+        KeyCode::ArrowLeft => "Left Arrow".into(),
+        KeyCode::ArrowRight => "Right Arrow".into(),
+        KeyCode::PageUp => "Page Up".into(),
+        KeyCode::PageDown => "Page Down".into(),
+        key_code => {
+            let debug_name = format!("{key_code:?}");
+            debug_name
+                .strip_prefix("Key")
+                .or_else(|| debug_name.strip_prefix("Digit"))
+                .unwrap_or(&debug_name)
+                .to_owned()
+        }
+    }
+}
+
+fn mouse_button_label(mouse_button: MouseButton) -> String {
+    match mouse_button {
+        MouseButton::Left => "Left".into(),
+        MouseButton::Right => "Right".into(),
+        MouseButton::Middle => "Middle".into(),
+        MouseButton::Back => "Back".into(),
+        MouseButton::Forward => "Forward".into(),
+        MouseButton::Other(number) => format!("Button {number}"),
+    }
 }

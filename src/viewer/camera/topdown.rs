@@ -96,7 +96,7 @@ fn topdown_cam(
     let mut pan = Vec2::ZERO;
     let mut scroll = 0.;
 
-    if mouse_buttons.pressed(settings.camera.orbit.key_bindings.mouse_button) {
+    if mouse_buttons.pressed(settings.camera.top_down.key_bindings.mouse_button) {
         for ev in ev_mouse_motion.read() {
             pan += ev.delta;
         }
