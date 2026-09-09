@@ -4,7 +4,11 @@ use crate::ui::{
     viewport::{SetupViewportSet, ViewportImage, ViewportInfo},
 };
 use bevy::{
-    input::mouse::MouseMotion, math::vec3, prelude::*, camera::RenderTarget, window::{CursorGrabMode, CursorOptions, RequestRedraw},
+    camera::RenderTarget,
+    input::mouse::MouseMotion,
+    math::vec3,
+    prelude::*,
+    window::{CursorGrabMode, CursorOptions, RequestRedraw},
 };
 use serde::{Deserialize, Serialize};
 use transform_gizmo_bevy::GizmoCamera;
@@ -102,19 +106,23 @@ fn fly_cam_move(
         return;
     }
 
-    let window = q_window.single().unwrap();
-    let cursor: &mut CursorOptions = &mut q_cursor_options.single_mut().unwrap();
+    let Ok(window) = q_window.single() else { return };
+    let Ok(cursor) = q_cursor_options.single_mut() else {
+        return;
+    };
     // if we need to be holding the mouse to move but we aren't, return
     if settings.camera.fly.hold_mouse_to_move && cursor.grab_mode == CursorGrabMode::None {
         return;
     }
 
-    let mut transform = q_fly_cam.single_mut().unwrap();
+    let Ok(mut transform) = q_fly_cam.single_mut() else {
+        return;
+    };
 
     let mut velocity = Vec3::ZERO;
     let local_z = transform.local_z();
-    let forward = -Vec3::new(local_z.x, 0., local_z.z).normalize();
-    let right = Vec3::new(local_z.z, 0., -local_z.x).normalize();
+    let forward = -Vec3::new(local_z.x, 0., local_z.z).normalize_or_zero();
+    let right = Vec3::new(local_z.z, 0., -local_z.x).normalize_or_zero();
 
     let mut speed_boost = false;
 
@@ -166,9 +174,13 @@ fn fly_cam_look(
         return;
     }
 
-    let window = q_window.single().unwrap();
-    let cursor: &mut CursorOptions = &mut q_cursor_options.single_mut().unwrap();
-    let mut transform = q_fly_cam.single_mut().unwrap();
+    let Ok(window) = q_window.single() else { return };
+    let Ok(cursor) = q_cursor_options.single_mut() else {
+        return;
+    };
+    let Ok(mut transform) = q_fly_cam.single_mut() else {
+        return;
+    };
 
     for ev in ev_mouse_motion.read() {
         let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);

@@ -12,11 +12,7 @@ use crate::{
     },
 };
 use bevy::{
-    ecs::system::SystemState,
-    math::vec2,
-    prelude::*,
-    render::render_resource::Extent3d,
-    window::RequestRedraw,
+    ecs::system::SystemState, math::vec2, prelude::*, render::render_resource::Extent3d, window::RequestRedraw,
 };
 use bevy_egui::egui::{
     self, Color32, CornerRadius, Margin, PopupAnchor, Response, Sense, Stroke, StrokeKind, Tooltip, Ui, UiBuilder,
@@ -24,7 +20,9 @@ use bevy_egui::egui::{
 use transform_gizmo_bevy::{config::TransformPivotPoint, GizmoOptions, GizmoOrientation};
 
 pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
-    let window = world.query::<&Window>().single(world).unwrap();
+    let Ok(window) = world.query::<&Window>().single(world) else {
+        return;
+    };
 
     let window_sf = window.scale_factor();
 
@@ -45,21 +43,31 @@ pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
     let viewport_rect = Rect::from_corners(viewport_top_left, viewport_top_left + viewport_size);
     let egui_viewport_rect = viewport_rect.to_egui_rect();
 
-    let physical_size = (viewport_size * window_sf).round().as_uvec2().max(UVec2::ONE);
+    const MAX_TEXTURE_DIMENSION: u32 = 4096;
+    let mut physical_size = (viewport_size * window_sf).round().as_uvec2().max(UVec2::ONE);
+    let largest_dimension = physical_size.max_element();
+    if largest_dimension > MAX_TEXTURE_DIMENSION {
+        let scale = MAX_TEXTURE_DIMENSION as f32 / largest_dimension as f32;
+        physical_size = (physical_size.as_vec2() * scale).round().as_uvec2().max(UVec2::ONE);
+    }
 
     // Accessing an asset mutably marks it as modified, which causes Bevy to
     // reprepare the GPU image. Only do that when the texture actually changed size.
-    let current_size = image_assets.get(viewport.handle.id()).unwrap().size();
+    let Some(current_size) = image_assets.get(viewport.handle.id()).map(Image::size) else {
+        return;
+    };
     if current_size != physical_size {
         let size = Extent3d {
             width: physical_size.x,
             height: physical_size.y,
             ..default()
         };
-        image_assets.get_mut(viewport.handle.id()).unwrap().resize(size);
-        // The resized target is rendered later in this frame. Request one more
-        // frame so egui can display those contents in reactive desktop mode.
-        redraw.write(RequestRedraw);
+        if let Some(viewport_image) = image_assets.get_mut(viewport.handle.id()) {
+            viewport_image.resize(size);
+            // The resized target is rendered later in this frame. Request one more
+            // frame so egui can display those contents in reactive desktop mode.
+            redraw.write(RequestRedraw);
+        }
     }
 
     // show the viewport image

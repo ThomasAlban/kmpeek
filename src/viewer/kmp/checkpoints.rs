@@ -133,7 +133,9 @@ impl Default for CheckpointHeight {
 }
 
 fn on_remove_cp_left(trigger: On<Remove, CheckpointLeft>, q_cp_left: Query<&CheckpointLeft>, mut commands: Commands) {
-    let cp_left = q_cp_left.get(trigger.event().entity).unwrap();
+    let Ok(cp_left) = q_cp_left.get(trigger.event().entity) else {
+        return;
+    };
     let cp_right = cp_left.right;
 
     try_despawn(&mut commands, cp_right);
@@ -147,7 +149,9 @@ fn on_remove_cp_right(
     q_cp_right: Query<&CheckpointRight>,
     mut commands: Commands,
 ) {
-    let cp_right = q_cp_right.get(trigger.event().entity).unwrap();
+    let Ok(cp_right) = q_cp_right.get(trigger.event().entity) else {
+        return;
+    };
     let cp_left = cp_right.left;
 
     try_despawn(&mut commands, cp_left);
@@ -395,13 +399,23 @@ fn update_checkpoint_colors(
             CheckpointKind::LapCount => materials.lap_count_plane.clone(),
         };
 
-        let arrow = q_children.get(cp_left.arrow).unwrap().first().unwrap();
-
-        *q_std_mat.get_mut(cp_e).unwrap() = MeshMaterial3d(point_material.clone());
-        *q_std_mat.get_mut(cp_left.right).unwrap() = MeshMaterial3d(point_material.clone());
-        *q_std_mat.get_mut(cp_left.line).unwrap() = MeshMaterial3d(point_material.clone());
-        *q_std_mat.get_mut(*arrow).unwrap() = MeshMaterial3d(point_material.clone());
-        *q_std_mat.get_mut(cp_left.plane).unwrap() = MeshMaterial3d(plane_material);
+        if let Ok(mut material) = q_std_mat.get_mut(cp_e) {
+            *material = MeshMaterial3d(point_material.clone());
+        }
+        if let Ok(mut material) = q_std_mat.get_mut(cp_left.right) {
+            *material = MeshMaterial3d(point_material.clone());
+        }
+        if let Ok(mut material) = q_std_mat.get_mut(cp_left.line) {
+            *material = MeshMaterial3d(point_material.clone());
+        }
+        if let Some(arrow) = q_children.get(cp_left.arrow).ok().and_then(|children| children.first()) {
+            if let Ok(mut material) = q_std_mat.get_mut(*arrow) {
+                *material = MeshMaterial3d(point_material);
+            }
+        }
+        if let Ok(mut material) = q_std_mat.get_mut(cp_left.plane) {
+            *material = MeshMaterial3d(plane_material);
+        }
     }
 }
 
@@ -472,17 +486,58 @@ impl GetSelectedCheckpoints<'_, '_> {
     }
 }
 
-/// Utility for getting both checkpoint nodes when we only have the Entity ID of one of them, and don't know whether the one we have is a left or a right
-pub fn get_both_cp_nodes(world: &mut World, e: Entity) -> (Entity, Entity) {
-    let left = if world.entity(e).contains::<Checkpoint>() {
+/// Utility for getting both checkpoint nodes when we only have the entity ID of
+/// one side and do not know whether it is the left or right node.
+pub fn get_both_cp_nodes(world: &World, e: Entity) -> Option<(Entity, Entity)> {
+    let left = if world.get::<Checkpoint>(e).is_some() {
         e
     } else {
-        world.entity(e).get::<CheckpointRight>().unwrap().left
+        world.get::<CheckpointRight>(e)?.left
     };
-    let right = if world.entity(e).contains::<CheckpointRight>() {
+    let right = if world.get::<CheckpointRight>(e).is_some() {
         e
     } else {
-        world.entity(e).get::<CheckpointLeft>().unwrap().right
+        world.get::<CheckpointLeft>(e)?.right
     };
-    (left, right)
+
+    let left_component = world.get::<CheckpointLeft>(left)?;
+    let right_component = world.get::<CheckpointRight>(right)?;
+    (left_component.right == right && right_component.left == left).then_some((left, right))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn checkpoint_pair_lookup_rejects_live_mismatched_partner() {
+        let mut world = World::new();
+        let left = world.spawn((Checkpoint::default(), CheckpointLeft::default())).id();
+        let other_left = world.spawn((Checkpoint::default(), CheckpointLeft::default())).id();
+        let right = world
+            .spawn(CheckpointRight {
+                left: other_left,
+                ..default()
+            })
+            .id();
+        world.get_mut::<CheckpointLeft>(left).unwrap().right = right;
+
+        assert!(get_both_cp_nodes(&world, left).is_none());
+        assert!(get_both_cp_nodes(&world, right).is_none());
+    }
+
+    #[test]
+    fn checkpoint_pair_lookup_rejects_stale_partner() {
+        let mut world = World::new();
+        let stale_left = world.spawn_empty().id();
+        world.despawn(stale_left);
+        let right = world
+            .spawn(CheckpointRight {
+                left: stale_left,
+                ..default()
+            })
+            .id();
+
+        assert!(get_both_cp_nodes(&world, right).is_none());
+    }
 }

@@ -5,8 +5,8 @@ use crate::{
         camera::EditorCamera,
         kmp::{
             checkpoints::CheckpointRespawnLink,
-            components::{KmpSelectablePoint, RespawnPoint, RoutePoint},
-            routes::{GetRouteStart, RouteLink},
+            components::{Checkpoint, KmpSelectablePoint, RespawnPoint, RoutePoint},
+            routes::{GetRouteStart, RouteLink, RouteLinkedEntities},
         },
     },
 };
@@ -48,15 +48,26 @@ impl CreateLink for RoutePoint {
         let route_start_e = get_route_start.get_entity(route_e);
         ss.apply(world);
 
+        if world.get::<RoutePoint>(route_e).is_none() || world.get::<RouteLinkedEntities>(route_start_e).is_none() {
+            return;
+        }
+
         for e in pts_to_be_linked {
-            world.entity_mut(e).insert(RouteLink(route_start_e));
+            if let Ok(mut entity) = world.get_entity_mut(e) {
+                entity.insert(RouteLink(route_start_e));
+            }
         }
     }
 }
 impl CreateLink for RespawnPoint {
     fn create_link(world: &mut World, respawn_e: Entity, cps_to_be_linked: Vec<Entity>) {
+        if world.get::<RespawnPoint>(respawn_e).is_none() {
+            return;
+        }
         for cp in cps_to_be_linked {
-            world.entity_mut(cp).insert(CheckpointRespawnLink(respawn_e));
+            if world.get::<Checkpoint>(cp).is_some() {
+                world.entity_mut(cp).insert(CheckpointRespawnLink(respawn_e));
+            }
         }
     }
 }
@@ -84,17 +95,22 @@ fn update_link_selection_mode<T: Component + CreateLink>(
             e_v_map.insert(e, *v);
         }
         for e in q_every_other_pt.iter() {
-            *q_visibility.get_mut(e).unwrap().1 = Visibility::Hidden;
+            if let Ok((_, mut visibility)) = q_visibility.get_mut(e) {
+                *visibility = Visibility::Hidden;
+            }
         }
         for e in q_route_pt.iter() {
-            *q_visibility.get_mut(e).unwrap().1 = Visibility::Visible;
+            if let Ok((_, mut visibility)) = q_visibility.get_mut(e) {
+                *visibility = Visibility::Visible;
+            }
         }
     }
 
     let mut reset_visibilities = || {
         for (e, v) in e_v_map.iter() {
-            let (_, mut v_mut) = q_visibility.get_mut(*e).unwrap();
-            *v_mut = *v;
+            if let Ok((_, mut v_mut)) = q_visibility.get_mut(*e) {
+                *v_mut = *v;
+            }
         }
     };
 
@@ -116,7 +132,10 @@ fn update_link_selection_mode<T: Component + CreateLink>(
     };
 
     // get the active camera
-    let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
+    let Some(cam) = q_camera.iter().find(|cam| cam.0.is_active) else {
+        reset_visibilities();
+        return;
+    };
 
     let mouse_pos_ndc = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
 
@@ -134,8 +153,9 @@ fn update_link_selection_mode<T: Component + CreateLink>(
         T::create_link(world, intersection_e, entities);
 
         for (e, v) in e_v_map.iter() {
-            let mut v_mut = world.query::<&mut Visibility>().get_mut(world, *e).unwrap();
-            *v_mut = *v;
+            if let Some(mut v_mut) = world.get_mut::<Visibility>(*e) {
+                *v_mut = *v;
+            }
         }
     });
 }

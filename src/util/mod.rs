@@ -8,11 +8,7 @@ pub mod shapes;
 use bevy::ecs::change_detection::MaybeLocation;
 use bevy::picking::mesh_picking::ray_cast::*;
 use bevy::{
-    ecs::{
-        component::Tick,
-        entity::EntityHashSet,
-        query::QueryData,
-    },
+    ecs::{component::Tick, entity::EntityHashSet, query::QueryData},
     math::vec2,
     prelude::*,
     window::PrimaryWindow,
@@ -144,11 +140,13 @@ pub trait ToBevyTransform {
 pub fn get_ray_from_cam(cam: (&Camera, &GlobalTransform), ndc: Vec2) -> Option<Ray3d> {
     let world_near_plane = cam.0.ndc_to_world(cam.1, ndc.extend(1.))?;
     let world_far_plane = cam.0.ndc_to_world(cam.1, ndc.extend(f32::EPSILON))?;
+    let direction = world_far_plane - world_near_plane;
 
-    (!world_near_plane.is_nan() && !world_far_plane.is_nan()).then_some(Ray3d::new(
-        world_near_plane,
-        Dir3::new_unchecked((world_far_plane - world_near_plane).normalize()),
-    ))
+    if !world_near_plane.is_finite() || !world_far_plane.is_finite() {
+        return None;
+    }
+
+    Some(Ray3d::new(world_near_plane, Dir3::new(direction).ok()?))
 }
 
 #[derive(new)]
@@ -182,12 +180,12 @@ pub fn give_me_a_mut<'a, T: 'a, R>(items: impl IntoIterator<Item = &'a mut T>, f
 
     let mut ticks = Vec::with_capacity(items.len());
     let mut locations = Vec::with_capacity(items.len());
-    
+
     for _ in 0..items.len() {
         ticks.push((Tick::default(), Tick::default()));
         locations.push(MaybeLocation::caller());
     }
-    
+
     let mut items_mut = Vec::with_capacity(items.len());
     for ((item, ticks), location) in items.iter_mut().zip(ticks.iter_mut()).zip(locations.iter_mut()) {
         let m = Mut::new(

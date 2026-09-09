@@ -75,8 +75,9 @@ fn cursor_grab(
     if !viewport_info.mouse_in_viewport {
         return;
     }
-    // let mut window = q_window.single_mut().unwrap();
-    let cursor: &mut CursorOptions = &mut q_cursor_options.single_mut().unwrap();
+    let Ok(mut cursor) = q_cursor_options.single_mut() else {
+        return;
+    };
 
     if (settings.camera.mode == CameraMode::Fly
         && !mouse_buttons.pressed(settings.camera.fly.key_bindings.mouse_button))
@@ -101,9 +102,14 @@ fn update_active_camera(
     mut ev_camera_mode_changed: MessageReader<CameraModeChanged>,
 ) {
     for ev in ev_camera_mode_changed.read() {
-        let mut fly_cam = q_fly_cam.single_mut().unwrap();
-        let mut orbit_cam = q_orbit_cam.single_mut().unwrap();
-        let mut topdown_cam = q_topdown_cam.single_mut().unwrap();
+        let (Ok(mut fly_cam), Ok(mut orbit_cam), Ok(mut topdown_cam)) = (
+            q_fly_cam.single_mut(),
+            q_orbit_cam.single_mut(),
+            q_topdown_cam.single_mut(),
+        ) else {
+            warn!("cannot switch camera mode because the editor cameras are not uniquely available");
+            continue;
+        };
 
         let active_states = match ev.0 {
             CameraMode::Fly => (true, false, false),

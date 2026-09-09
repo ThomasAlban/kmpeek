@@ -4,10 +4,10 @@ use crate::ui::{
     viewport::{SetupViewportSet, ViewportImage, ViewportInfo},
 };
 use bevy::{
+    camera::RenderTarget,
     input::mouse::{MouseMotion, MouseWheel},
     math::vec3,
     prelude::*,
-    camera::RenderTarget,
 };
 use serde::{Deserialize, Serialize};
 use transform_gizmo_bevy::GizmoCamera;
@@ -93,7 +93,7 @@ fn topdown_cam(
         return;
     }
 
-    let window = q_window.single().unwrap();
+    let Ok(window) = q_window.single() else { return };
 
     let mut pan = Vec2::ZERO;
     let mut scroll = 0.;
@@ -109,7 +109,9 @@ fn topdown_cam(
 
     let window_size = Vec2::new(window.width(), window.height());
 
-    let Ok((mut transform, mut projection)) = q_topdown_cam.single_mut() else { return; };
+    let Ok((mut transform, mut projection)) = q_topdown_cam.single_mut() else {
+        return;
+    };
     let mut transform_cp = *transform;
 
     if let Projection::Orthographic(projection) = &*projection {

@@ -8,7 +8,7 @@ use crate::{
     util::{get_ray_from_cam, ui_viewport_to_ndc, RaycastFromCam},
     viewer::{camera::EditorCamera, kcl_model::KCLModelSection, kmp::checkpoints::CheckpointHeight},
 };
-use bevy::{prelude::*, platform::collections::hash_map::HashMap};
+use bevy::{platform::collections::hash_map::HashMap, prelude::*};
 
 #[derive(Component)]
 pub struct Tweakable(pub SnapTo);
@@ -66,7 +66,9 @@ pub fn tweak_interaction(
         return;
     };
     // get the active camera
-    let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
+    let Some(cam) = q_camera.iter().find(|cam| cam.0.is_active) else {
+        return;
+    };
 
     let mouse_pos_ndc = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
 
@@ -89,12 +91,16 @@ pub fn tweak_interaction(
         };
 
         // if we got this far it means we just clicked on a tweakable point
-        let (_, mouse_over_transform, _) = q_selected.get(mouse_over_entity).unwrap();
+        let Ok((_, mouse_over_transform, mouse_over_type)) = q_selected.get(mouse_over_entity) else {
+            return;
+        };
 
         // get the position of the entity we are going to start dragging
         let pos = mouse_over_transform.translation;
         // translate this position into screenspace coords
-        let pos_ndc = cam.0.world_to_ndc(cam.1, pos).unwrap().xy();
+        let Some(pos_ndc) = cam.0.world_to_ndc(cam.1, pos).map(|position| position.xy()) else {
+            return;
+        };
 
         let mut position_differences = HashMap::new();
 
@@ -105,7 +111,7 @@ pub fn tweak_interaction(
         }
 
         // we can't allow tweak interactions where they are not all the same type as this would lead to weird behaviour
-        let tweak_type = q_selected.iter().next().unwrap().2 .0;
+        let tweak_type = mouse_over_type.0;
         if q_selected.iter().any(|x| x.2 .0 != tweak_type) {
             return;
         }

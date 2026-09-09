@@ -20,12 +20,12 @@ pub fn docktree_plugin(app: &mut App) {
     app.add_systems(Startup, setup_docktree);
 }
 
-fn setup_docktree(mut commands: Commands, mut pkv: ResMut<PkvStore>) {
+fn setup_docktree(mut commands: Commands, pkv: Res<PkvStore>) {
     // get the docktree if it exists, if not, set it to default
     let tree = match pkv.get::<DockTree>("tree") {
         Ok(tree) => tree,
-        Err(_) => {
-            pkv.set("tree", &DockTree::default()).unwrap();
+        Err(error) => {
+            warn!("could not load saved dock layout; using defaults for this session: {error}");
             DockTree::default()
         }
     };

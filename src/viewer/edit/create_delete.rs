@@ -160,7 +160,9 @@ fn alt_click_create_point(
     };
 
     // get the active camera
-    let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
+    let Some(cam) = q_camera.iter().find(|cam| cam.0.is_active) else {
+        return;
+    };
 
     let ndc_mouse_pos = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
     let intersections = RaycastFromCam::new(cam, ndc_mouse_pos, &mut raycast).cast();

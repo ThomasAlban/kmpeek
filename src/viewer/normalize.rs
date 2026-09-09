@@ -70,12 +70,23 @@ fn update_normalize(
         };
 
         let actual_pixel_size = pixel_root.distance(pixel_end);
+        if !actual_pixel_size.is_finite() || actual_pixel_size <= f32::EPSILON {
+            continue;
+        }
 
-        let required_scale = (normalize.desired_pixel_size * settings.kmp_model.point_scale) / actual_pixel_size;
+        let scale_factor = (normalize.desired_pixel_size * settings.kmp_model.point_scale * window.scale_factor()
+            / 2.0)
+            / actual_pixel_size;
+        if !scale_factor.is_finite() || scale_factor <= 0.0 {
+            continue;
+        }
 
         let scale_before = transform_cp.scale; // save what the scale was before we change it
-
-        transform_cp.scale = transform_cp.scale * required_scale * window.scale_factor() / 2.; // change the scale
+        let new_scale = transform_cp.scale * scale_factor;
+        if !new_scale.is_finite() {
+            continue;
+        }
+        transform_cp.scale = new_scale;
 
         // reset the scale if we didn't want to affect any axes
         if !normalize.axes.x {
@@ -87,7 +98,12 @@ fn update_normalize(
         if !normalize.axes.z {
             transform_cp.scale.z = scale_before.z;
         }
-        transform_cp.rotation = transform_cp.rotation.normalize();
+        transform_cp.rotation =
+            if transform_cp.rotation.is_finite() && transform_cp.rotation.length_squared() > f32::EPSILON {
+                transform_cp.rotation.normalize()
+            } else {
+                Quat::IDENTITY
+            };
 
         gt.set_if_neq(transform_cp.into());
 

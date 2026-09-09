@@ -65,7 +65,9 @@ fn select(
     let shift_key_down = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
 
     // get the active camera
-    let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
+    let Some(cam) = q_camera.iter().find(|cam| cam.0.is_active) else {
+        return;
+    };
 
     let mouse_pos_ndc = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
 
@@ -187,7 +189,9 @@ fn select_box(
             return;
         };
         // get the active camera
-        let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
+        let Some(cam) = q_camera.iter().find(|cam| cam.0.is_active) else {
+            return;
+        };
 
         // select stuff
         for selectable in q_selectable.iter() {

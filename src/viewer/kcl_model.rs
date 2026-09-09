@@ -92,15 +92,29 @@ pub fn spawn_model(
     if ev.0.extension() != Some(OsStr::new("kcl")) {
         return;
     }
-    // despawn all entities with KCLModelSection (so that we have a clean slate)
+    // Parse the replacement before removing the current model. A missing or
+    // malformed file should leave the editor's existing collision model intact.
+    let kcl_file = match File::open(&ev.0) {
+        Ok(file) => file,
+        Err(error) => {
+            error!("could not open KCL file {}: {error}", ev.0.display());
+            return;
+        }
+    };
+    let kcl = match Kcl::read(kcl_file) {
+        Ok(kcl) => kcl,
+        Err(error) => {
+            error!("could not read KCL file {}: {error}", ev.0.display());
+            return;
+        }
+    };
+
+    // Parsing succeeded, so replace the old model.
     for entity in q_model.iter_mut() {
         try_despawn(&mut commands, entity);
     }
     commands.remove_resource::<Kcl>();
 
-    // open the KCL file and read it
-    let kcl_file = File::open(ev.0.clone()).expect("could not open kcl file");
-    let kcl = Kcl::read(kcl_file).expect("could not read kcl file");
     // spawn the KCL model
     for i in 0..32 {
         let vertex_group = kcl.vertex_groups[i].clone();
@@ -155,13 +169,19 @@ pub fn update_kcl_model(
 
     for (mut visibility, kcl_model_section, standard_material) in q_kcl.iter_mut() {
         let i = kcl_model_section.0;
-        *visibility = if settings.kcl_model.visible[i] {
+        let (Some(visible), Some(color)) = (settings.kcl_model.visible.get(i), settings.kcl_model.color.get(i)) else {
+            warn!("ignoring invalid KCL model section index {i}");
+            continue;
+        };
+        *visibility = if *visible {
             Visibility::Inherited
         } else {
             Visibility::Hidden
         };
-        let material = materials.get_mut(standard_material.id()).unwrap();
-        material.base_color = settings.kcl_model.color[i];
+        let Some(material) = materials.get_mut(standard_material.id()) else {
+            continue;
+        };
+        material.base_color = *color;
         material.alpha_mode = if material.base_color.alpha() < 1. {
             AlphaMode::Blend
         } else {

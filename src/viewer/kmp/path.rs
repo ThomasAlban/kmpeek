@@ -250,8 +250,7 @@ impl KmpPathNode {
             // back to its canonical course/path start.
             Some(true) => {
                 prev_node.next_nodes.is_empty()
-                    && (world.get::<PathOverallStart>(next_e).is_some()
-                        || world.get::<RouteSettings>(next_e).is_some())
+                    && (world.get::<PathOverallStart>(next_e).is_some() || world.get::<RouteSettings>(next_e).is_some())
             }
             // Reject stale, asymmetric, or already-cyclic reachable graphs.
             None => false,
@@ -300,18 +299,33 @@ fn on_add_kmp_path_node(trigger: On<Add, KmpPathNode>, mut q_kmp_path_node: Quer
     // on adding this component, ensure that the next/prev nodes also all hold references to the current node
     let e = trigger.event().entity;
 
-    let cur_node = q_kmp_path_node.get(e).unwrap();
+    let Ok(cur_node) = q_kmp_path_node.get(e) else {
+        return;
+    };
 
     let next_nodes = cur_node.get_next();
     let prev_nodes = cur_node.get_previous();
+    let mut stale_next_nodes = Vec::new();
+    let mut stale_prev_nodes = Vec::new();
 
     for next_entity in next_nodes {
-        let mut next_node = q_kmp_path_node.get_mut(next_entity).unwrap();
-        next_node.prev_nodes.insert(e);
+        if let Ok(mut next_node) = q_kmp_path_node.get_mut(next_entity) {
+            next_node.prev_nodes.insert(e);
+        } else {
+            stale_next_nodes.push(next_entity);
+        }
     }
     for prev_entity in prev_nodes {
-        let mut prev_node = q_kmp_path_node.get_mut(prev_entity).unwrap();
-        prev_node.next_nodes.insert(e);
+        if let Ok(mut prev_node) = q_kmp_path_node.get_mut(prev_entity) {
+            prev_node.next_nodes.insert(e);
+        } else {
+            stale_prev_nodes.push(prev_entity);
+        }
+    }
+
+    if let Ok(mut cur_node) = q_kmp_path_node.get_mut(e) {
+        cur_node.next_nodes.retain(|next| !stale_next_nodes.contains(next));
+        cur_node.prev_nodes.retain(|prev| !stale_prev_nodes.contains(prev));
     }
 }
 
@@ -325,17 +339,21 @@ fn on_remove_kmp_path_node(
 ) {
     let e = trigger.event().entity;
 
-    let cur_node = q_kmp_path_node.get(e).unwrap();
+    let Ok(cur_node) = q_kmp_path_node.get(e) else {
+        return;
+    };
     let next_nodes = cur_node.get_next();
     let prev_nodes = cur_node.get_previous();
 
     for next_entity in next_nodes {
-        let mut next_node = q_kmp_path_node.get_mut(next_entity).unwrap();
-        next_node.prev_nodes.remove(&e);
+        if let Ok(mut next_node) = q_kmp_path_node.get_mut(next_entity) {
+            next_node.prev_nodes.remove(&e);
+        }
     }
     for prev_entity in prev_nodes {
-        let mut prev_node = q_kmp_path_node.get_mut(prev_entity).unwrap();
-        prev_node.next_nodes.remove(&e);
+        if let Ok(mut prev_node) = q_kmp_path_node.get_mut(prev_entity) {
+            prev_node.next_nodes.remove(&e);
+        }
     }
     if q_is_enemy_path_pt.get(e).is_ok() {
         ev_recalc_paths.write(RecalcPaths::enemy());
@@ -526,7 +544,10 @@ fn spawn_node_link<T: Component + Clone + ToPathType>(
     world: &mut World,
     prev_node: Entity,
     next_node: Entity,
-) -> Entity {
+) -> Option<Entity> {
+    let prev_pos = world.get::<Transform>(prev_node)?.translation;
+    let next_pos = world.get::<Transform>(next_node)?.translation;
+
     let meshes = world.resource::<KmpMeshes>().clone();
     let (line, arrow) = if is_checkpoint::<T>() || is_checkpoint_right::<T>() {
         let materials = world.resource::<CheckpointMaterials>().clone();
@@ -536,8 +557,6 @@ fn spawn_node_link<T: Component + Clone + ToPathType>(
         (materials.line, materials.arrow)
     };
 
-    let prev_pos = world.get::<Transform>(prev_node).unwrap().translation;
-    let next_pos = world.get::<Transform>(next_node).unwrap().translation;
     let (parent_transform, line_transform) = path_link_transforms(prev_pos, next_pos);
     let visibility = if world.get::<Visibility>(prev_node) == Some(&Visibility::Visible)
         && world.get::<Visibility>(next_node) == Some(&Visibility::Visible)
@@ -576,7 +595,7 @@ fn spawn_node_link<T: Component + Clone + ToPathType>(
             ));
         })
         .id();
-    e
+    Some(e)
 }
 
 // Reconcile link entities during Update, before Bevy's PostUpdate render bookkeeping.
@@ -615,10 +634,7 @@ fn reconcile_node_links<T: Component + Clone + ToPathType>(
 // Update existing link geometry after point movement, but do not create render entities this late.
 pub fn update_node_links<T: Component + Clone + ToPathType>(
     mut q_kmp_node_link: Query<(Entity, &KmpPathNodeLink, &Children, &mut Visibility, &mut Transform)>,
-    q_node: Query<
-        (Ref<Transform>, &Visibility),
-        (Without<KmpPathNodeLink>, Without<KmpPathNodeLinkLine>),
-    >,
+    q_node: Query<(Ref<Transform>, &Visibility), (Without<KmpPathNodeLink>, Without<KmpPathNodeLinkLine>)>,
     mut q_line: Query<&mut Transform, (With<KmpPathNodeLinkLine>, Without<KmpPathNodeLink>)>,
     mut commands: Commands,
 ) {
@@ -932,6 +948,21 @@ mod tests {
             .iter()
             .position(|path| path.path.contains(&entity))
             .expect("entity should belong to a traversed path")
+    }
+
+    #[test]
+    fn adding_node_discards_stale_links() {
+        let mut app = App::new();
+        app.add_observer(on_add_kmp_path_node);
+
+        let stale = app.world_mut().spawn_empty().id();
+        app.world_mut().despawn(stale);
+        let node = app
+            .world_mut()
+            .spawn((TestPathPoint, KmpPathNode::default().with_next([stale])))
+            .id();
+
+        assert!(app.world().get::<KmpPathNode>(node).unwrap().next_nodes.is_empty());
     }
 
     #[test]

@@ -48,7 +48,7 @@ pub fn get_pt_to_link(
     }
     let mouse_pos = q_window.single().ok()?.cursor_position()?;
 
-    let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
+    let cam = q_camera.iter().find(|cam| cam.0.is_active)?;
     let ndc_mouse_pos = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
     let ray = RaycastFromCam::new(cam, ndc_mouse_pos, &mut raycast)
         .filter(&|e| q_transform.contains(e))
@@ -125,8 +125,12 @@ impl LinkKmpPoint for RoutePoint {
 }
 impl LinkKmpPoint for CheckpointMarker {
     fn link(world: &mut World, prev_e: Entity, next_e: Entity) -> bool {
-        let (prev_left, prev_right) = get_both_cp_nodes(world, prev_e);
-        let (next_left, next_right) = get_both_cp_nodes(world, next_e);
+        let Some((prev_left, prev_right)) = get_both_cp_nodes(world, prev_e) else {
+            return false;
+        };
+        let Some((next_left, next_right)) = get_both_cp_nodes(world, next_e) else {
+            return false;
+        };
 
         let left_changed = KmpPathNode::link_nodes(prev_left, next_left, world);
         let right_changed = KmpPathNode::link_nodes(prev_right, next_right, world);
@@ -143,8 +147,12 @@ impl LinkKmpPoint for CheckpointMarker {
     }
 
     fn unlink(world: &mut World, prev_e: Entity, next_e: Entity) -> bool {
-        let (prev_left, prev_right) = get_both_cp_nodes(world, prev_e);
-        let (next_left, next_right) = get_both_cp_nodes(world, next_e);
+        let Some((prev_left, prev_right)) = get_both_cp_nodes(world, prev_e) else {
+            return false;
+        };
+        let Some((next_left, next_right)) = get_both_cp_nodes(world, next_e) else {
+            return false;
+        };
         let left_changed = KmpPathNode::unlink_nodes(prev_left, next_left, world);
         let right_changed = KmpPathNode::unlink_nodes(prev_right, next_right, world);
         left_changed || right_changed
@@ -173,11 +181,14 @@ pub fn unlink_points(
                 return;
             }
 
-            let changed = if world.get::<Checkpoint>(self.0).is_some()
-                || world.get::<CheckpointRight>(self.1).is_some()
+            let changed = if world.get::<Checkpoint>(self.0).is_some() || world.get::<CheckpointRight>(self.1).is_some()
             {
-                let (prev_left, prev_right) = get_both_cp_nodes(world, self.0);
-                let (next_left, next_right) = get_both_cp_nodes(world, self.1);
+                let Some((prev_left, prev_right)) = get_both_cp_nodes(world, self.0) else {
+                    return;
+                };
+                let Some((next_left, next_right)) = get_both_cp_nodes(world, self.1) else {
+                    return;
+                };
                 let left_changed = KmpPathNode::unlink_nodes(prev_left, next_left, world);
                 let right_changed = KmpPathNode::unlink_nodes(prev_right, next_right, world);
                 left_changed || right_changed

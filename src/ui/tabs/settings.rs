@@ -31,9 +31,13 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
         mut ev_kcl_model_updated,
     ) = ss.get_mut(world);
 
-    let mut fly_cam = q_fly_cam.single_mut().unwrap();
-    let mut orbit_cam = q_orbit_cam.single_mut().unwrap();
-    let mut topdown_cam = q_topdown_cam.single_mut().unwrap();
+    let (Ok(mut fly_cam), Ok(mut orbit_cam), Ok(mut topdown_cam)) = (
+        q_fly_cam.single_mut(),
+        q_orbit_cam.single_mut(),
+        q_topdown_cam.single_mut(),
+    ) else {
+        return;
+    };
 
     egui::CollapsingHeader::new("KMP Viewer")
         .default_open(true)
@@ -279,11 +283,15 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
     });
     ui.horizontal(|ui| {
         if ui.button("Save Settings").clicked() {
-            pkv.set("settings", settings.as_ref()).unwrap();
+            if let Err(error) = pkv.set("settings", settings.as_ref()) {
+                error!("could not save application settings: {error}");
+            }
         }
         if ui.button("Reset Settings").clicked() {
             *settings = AppSettings::default();
-            pkv.set("settings", settings.as_ref()).unwrap();
+            if let Err(error) = pkv.set("settings", settings.as_ref()) {
+                error!("could not save reset application settings: {error}");
+            }
         }
     });
 

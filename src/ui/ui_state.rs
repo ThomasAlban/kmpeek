@@ -26,13 +26,17 @@ pub fn ui_state_plugin(app: &mut App) {
 #[derive(Message, Default)]
 pub struct SaveDockTree;
 pub fn save_docktree(mut pkv: ResMut<PkvStore>, tree: Res<DockTree>) {
-    pkv.set("tree", tree.as_ref()).unwrap();
+    if let Err(error) = pkv.set("tree", tree.as_ref()) {
+        error!("could not save dock layout: {error}");
+    }
 }
 #[derive(Message, Default)]
 pub struct ResetDockTree;
 pub fn reset_docktree(mut pkv: ResMut<PkvStore>, mut tree: ResMut<DockTree>) {
     *tree = DockTree::default();
-    pkv.set("tree", tree.as_ref()).unwrap();
+    if let Err(error) = pkv.set("tree", tree.as_ref()) {
+        error!("could not save reset dock layout: {error}");
+    }
 }
 
 #[derive(Resource, Default, Deref, DerefMut, Clone)]

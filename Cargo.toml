@@ -63,8 +63,8 @@ opt-level = 3
 opt-level = 3
 lto = true
 strip = true
-# for some reason setting codegen-units = 1 for release builds results in a seg fault (at least on macos), no idea why
-codegen-units = 1
+# Keep Cargo's default codegen-unit count: forcing one codegen unit has caused
+# release-build segmentation faults on macOS.
 
 [lints.clippy]
 type_complexity = "allow"

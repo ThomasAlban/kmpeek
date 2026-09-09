@@ -122,7 +122,9 @@ fn draw_area_handles(
     let Ok(window) = q_window.single() else { return };
 
     // get the active camera
-    let cam = q_cam.iter().find(|cam| cam.0.is_active).unwrap();
+    let Some(cam) = q_cam.iter().find(|cam| cam.0.is_active) else {
+        return;
+    };
     let is_topdown = cam.2;
     let cam = (cam.0, cam.1);
 
@@ -227,8 +229,11 @@ fn draw_area_handles(
 
                     // send out a ray from the mouse
                     if let Some(mouse_ray) = get_ray_from_cam(cam, mouse_ndc) {
+                        let Ok(normal_direction) = Dir3::new(normal) else {
+                            continue;
+                        };
                         // get the ray of the normal to the point we are dragging
-                        let normal_ray = Ray3d::new(pos, Dir3::new_unchecked(normal));
+                        let normal_ray = Ray3d::new(pos, normal_direction);
                         // find the closest points on both the rays to each otther
                         let (_ray_t, normal_t) = ray_to_ray(mouse_ray, normal_ray);
                         // the new pos is the position along the normal ray that is the closest to the mouse ray
@@ -267,7 +272,9 @@ fn draw_area_handles(
 
         // actually render the 5 handles
         painter.color = css::RED.into();
-        let gizmo_cam = q_gizmo_cam.single().unwrap();
+        let Ok(gizmo_cam) = q_gizmo_cam.single() else {
+            continue;
+        };
         for i in 0..5 {
             if is_topdown && i == 2 {
                 // skip top handle when viewing from topdown
