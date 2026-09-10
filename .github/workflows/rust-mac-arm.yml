@@ -1,6 +1,7 @@
 name: Rust-Mac-Arm
 
 on:
+  workflow_dispatch:
   push:
     branches: [ "bevy-migrate" ]
   pull_request:
