@@ -38,14 +38,11 @@ impl Default for AppSettings {
 #[derive(SystemSet, Hash, PartialEq, Eq, Clone, Debug)]
 pub struct SetupAppSettingsSet;
 
-pub fn setup_app_settings(mut commands: Commands, mut pkv: ResMut<PkvStore>) {
-    // get the app settings if it exists, if not, set it to default
-    // THIS LINE SHOULD BE REMOVED TO MAKE THIS ACTUALLY WORK
-    pkv.set("settings", &AppSettings::default()).unwrap();
+pub fn setup_app_settings(mut commands: Commands, pkv: Res<PkvStore>) {
     let settings = match pkv.get::<AppSettings>("settings") {
         Ok(settings) => settings,
-        Err(_) => {
-            pkv.set("settings", &AppSettings::default()).unwrap();
+        Err(error) => {
+            warn!("could not load saved application settings; using defaults for this session: {error}");
             AppSettings::default()
         }
     };
@@ -54,24 +51,29 @@ pub fn setup_app_settings(mut commands: Commands, mut pkv: ResMut<PkvStore>) {
 }
 
 pub fn export_import_app_settings(
-    mut ev_file_dialog: EventReader<FileDialogResult>,
+    mut ev_file_dialog: MessageReader<FileDialogResult>,
     mut settings: ResMut<AppSettings>,
 ) {
     for FileDialogResult { path, dialog_type } in ev_file_dialog.read() {
         match dialog_type {
-            DialogType::ImportSettings => {
-                let input_settings_string = read_to_string(path).expect("could not read user settings to string");
-                if let Ok(input_settings) = serde_json::from_str::<AppSettings>(&input_settings_string) {
-                    *settings = input_settings;
-                }
-            }
-            DialogType::ExportSettings => {
-                let settings_string =
-                    serde_json::to_string_pretty(settings.as_ref()).expect("could not convert settings to json");
-                let mut file = File::create(path).expect("could not create user settings file");
-                file.write_all(settings_string.as_bytes())
-                    .expect("could not write to user settings file");
-            }
+            DialogType::ImportSettings => match read_to_string(path) {
+                Ok(input_settings_string) => match serde_json::from_str::<AppSettings>(&input_settings_string) {
+                    Ok(input_settings) => *settings = input_settings,
+                    Err(error) => error!("could not parse settings file {}: {error}", path.display()),
+                },
+                Err(error) => error!("could not read settings file {}: {error}", path.display()),
+            },
+            DialogType::ExportSettings => match serde_json::to_string_pretty(settings.as_ref()) {
+                Ok(settings_string) => match File::create(path) {
+                    Ok(mut file) => {
+                        if let Err(error) = file.write_all(settings_string.as_bytes()) {
+                            error!("could not write settings file {}: {error}", path.display());
+                        }
+                    }
+                    Err(error) => error!("could not create settings file {}: {error}", path.display()),
+                },
+                Err(error) => error!("could not serialize application settings: {error}"),
+            },
             _ => {}
         }
     }

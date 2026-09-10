@@ -5,11 +5,12 @@ pub mod kmp_file;
 pub mod read_write_arrays;
 pub mod shapes;
 
+use bevy::ecs::change_detection::{MaybeLocation, Tick};
+use bevy::picking::mesh_picking::ray_cast::*;
 use bevy::{
     ecs::{
-        component::Tick,
         entity::EntityHashSet,
-        query::{QueryData, WorldQuery},
+        query::{IterQueryData, QueryData},
     },
     math::vec2,
     prelude::*,
@@ -18,10 +19,6 @@ use bevy::{
 use bevy_egui::{
     egui::{self, Pos2},
     EguiContext,
-};
-use bevy_mod_raycast::{
-    immediate::{Raycast, RaycastSettings},
-    primitives::IntersectionData,
 };
 use derive_new::new;
 
@@ -146,20 +143,22 @@ pub trait ToBevyTransform {
 pub fn get_ray_from_cam(cam: (&Camera, &GlobalTransform), ndc: Vec2) -> Option<Ray3d> {
     let world_near_plane = cam.0.ndc_to_world(cam.1, ndc.extend(1.))?;
     let world_far_plane = cam.0.ndc_to_world(cam.1, ndc.extend(f32::EPSILON))?;
+    let direction = world_far_plane - world_near_plane;
 
-    (!world_near_plane.is_nan() && !world_far_plane.is_nan()).then_some(Ray3d::new(
-        world_near_plane,
-        (world_far_plane - world_near_plane).normalize(),
-    ))
+    if !world_near_plane.is_finite() || !world_far_plane.is_finite() {
+        return None;
+    }
+
+    Some(Ray3d::new(world_near_plane, Dir3::new(direction).ok()?))
 }
 
 #[derive(new)]
 pub struct RaycastFromCam<'a, 'w, 's> {
     cam: (&'a Camera, &'a GlobalTransform),
     ndc: Vec2,
-    raycast: &'a mut Raycast<'w, 's>,
+    raycast: &'a mut MeshRayCast<'w, 's>,
     #[new(default)]
-    settings: RaycastSettings<'a>,
+    settings: MeshRayCastSettings<'a>,
 }
 impl<'a, 'w, 's> RaycastFromCam<'a, 'w, 's> {
     pub fn filter(mut self, filter: &'a impl Fn(Entity) -> bool) -> Self {
@@ -169,7 +168,7 @@ impl<'a, 'w, 's> RaycastFromCam<'a, 'w, 's> {
     pub fn ray(&self) -> Option<Ray3d> {
         get_ray_from_cam(self.cam, self.ndc)
     }
-    pub fn cast(self) -> Vec<(Entity, IntersectionData)> {
+    pub fn cast(self) -> Vec<(Entity, RayMeshHit)> {
         let Some(ray) = self.ray() else {
             return Vec::new();
         };
@@ -178,25 +177,37 @@ impl<'a, 'w, 's> RaycastFromCam<'a, 'w, 's> {
 }
 
 /// Just give me a mut, damn it! (I really am at the end of my tether)
+#[track_caller]
 pub fn give_me_a_mut<'a, T: 'a, R>(items: impl IntoIterator<Item = &'a mut T>, f: impl FnOnce(Vec<Mut<T>>) -> R) -> R {
     let mut items: Vec<_> = items.into_iter().collect();
 
     let mut ticks = Vec::with_capacity(items.len());
+    let mut locations = Vec::with_capacity(items.len());
+
     for _ in 0..items.len() {
-        ticks.push((Tick::default(), Tick::default()))
+        ticks.push((Tick::default(), Tick::default()));
+        locations.push(MaybeLocation::caller());
     }
+
     let mut items_mut = Vec::with_capacity(items.len());
-    for (item, ticks) in items.iter_mut().zip(ticks.iter_mut()) {
-        let m = Mut::new(*item, &mut ticks.0, &mut ticks.1, Tick::default(), Tick::default());
+    for ((item, ticks), location) in items.iter_mut().zip(ticks.iter_mut()).zip(locations.iter_mut()) {
+        let m = Mut::new(
+            *item,
+            &mut ticks.0,
+            &mut ticks.1,
+            Tick::default(),
+            Tick::default(),
+            location.as_mut(),
+        );
         items_mut.push(m);
     }
     f(items_mut)
 }
 
-pub fn iter_mut_from_entities<'a, R: QueryData>(
+pub fn iter_mut_from_entities<'a, 'w, 's, R: QueryData + IterQueryData>(
     entities: &EntityHashSet,
-    q: &'a mut Query<(Entity, R)>,
-) -> Vec<<R as WorldQuery>::Item<'a>> {
+    q: &'a mut Query<'w, 's, (Entity, R)>,
+) -> Vec<<R as QueryData>::Item<'a, 'a>> {
     let mut items = Vec::new();
     for (e, item) in q.iter_mut() {
         if entities.contains(&e) {
@@ -211,9 +222,9 @@ pub fn egui_has_primary_context(query: Query<(), (With<EguiContext>, With<Primar
 }
 
 pub fn try_despawn(commands: &mut Commands, entity: Entity) {
-    commands.add(move |world: &mut World| {
-        if let Some(e) = world.get_entity_mut(entity) {
-            e.despawn_recursive();
+    commands.queue(move |world: &mut World| {
+        if let Ok(e) = world.get_entity_mut(entity) {
+            e.despawn();
         }
     });
 }

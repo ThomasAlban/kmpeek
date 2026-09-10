@@ -4,16 +4,15 @@ use crate::ui::{
     viewport::{SetupViewportSet, ViewportImage, ViewportInfo},
 };
 use bevy::{
+    camera::RenderTarget,
     input::mouse::MouseMotion,
     math::vec3,
     prelude::*,
-    render::camera::RenderTarget,
-    window::{CursorGrabMode, RequestRedraw},
+    window::{CursorGrabMode, CursorOptions, RequestRedraw},
 };
 use serde::{Deserialize, Serialize};
-use transform_gizmo_bevy::GizmoCamera;
 
-use super::{CameraMode, UpdateCameraSet};
+use super::{CameraMode, EditorCamera, UpdateCameraSet};
 
 pub fn fly_cam_plugin(app: &mut App) {
     app.add_systems(Startup, camera_setup.after(SetupViewportSet))
@@ -76,25 +75,23 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
     let fly_default = FlySettings::default();
 
     commands.spawn((
-        Camera3dBundle {
-            camera: Camera {
-                // render to the image
-                target: RenderTarget::Image(viewport.handle.clone()),
-                ..default()
-            },
-            transform: Transform::from_translation(fly_default.start_pos).looking_at(Vec3::ZERO, Vec3::Y),
-            ..default()
-        },
+        Camera3d::default(),
+        Camera::default(),
+        // Render to the image.
+        RenderTarget::Image(viewport.handle.clone().into()),
+        Transform::from_translation(fly_default.start_pos).looking_at(Vec3::ZERO, Vec3::Y),
         FlyCam,
-        GizmoCamera,
+        EditorCamera,
+        Msaa::Sample4,
     ));
 }
 
 fn fly_cam_move(
     keys: Res<ButtonInput<KeyCode>>,
     q_window: Query<&Window>,
+    mut q_cursor_options: Query<&mut CursorOptions>,
     mut q_fly_cam: Query<&mut Transform, With<FlyCam>>,
-    mut ev_request_redraw: EventWriter<RequestRedraw>,
+    mut ev_request_redraw: MessageWriter<RequestRedraw>,
     settings: Res<AppSettings>,
     viewport_info: Res<ViewportInfo>,
 ) {
@@ -105,25 +102,30 @@ fn fly_cam_move(
         return;
     }
 
-    let window = q_window.get_single().unwrap();
+    let Ok(window) = q_window.single() else { return };
+    let Ok(cursor) = q_cursor_options.single_mut() else {
+        return;
+    };
     // if we need to be holding the mouse to move but we aren't, return
-    if settings.camera.fly.hold_mouse_to_move && window.cursor.grab_mode == CursorGrabMode::None {
+    if settings.camera.fly.hold_mouse_to_move && cursor.grab_mode == CursorGrabMode::None {
         return;
     }
 
-    let mut transform = q_fly_cam.get_single_mut().unwrap();
+    let Ok(mut transform) = q_fly_cam.single_mut() else {
+        return;
+    };
 
     let mut velocity = Vec3::ZERO;
     let local_z = transform.local_z();
-    let forward = -Vec3::new(local_z.x, 0., local_z.z).normalize();
-    let right = Vec3::new(local_z.z, 0., -local_z.x).normalize();
+    let forward = -Vec3::new(local_z.x, 0., local_z.z).normalize_or_zero();
+    let right = Vec3::new(local_z.z, 0., -local_z.x).normalize_or_zero();
 
     let mut speed_boost = false;
 
     if keys.get_pressed().count() > 0 {
         // redraw the window when we're holding a button down (e.g. flying around but not moving the mouse)
         // as otherwise the window doesn't redraw
-        ev_request_redraw.send(RequestRedraw);
+        ev_request_redraw.write(RequestRedraw);
     }
 
     for key in keys.get_pressed() {
@@ -158,7 +160,8 @@ fn fly_cam_move(
 
 fn fly_cam_look(
     q_window: Query<&Window>,
-    mut ev_mouse_motion: EventReader<MouseMotion>,
+    mut q_cursor_options: Query<&mut CursorOptions>,
+    mut ev_mouse_motion: MessageReader<MouseMotion>,
     mut q_fly_cam: Query<&mut Transform, With<FlyCam>>,
     settings: Res<AppSettings>,
     viewport_info: Res<ViewportInfo>,
@@ -167,12 +170,17 @@ fn fly_cam_look(
         return;
     }
 
-    let window = q_window.get_single().unwrap();
-    let mut transform = q_fly_cam.get_single_mut().unwrap();
+    let Ok(window) = q_window.single() else { return };
+    let Ok(cursor) = q_cursor_options.single_mut() else {
+        return;
+    };
+    let Ok(mut transform) = q_fly_cam.single_mut() else {
+        return;
+    };
 
     for ev in ev_mouse_motion.read() {
         let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
-        match window.cursor.grab_mode {
+        match cursor.grab_mode {
             CursorGrabMode::None => (),
             _ => {
                 // Using smallest of height or width ensures equal vertical and horizontal sensitivity

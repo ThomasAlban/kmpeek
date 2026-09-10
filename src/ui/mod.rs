@@ -18,7 +18,12 @@ pub mod viewport;
 
 pub fn ui_plugin(app: &mut App) {
     app.add_plugins((
-        EguiPlugin,
+        EguiPlugin {
+            // KMPeek only needs a small number of egui textures. Keep experimental
+            // bindless textures disabled for predictable behavior across Metal GPUs.
+            bindless_mode_array_size: None,
+            ..Default::default()
+        },
         ui_state_plugin,
         docktree_plugin,
         update_ui_plugin,

@@ -6,10 +6,9 @@ use super::{
 use crate::{
     ui::viewport::ViewportInfo,
     util::{get_ray_from_cam, ui_viewport_to_ndc, RaycastFromCam},
-    viewer::{camera::Gizmo2dCam, kcl_model::KCLModelSection, kmp::checkpoints::CheckpointHeight},
+    viewer::{camera::EditorCamera, kcl_model::KCLModelSection, kmp::checkpoints::CheckpointHeight},
 };
-use bevy::{prelude::*, utils::HashMap};
-use bevy_mod_raycast::prelude::*;
+use bevy::{platform::collections::hash_map::HashMap, prelude::*};
 
 #[derive(Component)]
 pub struct Tweakable(pub SnapTo);
@@ -45,11 +44,11 @@ pub fn tweak_interaction(
     viewport_info: Res<ViewportInfo>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_window: Query<&Window>,
-    q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
-    mut raycast: Raycast,
+    q_camera: Query<(&Camera, &GlobalTransform), With<EditorCamera>>,
+    mut raycast: MeshRayCast,
     checkpoint_height: Res<CheckpointHeight>,
     q_kcl: Query<(), With<KCLModelSection>>,
-    mut ev_just_created_point: EventReader<JustCreatedPoint>,
+    mut ev_just_created_point: MessageReader<JustCreatedPoint>,
 ) {
     if *edit_mode != EditMode::Tweak || !viewport_info.mouse_in_viewport || q_selected.is_empty() {
         return;
@@ -62,12 +61,14 @@ pub fn tweak_interaction(
         return;
     };
 
-    let Ok(window) = q_window.get_single() else { return };
+    let Ok(window) = q_window.single() else { return };
     let Some(mouse_pos) = window.cursor_position() else {
         return;
     };
     // get the active camera
-    let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
+    let Some(cam) = q_camera.iter().find(|cam| cam.0.is_active) else {
+        return;
+    };
 
     let mouse_pos_ndc = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
 
@@ -90,12 +91,16 @@ pub fn tweak_interaction(
         };
 
         // if we got this far it means we just clicked on a tweakable point
-        let (_, mouse_over_transform, _) = q_selected.get(mouse_over_entity).unwrap();
+        let Ok((_, mouse_over_transform, mouse_over_type)) = q_selected.get(mouse_over_entity) else {
+            return;
+        };
 
         // get the position of the entity we are going to start dragging
         let pos = mouse_over_transform.translation;
         // translate this position into screenspace coords
-        let pos_ndc = cam.0.world_to_ndc(cam.1, pos).unwrap().xy();
+        let Some(pos_ndc) = cam.0.world_to_ndc(cam.1, pos).map(|position| position.xy()) else {
+            return;
+        };
 
         let mut position_differences = HashMap::new();
 
@@ -106,7 +111,7 @@ pub fn tweak_interaction(
         }
 
         // we can't allow tweak interactions where they are not all the same type as this would lead to weird behaviour
-        let tweak_type = q_selected.iter().next().unwrap().2 .0;
+        let tweak_type = mouse_over_type.0;
         if q_selected.iter().any(|x| x.2 .0 != tweak_type) {
             return;
         }
@@ -138,9 +143,11 @@ pub fn tweak_interaction(
 
     let snap_pos = match tweak_interaction.tweak_type {
         SnapTo::Kcl => {
-            let intersections =
-                raycast.cast_ray(cam_ray, &RaycastSettings::default().with_filter(&|e| q_kcl.contains(e)));
-            intersections.first().map(|x| x.1.position())
+            let intersections = raycast.cast_ray(
+                cam_ray,
+                &MeshRayCastSettings::default().with_filter(&|e| q_kcl.contains(e)),
+            );
+            intersections.first().map(|x| x.1.point)
         }
         SnapTo::CheckpointPlane => {
             let dist = cam_ray.intersect_plane(Vec3::Y * checkpoint_height.0, InfinitePlane3d::default());

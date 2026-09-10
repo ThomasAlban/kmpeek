@@ -2,3 +2,8 @@
 .DS_Store
 /.vscode
 trace*
+.cargo/config.toml
+log.txt
+.juggler/
+test_files/
+AGENTS.md

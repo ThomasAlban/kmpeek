@@ -3,7 +3,7 @@ use crate::{
     ui::viewport::ViewportInfo,
     util::{get_ray_from_cam, try_despawn, ui_viewport_to_ndc, RaycastFromCam},
     viewer::{
-        camera::Gizmo2dCam,
+        camera::EditorCamera,
         kcl_model::KCLModelSection,
         kmp::{
             checkpoints::{CheckpointHeight, GetSelectedCheckpoints},
@@ -12,20 +12,19 @@ use crate::{
                 KmpSelectablePoint, MaxConnectedPath, Object, RespawnPoint, RoutePoint, Spawn, Spawner, StartPoint,
             },
             ordering::RefreshOrdering,
-            path::{is_checkpoint, KmpPathNode, RecalcPaths},
+            path::{is_checkpoint, KmpPathNode, RecalcPaths, ToPathType},
             sections::KmpEditMode,
         },
     },
 };
 use bevy::{ecs::entity::EntityHashSet, prelude::*};
-use bevy_mod_raycast::prelude::*;
 
 #[derive(SystemSet, Debug, PartialEq, Eq, Hash, Clone)]
 pub struct DeleteSet;
 
 pub fn create_delete_plugin(app: &mut App) {
-    app.add_event::<CreatePoint>()
-        .add_event::<JustCreatedPoint>()
+    app.add_message::<CreatePoint>()
+        .add_message::<JustCreatedPoint>()
         .add_systems(
             Update,
             (
@@ -50,20 +49,20 @@ pub fn create_delete_plugin(app: &mut App) {
         .add_systems(Update, delete_point.in_set(DeleteSet).after(SelectSet));
 }
 
-#[derive(Event, Default)]
+#[derive(Message, Default)]
 pub struct CreatePoint {
     pub position: Vec3,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct JustCreatedPoint(pub Entity);
 
 // responsible for consuming 'create point' events and creating the relevant point depending on what edit mode we are in
 fn create_point<T: Component + Spawn + Default + Clone>(
     mut commands: Commands,
     mode: Res<KmpEditMode>,
-    mut ev_create_point: EventReader<CreatePoint>,
-    mut ev_just_created_point: EventWriter<JustCreatedPoint>,
+    mut ev_create_point: MessageReader<CreatePoint>,
+    mut ev_just_created_point: MessageWriter<JustCreatedPoint>,
 ) {
     if !mode.in_mode::<T>() {
         return;
@@ -77,18 +76,17 @@ fn create_point<T: Component + Spawn + Default + Clone>(
     // we can't add it now, because then in the select system it will just be deselected again
     // the select system has to run after this so that we know which previous points we have to link to this one
     // if it ran after, everything would already be deselected by the time we create the point
-    ev_just_created_point.send(JustCreatedPoint(entity));
+    ev_just_created_point.write(JustCreatedPoint(entity));
 }
 
-fn create_path<T: Component + Spawn + Default + Clone + MaxConnectedPath>(
+fn create_path<T: Component + Spawn + Default + Clone + MaxConnectedPath + ToPathType>(
     mut commands: Commands,
     mode: Res<KmpEditMode>,
     q_selected_pt: Query<Entity, (With<T>, With<Selected>)>,
     q_kmp_path_node: Query<&KmpPathNode>,
     mut q_cp: GetSelectedCheckpoints,
-    mut ev_create_point: EventReader<CreatePoint>,
-    mut ev_recalc_paths: EventWriter<RecalcPaths>,
-    mut ev_just_created_point: EventWriter<JustCreatedPoint>,
+    mut ev_create_point: MessageReader<CreatePoint>,
+    mut ev_just_created_point: MessageWriter<JustCreatedPoint>,
 ) {
     if !mode.in_mode::<T>() {
         return;
@@ -103,24 +101,32 @@ fn create_path<T: Component + Spawn + Default + Clone + MaxConnectedPath>(
         q_selected_pt.iter().collect()
     };
 
-    // if any prev points are at max linking capacity, then return
-    if q_kmp_path_node.iter_many(&prev_nodes).any(|x| x.at_max_next()) {
+    // The new node must be able to reference every selected predecessor, and
+    // every predecessor must have room for one more outgoing edge.
+    if prev_nodes.len() > T::MAX_CONNECTED as usize
+        || q_kmp_path_node.iter_many(&prev_nodes).any(|node| node.at_max_next())
+    {
         return;
     }
 
-    ev_recalc_paths.send_default();
+    let path_type = T::to_path_type();
     let entity = Spawner::<T>::builder()
         .pos(pos)
         .prev_nodes(prev_nodes)
         .max(T::MAX_CONNECTED)
         .build()
         .spawn_command(&mut commands);
+    // Recalculate only after the deferred spawn has inserted the node and linked
+    // it to its selected predecessors.
+    commands.queue(move |world: &mut World| {
+        world.write_message(RecalcPaths::for_path_type(path_type));
+    });
     // let entity = Spawner::<T>::default()
     //     .pos(pos)
     //     .prev_nodes(prev_nodes)
     //     .max_connected(T::MAX_CONNECTED)
     //     .spawn_command(&mut commands);
-    ev_just_created_point.send(JustCreatedPoint(entity));
+    ev_just_created_point.write(JustCreatedPoint(entity));
 }
 
 // this detects whether we have alt clicked, and if we have, sends an event to the above function to actually
@@ -130,13 +136,13 @@ fn alt_click_create_point(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mode: Res<KmpEditMode>,
     viewport_info: Res<ViewportInfo>,
-    mut raycast: Raycast,
+    mut raycast: MeshRayCast,
     cp_height: Res<CheckpointHeight>,
-    q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
+    q_camera: Query<(&Camera, &GlobalTransform), With<EditorCamera>>,
     q_window: Query<&Window>,
     q_kmp_pt: Query<(), With<KmpSelectablePoint>>,
     q_kcl: Query<(), With<KCLModelSection>>,
-    mut ev_create_pt: EventWriter<CreatePoint>,
+    mut ev_create_pt: MessageWriter<CreatePoint>,
 ) {
     if *mode == KmpEditMode::TrackInfo {
         return;
@@ -149,12 +155,14 @@ fn alt_click_create_point(
         return;
     }
 
-    let Some(mouse_pos) = q_window.get_single().ok().and_then(|x| x.cursor_position()) else {
+    let Some(mouse_pos) = q_window.single().ok().and_then(|x| x.cursor_position()) else {
         return;
     };
 
     // get the active camera
-    let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
+    let Some(cam) = q_camera.iter().find(|cam| cam.0.is_active) else {
+        return;
+    };
 
     let ndc_mouse_pos = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
     let intersections = RaycastFromCam::new(cam, ndc_mouse_pos, &mut raycast).cast();
@@ -176,10 +184,10 @@ fn alt_click_create_point(
         let Some(kcl_intersection) = intersections.iter().find(|e| q_kcl.contains(e.0)) else {
             return;
         };
-        kcl_intersection.1.position()
+        kcl_intersection.1.point
     };
 
-    ev_create_pt.send(CreatePoint { position: mouse_3d_pos });
+    ev_create_pt.write(CreatePoint { position: mouse_3d_pos });
 }
 
 fn delete_point(
@@ -187,7 +195,7 @@ fn delete_point(
     mut q_selected: Query<Entity, With<Selected>>,
     mut commands: Commands,
     viewport_info: Res<ViewportInfo>,
-    mut ev_refresh_ordering: EventWriter<RefreshOrdering>,
+    mut ev_refresh_ordering: MessageWriter<RefreshOrdering>,
 ) {
     if !viewport_info.mouse_in_viewport && !viewport_info.mouse_in_table {
         return;
@@ -199,5 +207,5 @@ fn delete_point(
     for e in q_selected.iter_mut() {
         try_despawn(&mut commands, e);
     }
-    ev_refresh_ordering.send_default();
+    ev_refresh_ordering.write_default();
 }

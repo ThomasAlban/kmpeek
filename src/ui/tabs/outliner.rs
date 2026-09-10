@@ -102,7 +102,8 @@ fn show_path(ui: &mut Ui, world: &mut World, i: usize, pathgroup: EntityPathGrou
     ui.horizontal(|ui| {
         ui.add_space(10.);
         ui.add_sized([ICON_SIZE, ICON_SIZE], Icons::path(ui.ctx(), ICON_SIZE).tint(color));
-        let label = ui.add(
+        let label = ui.add_enabled(
+            all_visible,
             egui::Label::new(format!("Path {i}"))
                 .selectable(false)
                 .sense(egui::Sense::click()),
@@ -174,7 +175,7 @@ fn show_header<T: Component>(ui: &mut Ui, world: &mut World, path: bool) {
                 false
             };
             if view_icon_btn(ui, &mut all_visible).changed() {
-                world.send_event(SetSectionVisibility::<T>::new(all_visible));
+                world.write_message(SetSectionVisibility::<T>::new(all_visible));
             }
         });
     });

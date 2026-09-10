@@ -16,31 +16,35 @@ pub fn ui_state_plugin(app: &mut App) {
         // .init_resource::<CameraSettingsOpen>()
         // .init_resource::<ShowModesCollapsed>()
         // .init_resource::<KmpVisibility>()
-        .add_event::<SaveDockTree>()
-        .add_systems(Update, save_docktree.run_if(on_event::<SaveDockTree>()))
-        .add_systems(Update, reset_docktree.run_if(on_event::<ResetDockTree>()))
-        .add_event::<ResetDockTree>()
+        .add_message::<SaveDockTree>()
+        .add_systems(Update, save_docktree.run_if(on_message::<SaveDockTree>))
+        .add_systems(Update, reset_docktree.run_if(on_message::<ResetDockTree>))
+        .add_message::<ResetDockTree>()
         .add_systems(Startup, check_cmd_args.after(SetupAppSettingsSet));
 }
 
-#[derive(Event, Default)]
+#[derive(Message, Default)]
 pub struct SaveDockTree;
 pub fn save_docktree(mut pkv: ResMut<PkvStore>, tree: Res<DockTree>) {
-    pkv.set("tree", tree.as_ref()).unwrap();
+    if let Err(error) = pkv.set("tree", tree.as_ref()) {
+        error!("could not save dock layout: {error}");
+    }
 }
-#[derive(Event, Default)]
+#[derive(Message, Default)]
 pub struct ResetDockTree;
 pub fn reset_docktree(mut pkv: ResMut<PkvStore>, mut tree: ResMut<DockTree>) {
     *tree = DockTree::default();
-    pkv.set("tree", tree.as_ref()).unwrap();
+    if let Err(error) = pkv.set("tree", tree.as_ref()) {
+        error!("could not save reset dock layout: {error}");
+    }
 }
 
 #[derive(Resource, Default, Deref, DerefMut, Clone)]
 pub struct KmpFilePath(pub PathBuf);
 
 pub fn check_cmd_args(
-    mut ev_kmp_file_selected: EventWriter<KmpFileSelected>,
-    mut ev_kcl_file_selected: EventWriter<KclFileSelected>,
+    mut ev_kmp_file_selected: MessageWriter<KmpFileSelected>,
+    mut ev_kcl_file_selected: MessageWriter<KclFileSelected>,
     settings: Res<AppSettings>,
 ) {
     // if there is a command line arg of a path to a kmp or kcl, open it
@@ -52,18 +56,18 @@ pub fn check_cmd_args(
                 // if the file is a kmp file
                 if file_ext == "kmp" {
                     // open it
-                    ev_kmp_file_selected.send(KmpFileSelected(path.into()));
+                    ev_kmp_file_selected.write(KmpFileSelected(path.into()));
                     // if there is a course.kcl in the same directory and the setting to open it is set, open the kcl as well
                     if settings.open_course_kcl_in_dir {
                         let mut course_kcl_path = path.to_owned();
                         course_kcl_path.set_file_name("course.kcl");
                         if course_kcl_path.exists() {
-                            ev_kcl_file_selected.send(KclFileSelected(course_kcl_path));
+                            ev_kcl_file_selected.write(KclFileSelected(course_kcl_path));
                         }
                     }
                 // else if the file is a kcl file, open it
                 } else if file_ext == "kcl" {
-                    ev_kcl_file_selected.send(KclFileSelected(path.into()));
+                    ev_kcl_file_selected.write(KclFileSelected(path.into()));
                 }
             }
         }

@@ -2,17 +2,17 @@ use crate::{
     ui::viewport::ViewportInfo,
     util::{get_ray_from_cam, ui_viewport_to_ndc, world_to_ui_viewport},
     viewer::{
-        camera::{Gizmo2dCam, TopDownCam},
-        edit::select::Selected,
+        camera::{EditorCamera, Gizmo2dCam, TopDownCam},
+        edit::{select::Selected, transform_gizmo::TransformGizmoState},
         kmp::components::{AreaPoint, AreaShape},
     },
 };
 use bevy::{
+    camera::visibility::RenderLayers,
     color::palettes::css,
     math::{vec2, vec3, DVec3},
     prelude::*,
-    render::view::RenderLayers,
-    transform::TransformSystem,
+    transform::TransformSystems,
 };
 use bevy_vector_shapes::{
     painter::{ShapeConfig, ShapePainter},
@@ -20,7 +20,6 @@ use bevy_vector_shapes::{
     Shape2dPlugin,
 };
 use std::f32::consts::{PI, TAU};
-use transform_gizmo_bevy::GizmoTarget;
 
 pub fn area_gizmo_plugin(app: &mut App) {
     app.add_plugins(Shape2dPlugin {
@@ -32,8 +31,8 @@ pub fn area_gizmo_plugin(app: &mut App) {
     })
     .init_resource::<AreaGizmoOptions>()
     .add_systems(Update, draw_area_bounds)
-    // drawing handles after TransformPropagate fixes an issue where they would lag behind the camera position for 1 frame
-    .add_systems(PostUpdate, draw_area_handles.after(TransformSystem::TransformPropagate));
+    // drawing handles after Propagate fixes an issue where they would lag behind the camera position for 1 frame
+    .add_systems(PostUpdate, draw_area_handles.after(TransformSystems::Propagate));
 }
 
 #[derive(Resource, Default)]
@@ -66,7 +65,7 @@ fn draw_area_bounds(mut gizmos: Gizmos, q_areas: Query<(&mut Transform, &mut Are
         };
 
         match area.shape {
-            AreaShape::Box => gizmos.cuboid(area_transform, gizmo_color),
+            AreaShape::Box => gizmos.cube(area_transform, gizmo_color),
             AreaShape::Cylinder => {
                 let segments = 32;
                 let ellipse_h_size = vec2(area.scale.x, area.scale.z) / 2.;
@@ -75,14 +74,14 @@ fn draw_area_bounds(mut gizmos: Gizmos, q_areas: Query<(&mut Transform, &mut Are
                 let bottom_pos = transform.translation;
                 // draw the top ellipse
                 gizmos
-                    .ellipse(top_pos, ellipse_rot, ellipse_h_size, gizmo_color)
+                    .ellipse(Isometry3d::new(top_pos, ellipse_rot), ellipse_h_size, gizmo_color)
                     .resolution(segments);
                 // draw the bottom ellipse
                 gizmos
-                    .ellipse(bottom_pos, ellipse_rot, ellipse_h_size, gizmo_color)
+                    .ellipse(Isometry3d::new(bottom_pos, ellipse_rot), ellipse_h_size, gizmo_color)
                     .resolution(segments);
                 // draw the lines going between the top and bottom ellipses
-                ellipse_inner(ellipse_h_size, segments)
+                ellipse_inner(ellipse_h_size, segments as usize)
                     .map(|vec2| ellipse_rot * vec2.extend(0.))
                     .map(|vec3| (vec3 + bottom_pos, vec3 + top_pos))
                     .for_each(|(bottom, top)| gizmos.line(bottom, top, gizmo_color));
@@ -95,7 +94,7 @@ fn draw_area_bounds(mut gizmos: Gizmos, q_areas: Query<(&mut Transform, &mut Are
 // these are drawn using the 2d gizmo camera which renders above the main camera
 fn draw_area_handles(
     mut q_areas: Query<(Entity, &mut Transform, &mut AreaPoint), With<Selected>>,
-    q_cam: Query<(&Camera, &GlobalTransform, Has<TopDownCam>), (Without<Selected>, Without<Gizmo2dCam>)>,
+    q_cam: Query<(&Camera, &GlobalTransform, Has<TopDownCam>), (With<EditorCamera>, Without<Selected>)>,
     q_gizmo_cam: Query<(&Camera, &GlobalTransform), With<Gizmo2dCam>>,
     viewport_info: Res<ViewportInfo>,
     q_window: Query<&Window>,
@@ -103,7 +102,7 @@ fn draw_area_handles(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut current_interaction: Local<Option<AreaGizmoInteraction>>,
     mut initial_mouse_pos: Local<Vec2>,
-    q_transform_gizmos: Query<&GizmoTarget>,
+    transform_gizmo: Res<TransformGizmoState>,
     mut painter: ShapePainter,
 ) {
     const HANDLE_RADIUS: f32 = 12.;
@@ -119,10 +118,12 @@ fn draw_area_handles(
         vec3(0., 0., 0.5),
     ];
 
-    let Ok(window) = q_window.get_single() else { return };
+    let Ok(window) = q_window.single() else { return };
 
     // get the active camera
-    let cam = q_cam.iter().find(|cam| cam.0.is_active).unwrap();
+    let Some(cam) = q_cam.iter().find(|cam| cam.0.is_active) else {
+        return;
+    };
     let is_topdown = cam.2;
     let cam = (cam.0, cam.1);
 
@@ -202,7 +203,7 @@ fn draw_area_handles(
         }
 
         // if the mouse button is pressed and we aren't interacting with any transform gizmos
-        if mouse_buttons.pressed(MouseButton::Left) && !q_transform_gizmos.iter().any(|x| x.is_focused()) {
+        if mouse_buttons.pressed(MouseButton::Left) && !transform_gizmo.is_focused {
             if let (
                 Some(AreaGizmoInteraction {
                     area_entity: e,
@@ -227,8 +228,11 @@ fn draw_area_handles(
 
                     // send out a ray from the mouse
                     if let Some(mouse_ray) = get_ray_from_cam(cam, mouse_ndc) {
+                        let Ok(normal_direction) = Dir3::new(normal) else {
+                            continue;
+                        };
                         // get the ray of the normal to the point we are dragging
-                        let normal_ray = Ray3d::new(pos, normal);
+                        let normal_ray = Ray3d::new(pos, normal_direction);
                         // find the closest points on both the rays to each otther
                         let (_ray_t, normal_t) = ray_to_ray(mouse_ray, normal_ray);
                         // the new pos is the position along the normal ray that is the closest to the mouse ray
@@ -267,7 +271,9 @@ fn draw_area_handles(
 
         // actually render the 5 handles
         painter.color = css::RED.into();
-        let gizmo_cam = q_gizmo_cam.single();
+        let Ok(gizmo_cam) = q_gizmo_cam.single() else {
+            continue;
+        };
         for i in 0..5 {
             if is_topdown && i == 2 {
                 // skip top handle when viewing from topdown
@@ -316,16 +322,10 @@ pub fn ray_to_ray(a_ray: Ray3d, b_ray: Ray3d) -> (f64, f64) {
     let d = adir.dot(w);
     let e = bdir.dot(w);
     let dot = 1.0 - b * b;
-    let ta;
-    let tb;
 
     if dot < 1e-8 {
-        ta = 0.0;
-        tb = e;
+        (0.0, e)
     } else {
-        ta = (b * e - d) / dot;
-        tb = (e - b * d) / dot;
+        ((b * e - d) / dot, (e - b * d) / dot)
     }
-
-    (ta, tb)
 }

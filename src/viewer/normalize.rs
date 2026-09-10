@@ -2,7 +2,7 @@ use crate::ui::settings::AppSettings;
 use bevy::prelude::*;
 use derive_new::new;
 
-use super::camera::Gizmo2dCam;
+use super::camera::EditorCamera;
 
 pub fn normalize_plugin(app: &mut App) {
     app.add_systems(Last, update_normalize);
@@ -27,22 +27,24 @@ pub struct NormalizeInheritParent;
 // of entities which follow the transform of the parent but aren't necesssarily normalized
 fn update_normalize(
     mut p: ParamSet<(
-        Query<(&GlobalTransform, &Camera), Without<Gizmo2dCam>>,
+        Query<(&GlobalTransform, &Camera), With<EditorCamera>>,
         Query<(&mut GlobalTransform, &Normalize, Option<&Children>)>,
         Query<(&mut GlobalTransform, &Transform, &ViewVisibility), With<NormalizeInheritParent>>,
     )>,
     settings: Res<AppSettings>,
     q_window: Query<&Window>,
 ) {
-    let Ok(window) = q_window.get_single() else { return };
+    let Ok(window) = q_window.single() else { return };
 
     let (camera_position, camera) = {
         let q_cam = p.p0();
-        let res = q_cam.iter().find(|x| x.1.is_active).unwrap();
+        let Some(res) = q_cam.iter().find(|x| x.1.is_active) else {
+            return;
+        };
         (res.0.to_owned(), res.1.to_owned())
     };
 
-    let view = camera_position.compute_matrix().inverse();
+    let view = camera_position.to_matrix().inverse();
 
     let mut children_to_deal_with = Vec::new();
 
@@ -55,25 +57,36 @@ fn update_normalize(
 
         let distance = view.transform_point3(transform_cp.translation).z;
 
-        let Some(pixel_end) = camera.world_to_viewport(
+        let Ok(pixel_end) = camera.world_to_viewport(
             &GlobalTransform::default(),
             Vec3::new(normalize.size_in_world * transform_cp.scale.x, 0.0, distance),
         ) else {
             continue;
         };
 
-        let Some(pixel_root) = camera.world_to_viewport(&GlobalTransform::default(), Vec3::new(0.0, 0.0, distance))
+        let Ok(pixel_root) = camera.world_to_viewport(&GlobalTransform::default(), Vec3::new(0.0, 0.0, distance))
         else {
             continue;
         };
 
         let actual_pixel_size = pixel_root.distance(pixel_end);
+        if !actual_pixel_size.is_finite() || actual_pixel_size <= f32::EPSILON {
+            continue;
+        }
 
-        let required_scale = (normalize.desired_pixel_size * settings.kmp_model.point_scale) / actual_pixel_size;
+        let scale_factor = (normalize.desired_pixel_size * settings.kmp_model.point_scale * window.scale_factor()
+            / 2.0)
+            / actual_pixel_size;
+        if !scale_factor.is_finite() || scale_factor <= 0.0 {
+            continue;
+        }
 
         let scale_before = transform_cp.scale; // save what the scale was before we change it
-
-        transform_cp.scale = transform_cp.scale * required_scale * window.scale_factor() / 2.; // change the scale
+        let new_scale = transform_cp.scale * scale_factor;
+        if !new_scale.is_finite() {
+            continue;
+        }
+        transform_cp.scale = new_scale;
 
         // reset the scale if we didn't want to affect any axes
         if !normalize.axes.x {
@@ -85,12 +98,17 @@ fn update_normalize(
         if !normalize.axes.z {
             transform_cp.scale.z = scale_before.z;
         }
-        transform_cp.rotation = transform_cp.rotation.normalize();
+        transform_cp.rotation =
+            if transform_cp.rotation.is_finite() && transform_cp.rotation.length_squared() > f32::EPSILON {
+                transform_cp.rotation.normalize()
+            } else {
+                Quat::IDENTITY
+            };
 
         gt.set_if_neq(transform_cp.into());
 
         let Some(children) = children else { continue };
-        let children: Vec<_> = children.iter().copied().collect();
+        let children: Vec<Entity> = children.to_vec();
         children_to_deal_with.push((*gt, children));
     }
 

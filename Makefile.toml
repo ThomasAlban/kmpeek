@@ -1,0 +1,10 @@
+# optional, just wanted quick write to log
+[tasks.check-log]
+script = [
+    "cargo check 2>&1 | tee log.txt"
+]
+
+[tasks.build-log]
+script = [
+    "cargo build 2>&1 | tee log.txt"
+]

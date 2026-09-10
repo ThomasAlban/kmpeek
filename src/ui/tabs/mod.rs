@@ -4,9 +4,7 @@ mod settings;
 mod table;
 mod viewport;
 
-use super::util::get_egui_ctx;
 use bevy::prelude::*;
-use bevy_egui::egui;
 use bevy_pkv::PkvStore;
 use edit::show_edit_tab;
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
@@ -21,12 +19,12 @@ pub fn docktree_plugin(app: &mut App) {
     app.add_systems(Startup, setup_docktree);
 }
 
-fn setup_docktree(mut commands: Commands, mut pkv: ResMut<PkvStore>) {
+fn setup_docktree(mut commands: Commands, pkv: Res<PkvStore>) {
     // get the docktree if it exists, if not, set it to default
     let tree = match pkv.get::<DockTree>("tree") {
         Ok(tree) => tree,
-        Err(_) => {
-            pkv.set("tree", &DockTree::default()).unwrap();
+        Err(error) => {
+            warn!("could not load saved dock layout; using defaults for this session: {error}");
             DockTree::default()
         }
     };
@@ -48,7 +46,7 @@ impl Default for DockTree {
     }
 }
 
-#[derive(Display, PartialEq, EnumIter, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Display, PartialEq, Eq, Hash, EnumIter, Serialize, Deserialize, Clone, Copy)]
 pub enum Tab {
     Viewport,
     Outliner,
@@ -63,7 +61,10 @@ pub struct TabViewer<'a>(&'a mut World);
 impl egui_dock::TabViewer for TabViewer<'_> {
     // each tab will be distinguished by an enum which can be converted to a string using strum
     type Tab = Tab;
-    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
+    fn id(&mut self, tab: &mut Self::Tab) -> egui_dock::egui::Id {
+        egui_dock::egui::Id::new(*tab)
+    }
+    fn ui(&mut self, ui: &mut egui_dock::egui::Ui, tab: &mut Self::Tab) {
         // we can do different things inside the tab depending on its name
         match tab {
             Tab::Viewport => show_viewport_tab(ui, self.0),
@@ -74,18 +75,20 @@ impl egui_dock::TabViewer for TabViewer<'_> {
         };
     }
     // show the title of the tab - the 'Tab' type already stores its title anyway
-    fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
+    fn title(&mut self, tab: &mut Self::Tab) -> egui_dock::egui::WidgetText {
         tab.to_string().into()
     }
 }
 
-pub fn show_dock_area(world: &mut World) {
-    let ctx = &get_egui_ctx(world);
-
-    let style = Style::from_egui(ctx.style().as_ref());
+pub fn show_dock_area(ui: &mut egui_dock::egui::Ui, world: &mut World) {
+    let style = Style::from_egui(ui.style().as_ref());
 
     world.resource_scope(|world, mut tree: Mut<DockTree>| {
-        // show the actual dock area
-        DockArea::new(&mut tree).style(style).show(ctx, &mut TabViewer(world));
+        let available = ui.available_rect_before_wrap();
+        if available.width() > 1.0 && available.height() > 1.0 {
+            DockArea::new(&mut tree)
+                .style(style)
+                .show_inside(ui, &mut TabViewer(world));
+        }
     });
 }

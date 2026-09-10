@@ -1,18 +1,17 @@
 use super::area_gizmo::AreaGizmoOptions;
 use super::create_delete::JustCreatedPoint;
 use super::link_select_mode::LinkSelectMode;
+use super::transform_gizmo::TransformGizmoState;
 use super::EditMode;
 use crate::ui::keybinds::{Modifier, ModifiersPressed};
 use crate::ui::update_ui::UpdateUiSet;
 use crate::ui::viewport::ViewportInfo;
 use crate::util::{ui_viewport_to_ndc, world_to_ui_viewport, RaycastFromCam};
-use crate::viewer::camera::Gizmo2dCam;
+use crate::viewer::camera::EditorCamera;
 use crate::viewer::kmp::components::{KmpSelectablePoint, RespawnPoint, RoutePoint};
 use crate::viewer::kmp::sections::KmpEditMode;
 use bevy::prelude::*;
 use bevy_mod_outline::*;
-use bevy_mod_raycast::prelude::*;
-use transform_gizmo_bevy::GizmoTarget;
 
 #[derive(SystemSet, Debug, PartialEq, Eq, Hash, Clone)]
 pub struct SelectSet;
@@ -35,14 +34,14 @@ fn select(
     q_window: Query<&Window>,
     keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
-    q_camera: Query<(&mut Camera, &GlobalTransform), Without<Gizmo2dCam>>,
-    q_gizmos: Query<&GizmoTarget>,
-    mut raycast: Raycast,
+    q_camera: Query<(&mut Camera, &GlobalTransform), With<EditorCamera>>,
+    transform_gizmo: Res<TransformGizmoState>,
+    mut raycast: MeshRayCast,
     q_kmp_section: Query<&KmpSelectablePoint>,
     mut commands: Commands,
     area_gizmo_opts: Res<AreaGizmoOptions>,
     q_selected: Query<Entity, With<Selected>>,
-    mut ev_just_created_point: EventReader<JustCreatedPoint>,
+    mut ev_just_created_point: MessageReader<JustCreatedPoint>,
 
     route_selection_mode: Option<Res<LinkSelectMode<RoutePoint>>>,
     respawn_selection_mode: Option<Res<LinkSelectMode<RespawnPoint>>>,
@@ -52,21 +51,23 @@ fn select(
         || !mouse_buttons.just_pressed(MouseButton::Left)
         || (ev_just_created_point.is_empty() && (keys.pressed(KeyCode::AltLeft)) || keys.pressed(KeyCode::AltRight))
         || area_gizmo_opts.mouse_hovering
-        || q_gizmos.iter().any(|x| x.is_focused())
+        || transform_gizmo.is_focused
         || route_selection_mode.is_some()
         || respawn_selection_mode.is_some()
     {
         return;
     }
 
-    let Some(mouse_pos) = q_window.get_single().ok().and_then(|x| x.cursor_position()) else {
+    let Some(mouse_pos) = q_window.single().ok().and_then(|x| x.cursor_position()) else {
         return;
     };
 
     let shift_key_down = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
 
     // get the active camera
-    let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
+    let Some(cam) = q_camera.iter().find(|cam| cam.0.is_active) else {
+        return;
+    };
 
     let mouse_pos_ndc = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
 
@@ -150,7 +151,7 @@ fn select_box(
     edit_mode: Res<EditMode>,
     viewport_info: Res<ViewportInfo>,
     q_selectable: Query<(&Transform, Entity, &Visibility, Has<Selected>), With<KmpSelectablePoint>>,
-    q_camera: Query<(&Camera, &GlobalTransform), Without<Gizmo2dCam>>,
+    q_camera: Query<(&Camera, &GlobalTransform), With<EditorCamera>>,
     mut commands: Commands,
     mut select_box: ResMut<SelectBox>,
     mut initial_mouse_pos: Local<Vec2>,
@@ -159,7 +160,7 @@ fn select_box(
         return;
     }
 
-    let Ok(window) = q_window.get_single() else { return };
+    let Ok(window) = q_window.single() else { return };
     let Some(mouse_pos) = window.cursor_position() else {
         return;
     };
@@ -188,7 +189,9 @@ fn select_box(
             return;
         };
         // get the active camera
-        let cam = q_camera.iter().find(|cam| cam.0.is_active).unwrap();
+        let Some(cam) = q_camera.iter().find(|cam| cam.0.is_active) else {
+            return;
+        };
 
         // select stuff
         for selectable in q_selectable.iter() {

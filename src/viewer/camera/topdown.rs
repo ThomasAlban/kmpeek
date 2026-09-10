@@ -1,16 +1,15 @@
-use super::{CameraMode, UpdateCameraSet};
+use super::{CameraMode, EditorCamera, UpdateCameraSet};
 use crate::ui::{
     settings::AppSettings,
     viewport::{SetupViewportSet, ViewportImage, ViewportInfo},
 };
 use bevy::{
+    camera::RenderTarget,
     input::mouse::{MouseMotion, MouseWheel},
     math::vec3,
     prelude::*,
-    render::camera::RenderTarget,
 };
 use serde::{Deserialize, Serialize};
-use transform_gizmo_bevy::GizmoCamera;
 
 pub fn topdown_cam_plugin(app: &mut App) {
     app.add_systems(Startup, camera_setup.after(SetupViewportSet))
@@ -59,31 +58,30 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
     let topdown_default = TopDownSettings::default();
 
     commands.spawn((
-        Camera3dBundle {
-            camera: Camera {
-                // render to the image
-                target: RenderTarget::Image(viewport.handle.clone()),
-                is_active: false,
-                ..default()
-            },
-            projection: Projection::Orthographic(OrthographicProjection {
-                near: topdown_default.near,
-                far: topdown_default.far,
-                scale: topdown_default.scale,
-                ..default()
-            }),
-            transform: Transform::from_translation(topdown_default.start_pos).looking_at(Vec3::ZERO, Vec3::Z),
+        Camera3d::default(),
+        Camera {
+            is_active: false,
             ..default()
         },
+        // Render to the image.
+        RenderTarget::Image(viewport.handle.clone().into()),
+        Projection::Orthographic(OrthographicProjection {
+            near: topdown_default.near,
+            far: topdown_default.far,
+            scale: topdown_default.scale,
+            ..OrthographicProjection::default_3d()
+        }),
+        Transform::from_translation(topdown_default.start_pos).looking_at(Vec3::ZERO, Vec3::Z),
         TopDownCam,
-        GizmoCamera,
+        EditorCamera,
+        Msaa::Sample4,
     ));
 }
 
 fn topdown_cam(
     q_window: Query<&mut Window>,
-    mut ev_mouse_motion: EventReader<MouseMotion>,
-    mut ev_mouse_scroll: EventReader<MouseWheel>,
+    mut ev_mouse_motion: MessageReader<MouseMotion>,
+    mut ev_mouse_scroll: MessageReader<MouseWheel>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut q_topdown_cam: Query<(&mut Transform, &mut Projection), With<TopDownCam>>,
     settings: Res<AppSettings>,
@@ -93,12 +91,12 @@ fn topdown_cam(
         return;
     }
 
-    let window = q_window.get_single().unwrap();
+    let Ok(window) = q_window.single() else { return };
 
     let mut pan = Vec2::ZERO;
     let mut scroll = 0.;
 
-    if mouse_buttons.pressed(settings.camera.orbit.key_bindings.mouse_button) {
+    if mouse_buttons.pressed(settings.camera.top_down.key_bindings.mouse_button) {
         for ev in ev_mouse_motion.read() {
             pan += ev.delta;
         }
@@ -109,7 +107,9 @@ fn topdown_cam(
 
     let window_size = Vec2::new(window.width(), window.height());
 
-    let (mut transform, mut projection) = q_topdown_cam.single_mut();
+    let Ok((mut transform, mut projection)) = q_topdown_cam.single_mut() else {
+        return;
+    };
     let mut transform_cp = *transform;
 
     if let Projection::Orthographic(projection) = &*projection {

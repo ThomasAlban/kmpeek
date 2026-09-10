@@ -4,18 +4,15 @@ use super::{
     file_dialog::FileDialogManager,
     tabs::{DockTree, Tab},
     ui_state::{KmpFilePath, ResetDockTree, SaveDockTree},
-    util::get_egui_ctx,
 };
 use bevy::ecs::system::SystemState;
 use bevy::prelude::*;
 use bevy_egui::egui::{self, Align, Button, Layout};
 use strum::IntoEnumIterator;
 
-pub fn show_menu_bar(world: &mut World) {
-    let ctx = &get_egui_ctx(world);
-
-    egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-        egui::menu::bar(ui, |ui| {
+pub fn show_menu_bar(ui: &mut egui::Ui, world: &mut World) {
+    egui::Panel::top("top_panel").show(ui, |ui| {
+        egui::MenuBar::new().ui(ui, |ui| {
             let mut sc_btn = "Ctrl";
             if cfg!(target_os = "macos") {
                 sc_btn = "Cmd";
@@ -26,11 +23,13 @@ pub fn show_menu_bar(world: &mut World) {
                     .clicked()
                 {
                     let mut ss = SystemState::<FileDialogManager>::new(world);
-                    let mut file_dialog = ss.get_mut(world);
+                    let Ok(mut file_dialog) = ss.get_mut(world) else {
+                        return;
+                    };
 
                     file_dialog.open_kmp_kcl();
 
-                    ui.close_menu();
+                    ui.close();
                 }
                 if !world.contains_resource::<KmpFilePath>() {
                     ui.disable();
@@ -40,15 +39,15 @@ pub fn show_menu_bar(world: &mut World) {
                     .add(Button::new("Save").shortcut_text(format!("{sc_btn}+S")))
                     .clicked()
                 {
-                    world.send_event(SaveFile);
-                    ui.close_menu();
+                    world.write_message(SaveFile);
+                    ui.close();
                 }
 
                 if ui
                     .add(Button::new("Save as...").shortcut_text(format!("{sc_btn}+Shift+S")))
                     .clicked()
                 {
-                    ui.close_menu();
+                    ui.close();
                 }
             });
             ui.menu_button("Edit", |ui| {
@@ -70,12 +69,12 @@ pub fn show_menu_bar(world: &mut World) {
 
             ui.menu_button("Window", |ui| {
                 if ui.button("Save Tab Layout").clicked() {
-                    world.send_event_default::<SaveDockTree>();
-                    ui.close_menu();
+                    world.write_message_default::<SaveDockTree>();
+                    ui.close();
                 }
                 if ui.button("Reset Tab Layout").clicked() {
-                    world.send_event_default::<ResetDockTree>();
-                    ui.close_menu();
+                    world.write_message_default::<ResetDockTree>();
+                    ui.close();
                 }
                 // toggle each tab on or off
                 let mut tree = world.resource_mut::<DockTree>();

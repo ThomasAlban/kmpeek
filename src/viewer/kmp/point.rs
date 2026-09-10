@@ -16,8 +16,8 @@ use crate::{
         normalize::{Normalize, NormalizeInheritParent},
     },
 };
-use bevy::{ecs::world::Command, math::vec3, prelude::*};
-use bevy_mod_outline::{OutlineBundle, OutlineVolume};
+use bevy::{math::vec3, prelude::*};
+use bevy_mod_outline::OutlineVolume;
 
 pub fn spawn_point_section<T: KmpComponent + Spawn>(world: &mut World, kmp: &KmpFile) -> KmpSectionIdEntityMap<T>
 where
@@ -63,16 +63,13 @@ pub fn spawn_point<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mu
     };
 
     entity.insert((
-        PbrBundle {
-            mesh: meshes.sphere.clone(),
-            material: materials.point.clone(),
-            transform: spawner.get_transform(),
-            visibility: if spawner.visible {
-                Visibility::Visible
-            } else {
-                Visibility::Hidden
-            },
-            ..default()
+        Mesh3d(meshes.sphere.clone()),
+        MeshMaterial3d(materials.point.clone()),
+        spawner.get_transform(),
+        if spawner.visible {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
         },
         spawner.component,
         KmpSelectablePoint,
@@ -80,13 +77,10 @@ pub fn spawn_point<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mu
         GizmoTransformable,
         OrderId(order_id),
         Normalize::new(200., 30., BVec3::TRUE),
-        OutlineBundle {
-            outline: OutlineVolume {
-                visible: false,
-                colour: outline.color,
-                width: outline.width,
-            },
-            ..default()
+        OutlineVolume {
+            visible: false,
+            colour: outline.color,
+            width: outline.width,
         },
     ));
     entity.with_children(|parent| {
@@ -95,36 +89,27 @@ pub fn spawn_point<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mu
         line_transform.translation.z = line_length / 2.;
         line_transform.rotate_x(90_f32.to_radians());
         parent.spawn((
-            PbrBundle {
-                mesh: meshes.cylinder.clone(),
-                material: materials.line.clone(),
-                transform: line_transform,
-                ..default()
-            },
+            Mesh3d(meshes.cylinder.clone()),
+            MeshMaterial3d(materials.line.clone()),
+            line_transform,
             NormalizeInheritParent,
         ));
 
         let mut arrow_transform = Transform::from_translation(vec3(0., 0., line_length));
         arrow_transform.rotate_x(90_f32.to_radians());
         parent.spawn((
-            PbrBundle {
-                mesh: meshes.cone.clone(),
-                material: materials.arrow.clone(),
-                transform: arrow_transform,
-                ..default()
-            },
+            Mesh3d(meshes.cone.clone()),
+            MeshMaterial3d(materials.arrow.clone()),
+            arrow_transform,
             NormalizeInheritParent,
         ));
 
         let up_arrow_transform =
             Transform::from_translation(vec3(0., line_length * 0.75, 0.)).with_scale(vec3(1., 2., 1.));
         parent.spawn((
-            PbrBundle {
-                mesh: meshes.cone.clone(),
-                material: materials.up_arrow.clone(),
-                transform: up_arrow_transform,
-                ..default()
-            },
+            Mesh3d(meshes.cone.clone()),
+            MeshMaterial3d(materials.up_arrow.clone()),
+            up_arrow_transform,
             NormalizeInheritParent,
         ));
     });
@@ -136,6 +121,8 @@ pub fn spawn_point<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mu
 
 pub struct AddRespawnPointPreview(pub Entity);
 impl Command for AddRespawnPointPreview {
+    type Out = ();
+
     fn apply(self, world: &mut World) {
         let mesh = world.resource::<KmpMeshes>().sphere.clone();
         let material = world.resource::<PointMaterials<RespawnPoint>>().line.clone();
@@ -147,14 +134,11 @@ impl Command for AddRespawnPointPreview {
             while z <= 0. {
                 let mut x = -450.;
                 while x <= 450. {
-                    parent.spawn({
-                        PbrBundle {
-                            mesh: mesh.clone(),
-                            material: material.clone(),
-                            transform: Transform::from_translation(vec3(x, y, z)).with_scale(Vec3::splat(0.5)),
-                            ..default()
-                        }
-                    });
+                    parent.spawn((
+                        Mesh3d(mesh.clone()),
+                        MeshMaterial3d(material.clone()),
+                        Transform::from_translation(vec3(x, y, z)).with_scale(Vec3::splat(0.5)),
+                    ));
                     x += 300.;
                 }
                 z += 300.;

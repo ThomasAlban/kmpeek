@@ -25,9 +25,9 @@ use bevy::{
     },
     math::vec3,
     prelude::*,
-    transform::TransformSystem,
+    transform::TransformSystems,
 };
-use bevy_mod_outline::{OutlineBundle, OutlineVolume};
+use bevy_mod_outline::OutlineVolume;
 use bon::builder;
 
 pub fn checkpoint_plugin(app: &mut App) {
@@ -43,7 +43,7 @@ pub fn checkpoint_plugin(app: &mut App) {
         )
         .add_systems(
             PostUpdate,
-            set_checkpoint_node_height.after(TransformSystem::TransformPropagate),
+            set_checkpoint_node_height.after(TransformSystems::Propagate),
         )
         // .add_systems(
         //     Update,
@@ -53,8 +53,8 @@ pub fn checkpoint_plugin(app: &mut App) {
         //         dbg!(q2.iter().len());
         //     },
         // )
-        .observe(on_remove_cp_left)
-        .observe(on_remove_cp_right);
+        .add_observer(on_remove_cp_left)
+        .add_observer(on_remove_cp_right);
 }
 
 #[derive(Component)]
@@ -132,12 +132,10 @@ impl Default for CheckpointHeight {
     }
 }
 
-fn on_remove_cp_left(
-    trigger: Trigger<OnRemove, CheckpointLeft>,
-    q_cp_left: Query<&CheckpointLeft>,
-    mut commands: Commands,
-) {
-    let cp_left = q_cp_left.get(trigger.entity()).unwrap();
+fn on_remove_cp_left(trigger: On<Remove, CheckpointLeft>, q_cp_left: Query<&CheckpointLeft>, mut commands: Commands) {
+    let Ok(cp_left) = q_cp_left.get(trigger.event().entity) else {
+        return;
+    };
     let cp_right = cp_left.right;
 
     try_despawn(&mut commands, cp_right);
@@ -147,11 +145,13 @@ fn on_remove_cp_left(
 }
 
 fn on_remove_cp_right(
-    trigger: Trigger<OnRemove, CheckpointRight>,
+    trigger: On<Remove, CheckpointRight>,
     q_cp_right: Query<&CheckpointRight>,
     mut commands: Commands,
 ) {
-    let cp_right = q_cp_right.get(trigger.entity()).unwrap();
+    let Ok(cp_right) = q_cp_right.get(trigger.event().entity) else {
+        return;
+    };
     let cp_left = cp_right.left;
 
     try_despawn(&mut commands, cp_left);
@@ -214,13 +214,10 @@ pub fn checkpoint_spawner(
             TransformEditOptions::new(true, true),
             GizmoTransformable,
             Normalize::new(200., 30., BVec3::TRUE),
-            OutlineBundle {
-                outline: OutlineVolume {
-                    visible: false,
-                    colour: outline.color,
-                    width: outline.width,
-                },
-                ..default()
+            OutlineVolume {
+                visible: false,
+                colour: outline.color,
+                width: outline.width,
             },
             KmpPathNode::default(),
             CheckpointMarker,
@@ -229,13 +226,10 @@ pub fn checkpoint_spawner(
 
     // spawn the left of the checkpoint
     world.entity_mut(left_e).insert((
-        PbrBundle {
-            mesh: sphere_mesh.clone(),
-            material: material.clone(),
-            transform: left_transform,
-            visibility,
-            ..default()
-        },
+        Mesh3d(sphere_mesh.clone()),
+        MeshMaterial3d(material.clone()),
+        left_transform,
+        visibility,
         cp.clone(),
         CheckpointLeft {
             right: right_e,
@@ -249,13 +243,10 @@ pub fn checkpoint_spawner(
 
     // spawn the right of the checkpoint
     world.entity_mut(right_e).insert((
-        PbrBundle {
-            mesh: sphere_mesh,
-            material: material.clone(),
-            transform: right_transform,
-            visibility,
-            ..default()
-        },
+        Mesh3d(sphere_mesh),
+        MeshMaterial3d(material.clone()),
+        right_transform,
+        visibility,
         CheckpointRight {
             left: left_e,
             line: line_e,
@@ -266,13 +257,10 @@ pub fn checkpoint_spawner(
 
     // spawn the line
     world.get_entity_mut(line_e).unwrap().insert((
-        PbrBundle {
-            mesh: cylinder_mesh,
-            material: material.clone(),
-            transform: line_transform,
-            visibility,
-            ..default()
-        },
+        Mesh3d(cylinder_mesh),
+        MeshMaterial3d(material.clone()),
+        line_transform,
+        visibility,
         Normalize::new(200., 30., BVec3::new(true, false, true)),
         CheckpointLine {
             left: left_e,
@@ -289,22 +277,16 @@ pub fn checkpoint_spawner(
         .get_entity_mut(arrow_e)
         .unwrap()
         .insert((
-            SpatialBundle {
-                visibility: Visibility::Visible,
-                transform: arrow_parent_transform,
-                ..default()
-            },
+            visibility,
+            arrow_parent_transform,
             CpArrowParent,
             Normalize::new(200., 30., BVec3::TRUE),
         ))
         .with_children(|parent| {
             parent.spawn((
-                PbrBundle {
-                    mesh: cone_mesh,
-                    material,
-                    transform: arrow_child_transform,
-                    ..default()
-                },
+                Mesh3d(cone_mesh),
+                MeshMaterial3d(material),
+                arrow_child_transform,
                 CpArrowChild,
                 NormalizeInheritParent,
             ));
@@ -313,13 +295,10 @@ pub fn checkpoint_spawner(
     // spawn the plane
     let transform = calc_cp_plane_transform(left_pos, right_pos, height);
     world.entity_mut(plane_e).insert((
-        PbrBundle {
-            mesh: plane_mesh,
-            material: material_plane,
-            transform,
-            visibility,
-            ..default()
-        },
+        Mesh3d(plane_mesh),
+        MeshMaterial3d(material_plane),
+        transform,
+        visibility,
         CheckpointPlane {
             left: left_e,
             right: right_e,
@@ -400,7 +379,7 @@ fn set_checkpoint_node_height(
 
 fn update_checkpoint_colors(
     q_cp_left: Query<(Ref<Checkpoint>, &CheckpointLeft, Entity)>,
-    mut q_std_mat: Query<&mut Handle<StandardMaterial>>,
+    mut q_std_mat: Query<&mut MeshMaterial3d<StandardMaterial>>,
     q_children: Query<&Children>,
     materials: Res<CheckpointMaterials>,
 ) {
@@ -420,13 +399,23 @@ fn update_checkpoint_colors(
             CheckpointKind::LapCount => materials.lap_count_plane.clone(),
         };
 
-        let arrow = q_children.get(cp_left.arrow).unwrap().first().unwrap();
-
-        *q_std_mat.get_mut(cp_e).unwrap() = point_material.clone();
-        *q_std_mat.get_mut(cp_left.right).unwrap() = point_material.clone();
-        *q_std_mat.get_mut(cp_left.line).unwrap() = point_material.clone();
-        *q_std_mat.get_mut(*arrow).unwrap() = point_material.clone();
-        *q_std_mat.get_mut(cp_left.plane).unwrap() = plane_material;
+        if let Ok(mut material) = q_std_mat.get_mut(cp_e) {
+            *material = MeshMaterial3d(point_material.clone());
+        }
+        if let Ok(mut material) = q_std_mat.get_mut(cp_left.right) {
+            *material = MeshMaterial3d(point_material.clone());
+        }
+        if let Ok(mut material) = q_std_mat.get_mut(cp_left.line) {
+            *material = MeshMaterial3d(point_material.clone());
+        }
+        if let Some(arrow) = q_children.get(cp_left.arrow).ok().and_then(|children| children.first()) {
+            if let Ok(mut material) = q_std_mat.get_mut(*arrow) {
+                *material = MeshMaterial3d(point_material);
+            }
+        }
+        if let Ok(mut material) = q_std_mat.get_mut(cp_left.plane) {
+            *material = MeshMaterial3d(plane_material);
+        }
     }
 }
 
@@ -475,7 +464,7 @@ pub struct GetSelectedCheckpoints<'w, 's> {
     q_cp_right: Query<'w, 's, &'static mut CheckpointRight, With<Selected>>,
 }
 impl GetSelectedCheckpoints<'_, '_> {
-    pub fn get(&mut self) -> EntityHashMap<Mut<Checkpoint>> {
+    pub fn get(&mut self) -> EntityHashMap<Mut<'_, Checkpoint>> {
         let cp_left_of_right: EntityHashSet = self.q_cp_right.iter().map(|x| x.left).collect();
         let mut cps: EntityHashMap<Mut<Checkpoint>> = EntityHashMap::default();
         for (cp_l, e, selected) in self.q_cp_left.iter_mut() {
@@ -497,17 +486,58 @@ impl GetSelectedCheckpoints<'_, '_> {
     }
 }
 
-/// Utility for getting both checkpoint nodes when we only have the Entity ID of one of them, and don't know whether the one we have is a left or a right
-pub fn get_both_cp_nodes(world: &mut World, e: Entity) -> (Entity, Entity) {
-    let left = if world.entity(e).contains::<Checkpoint>() {
+/// Utility for getting both checkpoint nodes when we only have the entity ID of
+/// one side and do not know whether it is the left or right node.
+pub fn get_both_cp_nodes(world: &World, e: Entity) -> Option<(Entity, Entity)> {
+    let left = if world.get::<Checkpoint>(e).is_some() {
         e
     } else {
-        world.entity(e).get::<CheckpointRight>().unwrap().left
+        world.get::<CheckpointRight>(e)?.left
     };
-    let right = if world.entity(e).contains::<CheckpointRight>() {
+    let right = if world.get::<CheckpointRight>(e).is_some() {
         e
     } else {
-        world.entity(e).get::<CheckpointLeft>().unwrap().right
+        world.get::<CheckpointLeft>(e)?.right
     };
-    (left, right)
+
+    let left_component = world.get::<CheckpointLeft>(left)?;
+    let right_component = world.get::<CheckpointRight>(right)?;
+    (left_component.right == right && right_component.left == left).then_some((left, right))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn checkpoint_pair_lookup_rejects_live_mismatched_partner() {
+        let mut world = World::new();
+        let left = world.spawn((Checkpoint::default(), CheckpointLeft::default())).id();
+        let other_left = world.spawn((Checkpoint::default(), CheckpointLeft::default())).id();
+        let right = world
+            .spawn(CheckpointRight {
+                left: other_left,
+                ..default()
+            })
+            .id();
+        world.get_mut::<CheckpointLeft>(left).unwrap().right = right;
+
+        assert!(get_both_cp_nodes(&world, left).is_none());
+        assert!(get_both_cp_nodes(&world, right).is_none());
+    }
+
+    #[test]
+    fn checkpoint_pair_lookup_rejects_stale_partner() {
+        let mut world = World::new();
+        let stale_left = world.spawn_empty().id();
+        world.despawn(stale_left);
+        let right = world
+            .spawn(CheckpointRight {
+                left: stale_left,
+                ..default()
+            })
+            .id();
+
+        assert!(get_both_cp_nodes(&world, right).is_none());
+    }
 }

@@ -7,47 +7,81 @@ use crate::{
     util::ToEguiRect,
     viewer::{
         camera::{CameraMode, CameraModeChanged},
-        edit::{link_select_mode::LinkSelectMode, select::SelectBox, EditMode},
+        edit::{
+            link_select_mode::LinkSelectMode,
+            select::SelectBox,
+            transform_gizmo::{show_transform_gizmo, TransformGizmoState},
+            EditMode,
+        },
         kmp::components::{RespawnPoint, RoutePoint},
     },
 };
-use bevy::{ecs::system::SystemState, math::vec2, prelude::*, render::render_resource::Extent3d};
-use bevy_egui::egui::{self, show_tooltip_at_pointer, Color32, Margin, Response, Rounding, Sense, Stroke, Ui};
-use transform_gizmo_bevy::{config::TransformPivotPoint, GizmoOptions, GizmoOrientation};
+use bevy::{
+    ecs::system::SystemState, math::vec2, prelude::*, render::render_resource::Extent3d, window::RequestRedraw,
+};
+use bevy_egui::egui::{
+    self, Color32, CornerRadius, Margin, PopupAnchor, Response, Sense, Stroke, StrokeKind, Tooltip, Ui, UiBuilder,
+};
+use transform_gizmo::{config::TransformPivotPoint, GizmoOrientation};
 
 pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
-    let window = world.query::<&Window>().get_single(world).unwrap();
+    let Ok(window) = world.query::<&Window>().single(world) else {
+        return;
+    };
 
     let window_sf = window.scale_factor();
 
-    let mut ss = SystemState::<(Res<ViewportImage>, ResMut<Assets<Image>>, ResMut<ViewportInfo>)>::new(world);
-    let (viewport, mut image_assets, mut viewport_info) = ss.get_mut(world);
-
-    let viewport_image = image_assets.get_mut(viewport.handle.id()).unwrap();
+    let mut ss = SystemState::<(
+        Res<ViewportImage>,
+        ResMut<Assets<Image>>,
+        ResMut<ViewportInfo>,
+        MessageWriter<RequestRedraw>,
+    )>::new(world);
+    let Ok((viewport, mut image_assets, mut viewport_info, mut redraw)) = ss.get_mut(world) else {
+        return;
+    };
 
     let viewport_top_left = vec2(ui.next_widget_position().x, ui.next_widget_position().y);
-    // make sure we don't go above 2000 because otherwise igpus may run out of memory especially when multiplying by a window scale factor above 1
-    // this fixes a weird error I experienced on windows where for one frame the viewport image size would be strangely large and crash the igpu
-    let viewport_bottom_right = vec2(ui.max_rect().max.x, ui.max_rect().max.y).min(Vec2::splat(2000.));
-
-    let viewport_rect = Rect::from_corners(viewport_top_left, viewport_bottom_right);
+    // Cap the texture dimensions because unexpectedly large images can exhaust
+    // integrated GPUs, especially on high-DPI displays.
+    let viewport_size = (vec2(ui.max_rect().max.x, ui.max_rect().max.y) - viewport_top_left)
+        .max(Vec2::ONE)
+        .min(Vec2::splat(2000.));
+    let viewport_rect = Rect::from_corners(viewport_top_left, viewport_top_left + viewport_size);
     let egui_viewport_rect = viewport_rect.to_egui_rect();
 
-    // resize the viewport if needed
-    if viewport_image.size() != (viewport_rect.size().as_uvec2() * window_sf as u32) {
+    const MAX_TEXTURE_DIMENSION: u32 = 4096;
+    let mut physical_size = (viewport_size * window_sf).round().as_uvec2().max(UVec2::ONE);
+    let largest_dimension = physical_size.max_element();
+    if largest_dimension > MAX_TEXTURE_DIMENSION {
+        let scale = MAX_TEXTURE_DIMENSION as f32 / largest_dimension as f32;
+        physical_size = (physical_size.as_vec2() * scale).round().as_uvec2().max(UVec2::ONE);
+    }
+
+    // Accessing an asset mutably marks it as modified, which causes Bevy to
+    // reprepare the GPU image. Only do that when the texture actually changed size.
+    let Some(current_size) = image_assets.get(viewport.handle.id()).map(Image::size) else {
+        return;
+    };
+    if current_size != physical_size {
         let size = Extent3d {
-            width: viewport_rect.size().x as u32 * window_sf as u32,
-            height: viewport_rect.size().y as u32 * window_sf as u32,
+            width: physical_size.x,
+            height: physical_size.y,
             ..default()
         };
-        viewport_image.resize(size);
+        if let Some(mut viewport_image) = image_assets.get_mut(viewport.handle.id()) {
+            viewport_image.resize(size);
+            // The resized target is rendered later in this frame. Request one more
+            // frame so egui can display those contents in reactive desktop mode.
+            redraw.write(RequestRedraw);
+        }
     }
 
     // show the viewport image
-
-    ui.allocate_ui_at_rect(egui_viewport_rect, |ui| {
-        // make the image sense clicks and drags, so that any events that aren't consumed by buttons above it are consumed by this
-        // so we don't start dragging around the window when trying to select stuff etc
+    ui.scope_builder(UiBuilder::new().max_rect(egui_viewport_rect), |ui| {
+        // Register the viewport background first so it consumes otherwise-unused
+        // clicks and drags. The gizmo and overlay controls are registered later
+        // and therefore remain the topmost interactions at the pointer.
         ui.add(
             egui::Image::new(egui::load::SizedTexture::new(
                 viewport.tex_id,
@@ -60,6 +94,11 @@ pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
     viewport_info.mouse_in_viewport = ui.rect_contains_pointer(egui_viewport_rect);
     viewport_info.viewport_rect = viewport_rect;
 
+    ui.scope_builder(UiBuilder::new().max_rect(egui_viewport_rect), |ui| {
+        ui.set_clip_rect(egui_viewport_rect);
+        show_transform_gizmo(ui, egui_viewport_rect, world);
+    });
+
     show_select_box(ui, world);
 
     let responses = show_overlayed_ui(ui, world);
@@ -68,11 +107,11 @@ pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
 
     // show the route hover label if needed
     if world.contains_resource::<LinkSelectMode<RoutePoint>>() {
-        show_tooltip_at_pointer(ui.ctx(), ui.layer_id(), ui.next_auto_id(), |ui| {
+        Tooltip::always_open(ui.ctx().clone(), ui.layer_id(), ui.next_auto_id(), PopupAnchor::Pointer).show(|ui| {
             ui.label("Select a Route (ESC to cancel)");
         });
     } else if world.contains_resource::<LinkSelectMode<RespawnPoint>>() {
-        show_tooltip_at_pointer(ui.ctx(), ui.layer_id(), ui.next_auto_id(), |ui| {
+        Tooltip::always_open(ui.ctx().clone(), ui.layer_id(), ui.next_auto_id(), PopupAnchor::Pointer).show(|ui| {
             ui.label("Select a Respawn (ESC to cancel)");
         });
     }
@@ -80,19 +119,20 @@ pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
 
 fn show_select_box(ui: &mut Ui, world: &mut World) {
     let vp_rect = world.resource::<ViewportInfo>().viewport_rect.to_egui_rect();
-    ui.allocate_ui_at_rect(vp_rect, |ui| {
+    ui.scope_builder(UiBuilder::new().max_rect(vp_rect), |ui| {
         ui.set_clip_rect(vp_rect);
         let painter = ui.painter();
         if let Some(select_box) = world.resource::<SelectBox>().0 {
             let select_box = select_box.to_egui_rect();
             painter.rect(
                 select_box,
-                Rounding::from(2.),
+                CornerRadius::from(2.),
                 Color32::from_rgba_unmultiplied(200, 200, 200, 15),
                 Stroke {
                     width: 1.,
                     color: Color32::GRAY,
                 },
+                StrokeKind::Inside,
             );
         }
     });
@@ -100,20 +140,13 @@ fn show_select_box(ui: &mut Ui, world: &mut World) {
 
 fn show_overlayed_ui(ui: &mut Ui, world: &mut World) -> Vec<Response> {
     let vp_rect = world.resource::<ViewportInfo>().viewport_rect.to_egui_rect();
-    // let ss = SystemState::<(
-    //     Res<ViewportInfo>,
-    //     ResMut<GizmoOptions>,
-    //     ResMut<AppSettings>,
-    //     ResMut<EditMode>,
-    // )>::new(world);
-    // let (vp, mut gizmo_options, mut settings, mut edit_mode) = ss.get_mut(world);
 
     let mut responses = Vec::new();
     // viewport overlayed ui
-    ui.allocate_ui_at_rect(vp_rect, |ui| {
+    ui.scope_builder(UiBuilder::new().max_rect(vp_rect), |ui| {
         ui.style_mut().spacing.item_spacing = egui::Vec2::splat(5.);
 
-        egui::Frame::none().inner_margin(Margin::same(5.)).show(ui, |ui| {
+        egui::Frame::new().inner_margin(Margin::same(5)).show(ui, |ui| {
             // popups for things such as gizmo options, camera options, etc
             ui.horizontal(|ui| {
                 let gizmo_options_btn = ui.button("Gizmo Options");
@@ -122,9 +155,9 @@ fn show_overlayed_ui(ui: &mut Ui, world: &mut World) -> Vec<Response> {
                     ui.style_mut().spacing.button_padding = egui::Vec2::ZERO;
                     let size = 25.;
                     ui.label("Pivot:");
-                    let mut gizmo_options = world.resource_mut::<GizmoOptions>();
+                    let mut transform_gizmo = world.resource_mut::<TransformGizmoState>();
                     ui.horizontal(|ui| {
-                        let pivot = &mut gizmo_options.pivot_point;
+                        let pivot = &mut transform_gizmo.config.pivot_point;
                         image_selectable_value(
                             ui,
                             pivot,
@@ -145,7 +178,7 @@ fn show_overlayed_ui(ui: &mut Ui, world: &mut World) -> Vec<Response> {
 
                     ui.label("Orientation:");
                     ui.horizontal(|ui| {
-                        let orientation = &mut gizmo_options.gizmo_orientation;
+                        let orientation = &mut transform_gizmo.config.orientation;
                         image_selectable_value(
                             ui,
                             orientation,
@@ -164,7 +197,7 @@ fn show_overlayed_ui(ui: &mut Ui, world: &mut World) -> Vec<Response> {
                         .on_hover_text_at_pointer("Local orientation");
                     });
                     ui.horizontal(|ui| {
-                        ui.checkbox(&mut gizmo_options.group_targets, "Group targets")
+                        ui.checkbox(&mut transform_gizmo.group_targets, "Group targets")
                             .on_hover_text_at_pointer(
                                 "Use a single gizmo for all targets, rather than individual gizmos",
                             )
@@ -196,7 +229,7 @@ fn show_overlayed_ui(ui: &mut Ui, world: &mut World) -> Vec<Response> {
                     });
                 });
                 if let Some(ev_camera_mode_change) = ev_camera_mode_change {
-                    world.send_event(ev_camera_mode_change);
+                    world.write_message(ev_camera_mode_change);
                 }
                 if let Some(r) = r {
                     responses.push(r);

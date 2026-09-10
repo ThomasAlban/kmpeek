@@ -1,16 +1,15 @@
-use super::{CameraMode, UpdateCameraSet};
+use super::{CameraMode, EditorCamera, UpdateCameraSet};
 use crate::ui::{
     settings::AppSettings,
     viewport::{SetupViewportSet, ViewportImage, ViewportInfo},
 };
 use bevy::{
+    camera::RenderTarget,
     input::mouse::{MouseMotion, MouseWheel},
     math::vec3,
     prelude::*,
-    render::camera::RenderTarget,
 };
 use serde::{Deserialize, Serialize};
-use transform_gizmo_bevy::GizmoCamera;
 
 pub fn orbit_cam_plugin(app: &mut App) {
     app.add_systems(Startup, camera_setup.after(SetupViewportSet))
@@ -70,28 +69,27 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
     let orbit_default = OrbitSettings::default();
 
     commands.spawn((
-        Camera3dBundle {
-            camera: Camera {
-                // render to the image
-                target: RenderTarget::Image(viewport.handle.clone()),
-                is_active: false,
-                ..default()
-            },
-            transform: Transform::from_translation(orbit_default.start_pos).looking_at(Vec3::ZERO, Vec3::Y),
+        Camera3d::default(),
+        Camera {
+            is_active: false,
             ..default()
         },
+        // Render to the image.
+        RenderTarget::Image(viewport.handle.clone().into()),
+        Transform::from_translation(orbit_default.start_pos).looking_at(Vec3::ZERO, Vec3::Y),
         OrbitCam {
             radius: OrbitSettings::default().start_pos.length(),
             ..default()
         },
-        GizmoCamera,
+        EditorCamera,
+        Msaa::Sample4,
     ));
 }
 
 fn orbit_cam(
     q_window: Query<&mut Window>,
-    mut ev_mouse_motion: EventReader<MouseMotion>,
-    mut ev_mouse_scroll: EventReader<MouseWheel>,
+    mut ev_mouse_motion: MessageReader<MouseMotion>,
+    mut ev_mouse_scroll: MessageReader<MouseWheel>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut q_orbit_cam: Query<(&mut OrbitCam, &mut Transform, &Projection)>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -102,7 +100,7 @@ fn orbit_cam(
         return;
     }
 
-    let window = q_window.get_single().unwrap();
+    let Ok(window) = q_window.single() else { return };
 
     let mut pan = Vec2::ZERO;
     let mut rotation_move = Vec2::ZERO;
@@ -139,7 +137,9 @@ fn orbit_cam(
         orbit_button_changed = true;
     }
 
-    let (mut orbit_cam, mut transform, projection) = q_orbit_cam.single_mut();
+    let Ok((mut orbit_cam, mut transform, projection)) = q_orbit_cam.single_mut() else {
+        return;
+    };
     let mut transform_cp = *transform;
     let mut orbit_cam_cp = *orbit_cam;
 

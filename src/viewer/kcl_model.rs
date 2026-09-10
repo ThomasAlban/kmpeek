@@ -1,23 +1,28 @@
 use crate::{
-    ui::{settings::AppSettings, update_ui::KclFileSelected},
+    ui::{
+        settings::AppSettings,
+        update_ui::{FileLoadSet, KclFileSelected},
+    },
     util::{kcl_file::Kcl, try_despawn},
 };
-use bevy::{
-    prelude::*,
-    render::{mesh::PrimitiveTopology, render_asset::RenderAssetUsages, render_resource::Face},
-};
+use bevy::{asset::RenderAssetUsages, mesh::PrimitiveTopology, prelude::*, render::render_resource::Face};
 
 use serde::{Deserialize, Serialize};
 use std::{ffi::OsStr, fs::File};
 
 pub fn kcl_plugin(app: &mut App) {
-    app.add_event::<KclModelUpdated>().add_systems(
+    app.add_message::<KclModelUpdated>().add_systems(
         Update,
-        (spawn_model.run_if(on_event::<KclFileSelected>()), update_kcl_model),
+        (
+            spawn_model
+                .run_if(on_message::<KclFileSelected>)
+                .in_set(FileLoadSet::Load),
+            update_kcl_model,
+        ),
     );
 }
 
-#[derive(Event, Default)]
+#[derive(Message, Default)]
 pub struct KclModelUpdated;
 
 #[derive(Resource, Serialize, Deserialize, Clone, PartialEq)]
@@ -78,7 +83,7 @@ pub fn spawn_model(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut q_model: Query<Entity, With<KCLModelSection>>,
-    mut ev_kcl_file_selected: EventReader<KclFileSelected>,
+    mut ev_kcl_file_selected: MessageReader<KclFileSelected>,
     settings: Res<AppSettings>,
 ) {
     let Some(ev) = ev_kcl_file_selected.read().next() else {
@@ -87,18 +92,35 @@ pub fn spawn_model(
     if ev.0.extension() != Some(OsStr::new("kcl")) {
         return;
     }
-    // despawn all entities with KCLModelSection (so that we have a clean slate)
+    // Parse the replacement before removing the current model. A missing or
+    // malformed file should leave the editor's existing collision model intact.
+    let kcl_file = match File::open(&ev.0) {
+        Ok(file) => file,
+        Err(error) => {
+            error!("could not open KCL file {}: {error}", ev.0.display());
+            return;
+        }
+    };
+    let kcl = match Kcl::read(kcl_file) {
+        Ok(kcl) => kcl,
+        Err(error) => {
+            error!("could not read KCL file {}: {error}", ev.0.display());
+            return;
+        }
+    };
+
+    // Parsing succeeded, so replace the old model.
     for entity in q_model.iter_mut() {
         try_despawn(&mut commands, entity);
     }
     commands.remove_resource::<Kcl>();
 
-    // open the KCL file and read it
-    let kcl_file = File::open(ev.0.clone()).expect("could not open kcl file");
-    let kcl = Kcl::read(kcl_file).expect("could not read kcl file");
     // spawn the KCL model
     for i in 0..32 {
         let vertex_group = kcl.vertex_groups[i].clone();
+        if vertex_group.vertices.is_empty() {
+            continue;
+        }
 
         let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
 
@@ -108,29 +130,26 @@ pub fn spawn_model(
         let color = settings.kcl_model.color[i];
 
         commands.spawn((
-            PbrBundle {
-                mesh: meshes.add(mesh),
-                material: materials.add(StandardMaterial {
-                    base_color: color,
-                    cull_mode: if settings.kcl_model.backface_culling {
-                        Some(Face::Back)
-                    } else {
-                        None
-                    },
-                    double_sided: !settings.kcl_model.backface_culling,
-                    alpha_mode: if color.alpha() < 1. {
-                        AlphaMode::Blend
-                    } else {
-                        AlphaMode::Opaque
-                    },
-                    ..default()
-                }),
-                visibility: if settings.kcl_model.visible[i] {
-                    Visibility::Inherited
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: color,
+                cull_mode: if settings.kcl_model.backface_culling {
+                    Some(Face::Back)
                 } else {
-                    Visibility::Hidden
+                    None
+                },
+                double_sided: !settings.kcl_model.backface_culling,
+                alpha_mode: if color.alpha() < 1. {
+                    AlphaMode::Blend
+                } else {
+                    AlphaMode::Opaque
                 },
                 ..default()
+            })),
+            if settings.kcl_model.visible[i] {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
             },
             KCLModelSection(i),
         ));
@@ -139,10 +158,10 @@ pub fn spawn_model(
 }
 
 pub fn update_kcl_model(
-    mut q_kcl: Query<(&mut Visibility, &KCLModelSection, &mut Handle<StandardMaterial>), With<KCLModelSection>>,
+    mut q_kcl: Query<(&mut Visibility, &KCLModelSection, &mut MeshMaterial3d<StandardMaterial>), With<KCLModelSection>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     settings: Res<AppSettings>,
-    mut ev_kcl_model_updated: EventReader<KclModelUpdated>,
+    mut ev_kcl_model_updated: MessageReader<KclModelUpdated>,
 ) {
     // don't run this function unless the kcl model needs to be updated
     if ev_kcl_model_updated.is_empty() {
@@ -153,13 +172,19 @@ pub fn update_kcl_model(
 
     for (mut visibility, kcl_model_section, standard_material) in q_kcl.iter_mut() {
         let i = kcl_model_section.0;
-        *visibility = if settings.kcl_model.visible[i] {
+        let (Some(visible), Some(color)) = (settings.kcl_model.visible.get(i), settings.kcl_model.color.get(i)) else {
+            warn!("ignoring invalid KCL model section index {i}");
+            continue;
+        };
+        *visibility = if *visible {
             Visibility::Inherited
         } else {
             Visibility::Hidden
         };
-        let material = materials.get_mut(standard_material.id()).unwrap();
-        material.base_color = settings.kcl_model.color[i];
+        let Some(mut material) = materials.get_mut(standard_material.id()) else {
+            continue;
+        };
+        material.base_color = *color;
         material.alpha_mode = if material.base_color.alpha() < 1. {
             AlphaMode::Blend
         } else {

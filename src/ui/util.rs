@@ -2,19 +2,23 @@
 use bevy::ecs::system::SystemState;
 use bevy::math::{vec3, Dir3, EulerRot, Quat};
 use bevy::prelude::{Query, With, World};
-use bevy::window::PrimaryWindow;
 use bevy::{math::Vec3, transform::components::Transform};
 use bevy_egui::egui::{self, pos2, vec2, Rect, Response, TextStyle, Ui, WidgetText};
 use bevy_egui::egui::{
-    Align, Align2, Area, CollapsingResponse, Color32, Context, Image, ImageButton, ImageSource, Order, Sense, Vec2,
+    Align, Button, CollapsingResponse, Color32, Context, DragValue, Image, ImageSource, Popup, Sense, Vec2,
 };
-use bevy_egui::EguiContext;
-use std::{fmt::Display, hash::Hash};
+use bevy_egui::{EguiContext, PrimaryEguiContext};
+use std::{
+    fmt::{Debug, Display},
+    hash::Hash,
+};
 
 pub fn get_egui_ctx(world: &mut World) -> Context {
-    let mut system_state = SystemState::<Query<&mut EguiContext, With<PrimaryWindow>>>::new(world);
-    let mut q = system_state.get_mut(world);
-    q.single_mut().get_mut().clone()
+    let mut system_state = SystemState::<Query<&mut EguiContext, With<PrimaryEguiContext>>>::new(world);
+    let mut q = system_state
+        .get_mut(world)
+        .expect("primary egui context system state should be valid");
+    q.single_mut().unwrap().get_mut().clone()
 }
 
 #[derive(Clone, Copy)]
@@ -189,7 +193,7 @@ pub mod multi_edit {
             ui.available_width()
         };
 
-        let combobox = egui::ComboBox::from_id_source(ui.next_auto_id())
+        let combobox = egui::ComboBox::from_id_salt(ui.next_auto_id())
             .selected_text(selected_text)
             .width(width);
 
@@ -241,7 +245,7 @@ pub fn combobox_enum<T>(ui: &mut Ui, value: &mut T, width: Option<f32>) -> Respo
 where
     T: strum::IntoEnumIterator + Display + PartialEq + Clone,
 {
-    let mut combobox = egui::ComboBox::from_id_source(ui.next_auto_id()).selected_text(value.to_string());
+    let mut combobox = egui::ComboBox::from_id_salt(ui.next_auto_id()).selected_text(value.to_string());
     combobox = if let Some(width) = width {
         combobox.width(width)
     } else {
@@ -265,14 +269,21 @@ pub fn svg_image<'a>(img: impl Into<ImageSource<'a>>, ctx: &Context, size: f32) 
 }
 
 pub fn image_selectable_value<Value: PartialEq>(
-    ui: &mut egui::Ui,
+    ui: &mut egui_dock::egui::Ui,
     current: &mut Value,
     selected: Value,
     img: Image,
     size: f32,
 ) -> Response {
     let res = ui.allocate_ui(egui::Vec2::splat(size), |ui| {
-        let btn = ui.add(ImageButton::new(img).selected(*current == selected));
+        // `Button::image` limits images to the default font height. These are
+        // toolbar buttons, so preserve the explicit size used by ImageButton.
+        let img = img.fit_to_exact_size(Vec2::splat(size));
+        let btn = ui.add(
+            Button::new(img)
+                .min_size(Vec2::splat(size))
+                .selected(*current == selected),
+        );
         if btn.clicked() {
             *current = selected;
         };
@@ -285,10 +296,10 @@ pub fn drag_vec3(ui: &mut Ui, value: &mut Vec3, speed: impl Into<f64>) -> (Respo
     let speed = speed.into();
     ui.columns(3, |ui| {
         let x = ui[0]
-            .centered_and_justified(|ui| ui.add(egui::DragValue::new(&mut value.x).speed(speed).fixed_decimals(1)))
+            .centered_and_justified(|ui| ui.add(DragValue::new(&mut value.x).speed(speed).fixed_decimals(1)))
             .inner;
         let y = ui[1]
-            .centered_and_justified(|ui| ui.add(egui::DragValue::new(&mut value.y).speed(speed).fixed_decimals(1)))
+            .centered_and_justified(|ui| ui.add(DragValue::new(&mut value.y).speed(speed).fixed_decimals(1)))
             .inner;
         let z = ui[2]
             .centered_and_justified(|ui| ui.add(egui::DragValue::new(&mut value.z).speed(speed).fixed_decimals(1)))
@@ -357,7 +368,7 @@ pub fn euler_to_quat_ui(rot: Vec3, res: (Response, Response, Response), transfor
 }
 
 pub fn rotation_edit(
-    ui: &mut egui::Ui,
+    ui: &mut egui_dock::egui::Ui,
     transform: &mut Transform,
     add_contents: impl FnOnce(&mut Ui, &mut Vec3) -> (Response, Response, Response),
 ) -> bool {
@@ -383,47 +394,17 @@ pub fn framed_collapsing_header<R>(
 
 pub fn button_triggered_popup<R>(
     ui: &mut Ui,
-    id: impl Hash,
+    id: impl Hash + Debug,
     btn: Response,
     add_contents: impl FnOnce(&mut Ui) -> R,
 ) -> Option<Response> {
     let popup_id = ui.make_persistent_id(id);
-    if btn.clicked() {
-        ui.memory_mut(|mem| mem.toggle_popup(popup_id));
-    }
-    let mut res: Option<Response> = None;
-
-    if ui.memory(|mem| mem.is_popup_open(popup_id)) {
-        let (pos, pivot) = (btn.rect.left_bottom(), Align2::LEFT_TOP);
-
-        let r = Area::new(popup_id)
-            .order(Order::Foreground)
-            .constrain(true)
-            .fixed_pos(pos)
-            .pivot(pivot)
-            .show(ui.ctx(), |ui| {
-                let frame = egui::Frame::popup(ui.style());
-                let frame_margin = frame.total_margin();
-                frame
-                    .show(ui, |ui| {
-                        ui.with_layout(egui::Layout::top_down_justified(Align::LEFT), |ui| {
-                            ui.set_width(btn.rect.width() - frame_margin.sum().x);
-                            add_contents(ui)
-                        })
-                        .inner
-                    })
-                    .inner
-            })
-            .response;
-        res = Some(r.clone());
-
-        let clicked_elsewhere = r.clicked_elsewhere() && btn.clicked_elsewhere();
-
-        if ui.input(|i| i.key_pressed(egui::Key::Escape)) || clicked_elsewhere {
-            ui.memory_mut(|mem| mem.close_popup());
-        }
-    }
-    res
+    Popup::from_toggle_button_response(&btn)
+        .id(popup_id)
+        .width(btn.rect.width())
+        .layout(egui::Layout::top_down_justified(Align::LEFT))
+        .show(add_contents)
+        .map(|response| response.response)
 }
 
 #[derive(Clone)]
@@ -466,7 +447,7 @@ pub fn link_select_btn(
 
     // paint the background
     ui.painter()
-        .rect_filled(bg_rect, bg_visuals.rounding, bg_visuals.weak_bg_fill);
+        .rect_filled(bg_rect, bg_visuals.corner_radius, bg_visuals.weak_bg_fill);
 
     let mut next_icon_hb_rect = Rect::from_min_size(
         bg_rect.right_top() - vec2(ui.spacing().button_padding.x + icon_hb_size.x, 0.),
@@ -562,9 +543,9 @@ pub fn view_icon_btn(ui: &mut Ui, checked: &mut bool) -> Response {
     ui.style_mut().spacing.button_padding = Vec2::ZERO;
 
     let img = if *checked {
-        Icons::view_on(ui.ctx(), 14.)
+        Icons::view_on(ui.ctx(), 14_f32)
     } else {
-        Icons::view_off(ui.ctx(), 14.)
+        Icons::view_off(ui.ctx(), 14_f32)
     };
 
     let res = ui.allocate_ui(egui::Vec2::splat(14.), |ui| {

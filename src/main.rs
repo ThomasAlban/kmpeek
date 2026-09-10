@@ -8,7 +8,6 @@ use viewer::viewer_plugin;
 
 fn main() {
     App::new()
-        .insert_resource(Msaa::Sample4)
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "KMPeek".into(),

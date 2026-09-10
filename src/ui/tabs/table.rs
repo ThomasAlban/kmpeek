@@ -16,6 +16,7 @@ use crate::{
         },
     },
 };
+use bevy::ecs::component::Mutable;
 use bevy::{ecs::system::SystemState, prelude::*};
 use bevy_egui::egui::{self, emath::Numeric, Checkbox, Direction, DragValue, Layout, Response, Sense, Ui};
 use egui_extras::{Column, TableBuilder, TableRow};
@@ -28,7 +29,7 @@ pub fn show_table_tab(ui: &mut Ui, world: &mut World) {
             ui.heading(world.resource::<KmpEditMode>().to_string());
             ui.add_space(10.);
             if ui.button("+").clicked() {
-                world.send_event_default::<CreatePoint>();
+                world.write_message_default::<CreatePoint>();
             }
         });
     }
@@ -209,7 +210,10 @@ impl ShowKmpTableTrait for BattleFinishPoint {
     fn show_row(_: &mut TableRow, _: &mut Self) {}
 }
 
-fn show_kmp_table<T: Component + PartialEq + Clone + ShowKmpTableTrait>(ui: &mut Ui, world: &mut World) {
+fn show_kmp_table<T: Component<Mutability = Mutable> + PartialEq + Clone + ShowKmpTableTrait>(
+    ui: &mut Ui,
+    world: &mut World,
+) {
     if !world.resource::<KmpEditMode>().in_mode::<T>() {
         return;
     }
@@ -220,7 +224,9 @@ fn show_kmp_table<T: Component + PartialEq + Clone + ShowKmpTableTrait>(ui: &mut
         Commands,
         Res<ButtonInput<KeyCode>>,
     )>::new(world);
-    let (mut q, q_entities, mut commands, keys) = ss.get_mut(world);
+    let Ok((mut q, q_entities, mut commands, keys)) = ss.get_mut(world) else {
+        return;
+    };
 
     let mut table_builder = TableBuilder::new(ui)
         .striped(true)

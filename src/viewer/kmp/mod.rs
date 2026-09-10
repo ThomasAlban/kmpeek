@@ -11,6 +11,7 @@ pub mod settings;
 
 use self::{
     checkpoints::{checkpoint_plugin, spawn_checkpoint_section},
+    components::Spawn,
     components::*,
     meshes_materials::setup_kmp_meshes_materials,
     path::{spawn_enemy_item_path_section, RecalcPaths},
@@ -21,15 +22,15 @@ use crate::{
         file_dialog::{DialogType, FileDialogResult},
         settings::{AppSettings, SetupAppSettingsSet},
         ui_state::KmpFilePath,
-        update_ui::{KclFileSelected, KmpFileSelected},
+        update_ui::{FileLoadSet, KclFileSelected, KmpFileSelected},
     },
     util::kmp_file::*,
 };
 use anyhow::{bail, Context};
 use bevy::{
-    ecs::{entity::EntityHashMap, system::SystemState, world::Command},
+    ecs::{entity::EntityHashMap, system::SystemState},
+    platform::collections::HashMap,
     prelude::*,
-    utils::HashMap,
 };
 use derive_new::new;
 use ordering::{ordering_plugin, RefreshOrdering};
@@ -47,48 +48,49 @@ pub fn kmp_plugin(app: &mut App) {
         section_plugin,
         routes_plugin,
     ))
-    .add_event::<SaveFile>()
+    .add_message::<SaveFile>()
     .add_systems(Startup, setup_kmp_meshes_materials.after(SetupAppSettingsSet))
     .add_systems(
         Update,
-        (save_kmp.pipe(handle_save_kmp_errors)).run_if(on_event::<SaveFile>()),
+        (save_kmp.pipe(handle_save_kmp_errors)).run_if(on_message::<SaveFile>),
     )
     .add_systems(
         Update,
         (
             open_kmp
                 .pipe(handle_open_kmp_errors)
-                .run_if(on_event::<KmpFileSelected>()),
-            open_kmp_kcl,
+                .run_if(on_message::<KmpFileSelected>)
+                .in_set(FileLoadSet::Load),
+            open_kmp_kcl.in_set(FileLoadSet::Select),
         ),
     );
 
     add_for_all_components!(@event app, SetSectionVisibility);
-    app.add_event::<SetSectionVisibility<TrackInfo>>();
+    app.add_message::<SetSectionVisibility<TrackInfo>>();
     add_for_all_components!(@system app, update_visible_on_mode_change);
     add_for_all_components!(@system app, set_section_visibility);
 }
 
 pub fn open_kmp_kcl(
-    mut ev_file_dialog: EventReader<FileDialogResult>,
-    mut ev_kmp_file_selected: EventWriter<KmpFileSelected>,
-    mut ev_kcl_file_selected: EventWriter<KclFileSelected>,
+    mut ev_file_dialog: MessageReader<FileDialogResult>,
+    mut ev_kmp_file_selected: MessageWriter<KmpFileSelected>,
+    mut ev_kcl_file_selected: MessageWriter<KclFileSelected>,
     settings: ResMut<AppSettings>,
 ) {
     for FileDialogResult { path, dialog_type } in ev_file_dialog.read() {
         if let DialogType::OpenKmpKcl = dialog_type {
             if let Some(file_ext) = path.extension() {
                 if file_ext == "kmp" {
-                    ev_kmp_file_selected.send(KmpFileSelected(path.into()));
+                    ev_kmp_file_selected.write(KmpFileSelected(path.into()));
                     if settings.open_course_kcl_in_dir {
                         let mut course_kcl_path = path.to_owned();
                         course_kcl_path.set_file_name("course.kcl");
                         if course_kcl_path.exists() {
-                            ev_kcl_file_selected.send(KclFileSelected(course_kcl_path));
+                            ev_kcl_file_selected.write(KclFileSelected(course_kcl_path));
                         }
                     }
                 } else if file_ext == "kcl" {
-                    ev_kcl_file_selected.send(KclFileSelected(path.into()));
+                    ev_kcl_file_selected.write(KclFileSelected(path.into()));
                 }
             }
         }
@@ -110,9 +112,23 @@ pub struct KmpError {
 #[derive(Resource, Deref, DerefMut, Clone, Default, new)]
 pub struct KmpSectionIdEntityMap<T: Component>(#[deref] pub HashMap<u32, Entity>, PhantomData<T>);
 
+fn despawn_kmp_points(world: &mut World) {
+    let entities: Vec<_> = world
+        .query_filtered::<Entity, With<KmpSelectablePoint>>()
+        .iter(world)
+        .collect();
+    for entity in entities {
+        // Despawning one checkpoint half also despawns its partner, which may
+        // still be present in this snapshot.
+        if let Ok(entity) = world.get_entity_mut(entity) {
+            entity.despawn();
+        }
+    }
+}
+
 pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
-    let mut ss = SystemState::<EventReader<KmpFileSelected>>::new(world);
-    let mut ev_kmp_file_selected = ss.get(world);
+    let mut ss = SystemState::<MessageReader<KmpFileSelected>>::new(world);
+    let mut ev_kmp_file_selected = ss.get(world)?;
     let Some(ev) = ev_kmp_file_selected.read().next() else {
         return Ok(());
     };
@@ -128,13 +144,7 @@ pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
     world.insert_resource(KmpFilePath(ev.0.clone()));
 
     // get rid of all kmp points we may currently have in the world
-    let entities: Vec<_> = world
-        .query_filtered::<Entity, With<KmpSelectablePoint>>()
-        .iter(world)
-        .collect();
-    for e in entities {
-        world.entity_mut(e).despawn_recursive();
-    }
+    despawn_kmp_points(world);
     world.remove_resource::<EntityPathGroups<EnemyPathPoint>>();
     world.remove_resource::<EntityPathGroups<ItemPathPoint>>();
     world.remove_resource::<EntityPathGroups<Checkpoint>>();
@@ -179,7 +189,7 @@ pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
 
     // the intro start index is the first byte of the additional value
     let intro_start = kmp.came.section_header.additional_value >> 8;
-    dbg!(&intro_start);
+
     if let Some(e) = camera_id_map.get(&(intro_start as u32)) {
         world.entity_mut(*e).insert(KmpCameraIntroStart);
     }
@@ -190,13 +200,13 @@ pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
     // --- FINISH POINTS ---
     spawn_point_section::<BattleFinishPoint>(world, &kmp);
 
-    world.send_event(RecalcPaths::all());
+    world.write_message(RecalcPaths::all());
 
     world.remove_resource::<KmpErrors>();
     world.remove_resource::<KmpSectionIdEntityMap<RoutePoint>>();
     world.remove_resource::<KmpSectionIdEntityMap<RespawnPoint>>();
 
-    world.send_event(RefreshOrdering);
+    world.write_message(RefreshOrdering);
 
     Ok(())
 }
@@ -210,7 +220,7 @@ fn handle_open_kmp_errors(In(result): In<anyhow::Result<()>>) {
 #[derive(Resource, Deref, DerefMut, Clone, Default, new)]
 pub struct KmpSectionEntityIdMap<T: Component>(#[deref] pub EntityHashMap<u8>, PhantomData<T>);
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct SaveFile;
 
 pub fn save_kmp(world: &mut World) -> anyhow::Result<()> {
@@ -277,11 +287,11 @@ fn handle_save_kmp_errors(In(result): In<anyhow::Result<()>>) {
     }
 }
 
-#[derive(Event, Deref, new)]
+#[derive(Message, Deref, new)]
 pub struct SetSectionVisibility<T>(#[deref] pub bool, PhantomData<T>);
 
 fn set_section_visibility<T: Component>(
-    mut ev_set_sect_visibility: EventReader<SetSectionVisibility<T>>,
+    mut ev_set_sect_visibility: MessageReader<SetSectionVisibility<T>>,
     mut q: Query<&mut Visibility, (With<KmpSelectablePoint>, With<T>)>,
 ) {
     let Some(ev) = ev_set_sect_visibility.read().next() else {
@@ -296,12 +306,12 @@ fn set_section_visibility<T: Component>(
 
 fn update_visible_on_mode_change<T: Component>(
     mode: Res<KmpEditMode>,
-    mut ev_set_sect_visibility: EventWriter<SetSectionVisibility<T>>,
+    mut ev_set_sect_visibility: MessageWriter<SetSectionVisibility<T>>,
 ) {
     if !mode.is_changed() {
         return;
     }
-    ev_set_sect_visibility.send(SetSectionVisibility::new(mode.in_mode::<T>()));
+    ev_set_sect_visibility.write(SetSectionVisibility::new(mode.in_mode::<T>()));
 }
 
 /// Utility function for calculating the transform a cylinder should have in order to join 2 points
@@ -317,4 +327,38 @@ fn calc_cp_arrow_transform(l_tr: Vec3, r_tr: Vec3) -> Transform {
     let mut trans = Transform::from_translation(mp).looking_at(r_tr, Vec3::Y);
     trans.rotate_local_z(f32::to_radians(90.));
     trans
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::viewer::kmp::checkpoints::{CheckpointLeft, CheckpointRight};
+
+    #[test]
+    fn despawning_kmp_points_handles_checkpoint_partner_cleanup() {
+        let mut app = App::new();
+        app.add_plugins(checkpoint_plugin);
+
+        let line = app.world_mut().spawn_empty().id();
+        let plane = app.world_mut().spawn_empty().id();
+        let arrow = app.world_mut().spawn_empty().id();
+        let left = app.world_mut().spawn(KmpSelectablePoint).id();
+        let right = app.world_mut().spawn(KmpSelectablePoint).id();
+
+        app.world_mut().entity_mut(left).insert(CheckpointLeft {
+            right,
+            line,
+            plane,
+            arrow,
+        });
+        app.world_mut()
+            .entity_mut(right)
+            .insert(CheckpointRight { left, line, plane });
+
+        despawn_kmp_points(app.world_mut());
+
+        for entity in [left, right, line, plane, arrow] {
+            assert!(app.world().get_entity(entity).is_err());
+        }
+    }
 }
