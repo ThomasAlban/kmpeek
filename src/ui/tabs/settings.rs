@@ -23,7 +23,7 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
         Query<(&mut Transform, &'static mut Projection), (Without<FlyCam>, Without<OrbitCam>, With<TopDownCam>)>,
         MessageWriter<KclModelUpdated>,
     )>::new(world);
-    let (
+    let Ok((
         mut settings,
         mut pkv,
         keys,
@@ -32,7 +32,10 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
         mut q_orbit_cam,
         mut q_topdown_cam,
         mut ev_kcl_model_updated,
-    ) = ss.get_mut(world);
+    )) = ss.get_mut(world)
+    else {
+        return;
+    };
 
     let (Ok(mut fly_cam), Ok(mut orbit_cam), Ok(mut topdown_cam)) = (
         q_fly_cam.single_mut(),

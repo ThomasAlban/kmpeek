@@ -17,7 +17,7 @@ use crate::{
     },
 };
 use bevy::{math::vec3, prelude::*};
-use bevy_mod_outline::{OutlineVolume};
+use bevy_mod_outline::OutlineVolume;
 
 pub fn spawn_point_section<T: KmpComponent + Spawn>(world: &mut World, kmp: &KmpFile) -> KmpSectionIdEntityMap<T>
 where
@@ -77,11 +77,11 @@ pub fn spawn_point<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mu
         GizmoTransformable,
         OrderId(order_id),
         Normalize::new(200., 30., BVec3::TRUE),
-            OutlineVolume {
-                visible: false,
-                colour: outline.color,
-                width: outline.width,
-            }
+        OutlineVolume {
+            visible: false,
+            colour: outline.color,
+            width: outline.width,
+        },
     ));
     entity.with_children(|parent| {
         let line_length = 750.;
@@ -121,6 +121,8 @@ pub fn spawn_point<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mu
 
 pub struct AddRespawnPointPreview(pub Entity);
 impl Command for AddRespawnPointPreview {
+    type Out = ();
+
     fn apply(self, world: &mut World) {
         let mesh = world.resource::<KmpMeshes>().sphere.clone();
         let material = world.resource::<PointMaterials<RespawnPoint>>().line.clone();

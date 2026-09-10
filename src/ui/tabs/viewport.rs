@@ -37,7 +37,9 @@ pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
         ResMut<ViewportInfo>,
         MessageWriter<RequestRedraw>,
     )>::new(world);
-    let (viewport, mut image_assets, mut viewport_info, mut redraw) = ss.get_mut(world);
+    let Ok((viewport, mut image_assets, mut viewport_info, mut redraw)) = ss.get_mut(world) else {
+        return;
+    };
 
     let viewport_top_left = vec2(ui.next_widget_position().x, ui.next_widget_position().y);
     // Cap the texture dimensions because unexpectedly large images can exhaust
@@ -67,7 +69,7 @@ pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
             height: physical_size.y,
             ..default()
         };
-        if let Some(viewport_image) = image_assets.get_mut(viewport.handle.id()) {
+        if let Some(mut viewport_image) = image_assets.get_mut(viewport.handle.id()) {
             viewport_image.resize(size);
             // The resized target is rendered later in this frame. Request one more
             // frame so egui can display those contents in reactive desktop mode.

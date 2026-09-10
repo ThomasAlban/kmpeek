@@ -17,7 +17,7 @@ use strum_macros::EnumIter;
 
 pub fn edit_plugin(app: &mut App) {
     app.add_plugins((
-        OutlinePlugin,
+        OutlinePlugin::EXTRUDE_VERTEX,
         transform_gizmo_plugin,
         area_gizmo_plugin,
         select_plugin,

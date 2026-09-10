@@ -107,7 +107,9 @@ pub fn show_transform_gizmo(ui: &mut Ui, viewport: egui::Rect, world: &mut World
         Query<(Entity, &mut Transform), (With<Selected>, With<GizmoTransformable>)>,
         Query<(&Camera, &GlobalTransform), With<EditorCamera>>,
     )>::new(world);
-    let (mut state, mut q_targets, q_camera) = system_state.get_mut(world);
+    let Ok((mut state, mut q_targets, q_camera)) = system_state.get_mut(world) else {
+        return;
+    };
 
     if !state.enabled {
         state.is_focused = false;

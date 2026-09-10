@@ -128,7 +128,7 @@ fn despawn_kmp_points(world: &mut World) {
 
 pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
     let mut ss = SystemState::<MessageReader<KmpFileSelected>>::new(world);
-    let mut ev_kmp_file_selected = ss.get(world);
+    let mut ev_kmp_file_selected = ss.get(world)?;
     let Some(ev) = ev_kmp_file_selected.read().next() else {
         return Ok(());
     };

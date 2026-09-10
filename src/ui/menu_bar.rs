@@ -4,17 +4,14 @@ use super::{
     file_dialog::FileDialogManager,
     tabs::{DockTree, Tab},
     ui_state::{KmpFilePath, ResetDockTree, SaveDockTree},
-    util::get_egui_ctx,
 };
 use bevy::ecs::system::SystemState;
 use bevy::prelude::*;
 use bevy_egui::egui::{self, Align, Button, Layout};
 use strum::IntoEnumIterator;
 
-pub fn show_menu_bar(world: &mut World) {
-    let ctx = &get_egui_ctx(world);
-
-    egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+pub fn show_menu_bar(ui: &mut egui::Ui, world: &mut World) {
+    egui::Panel::top("top_panel").show(ui, |ui| {
         egui::MenuBar::new().ui(ui, |ui| {
             let mut sc_btn = "Ctrl";
             if cfg!(target_os = "macos") {
@@ -26,7 +23,9 @@ pub fn show_menu_bar(world: &mut World) {
                     .clicked()
                 {
                     let mut ss = SystemState::<FileDialogManager>::new(world);
-                    let mut file_dialog = ss.get_mut(world);
+                    let Ok(mut file_dialog) = ss.get_mut(world) else {
+                        return;
+                    };
 
                     file_dialog.open_kmp_kcl();
 

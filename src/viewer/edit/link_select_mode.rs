@@ -43,7 +43,9 @@ trait CreateLink {
 impl CreateLink for RoutePoint {
     fn create_link(world: &mut World, route_e: Entity, pts_to_be_linked: Vec<Entity>) {
         let mut ss = SystemState::<GetRouteStart>::new(world);
-        let get_route_start = ss.get_mut(world);
+        let Ok(get_route_start) = ss.get_mut(world) else {
+            return;
+        };
 
         let route_start_e = get_route_start.get_entity(route_e);
         ss.apply(world);

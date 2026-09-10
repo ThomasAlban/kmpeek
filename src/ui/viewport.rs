@@ -2,7 +2,7 @@ use bevy::{
     prelude::*,
     render::render_resource::{Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages},
 };
-use bevy_egui::{EguiTextureHandle, EguiUserTextures, egui::TextureId};
+use bevy_egui::{egui::TextureId, EguiTextureHandle, EguiUserTextures};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 pub struct SetupViewportSet;

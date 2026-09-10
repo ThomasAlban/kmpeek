@@ -19,8 +19,8 @@ pub mod viewport;
 pub fn ui_plugin(app: &mut App) {
     app.add_plugins((
         EguiPlugin {
-            // bevy_egui 0.38 enables experimental bindless textures by default,
-            // but Bevy 0.17's bindless support is incomplete on Metal.
+            // KMPeek only needs a small number of egui textures. Keep experimental
+            // bindless textures disabled for predictable behavior across Metal GPUs.
             bindless_mode_array_size: None,
             ..Default::default()
         },

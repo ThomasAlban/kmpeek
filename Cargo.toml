@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.18.1", default-features = false, features = [
+bevy = { version = "0.19.1", default-features = false, features = [
     "bevy_render",
     "bevy_winit",
     "bevy_pbr",
@@ -21,24 +21,24 @@ bevy = { version = "0.18.1", default-features = false, features = [
     "serialize",
     "bevy_gizmos",
     "bevy_gizmos_render",
+    "bevy_dev_tools",
     "keyboard",
     "mouse",
     "track_location",
     # "dynamic_linking",
 ] }
 
-bevy_egui = "0.39.1"
-bevy_mod_outline = "0.12.1"
-bevy_pkv = "0.15"
+bevy_egui = "0.42"
+bevy_mod_outline = "0.13"
+bevy_pkv = "0.16"
 # KMPeek integrates the framework-independent core directly with its
 # egui-hosted offscreen viewport; do not replace this with transform-gizmo-bevy.
 transform-gizmo = "0.11"
-bevy_infinite_grid = "0.18"
-bevy_vector_shapes = "0.12.1"
+bevy_vector_shapes = "0.13.1"
 
-egui_dock = { version = "0.18", features = ["serde"] }
-egui_extras = { version = "0.33", default-features = false, features = ["all_loaders"] }
-egui_file = "0.25"
+egui_dock = { version = "0.21.1", features = ["serde"] }
+egui_extras = { version = "0.36.2", default-features = false, features = ["all_loaders"] }
+egui_file = "0.28"
 
 binrw = "0.14.0"
 bytemuck = "1.13.1"

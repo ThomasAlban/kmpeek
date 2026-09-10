@@ -4,7 +4,6 @@ mod settings;
 mod table;
 mod viewport;
 
-use super::util::get_egui_ctx;
 use bevy::prelude::*;
 use bevy_pkv::PkvStore;
 use edit::show_edit_tab;
@@ -47,7 +46,7 @@ impl Default for DockTree {
     }
 }
 
-#[derive(Display, PartialEq, EnumIter, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Display, PartialEq, Eq, Hash, EnumIter, Serialize, Deserialize, Clone, Copy)]
 pub enum Tab {
     Viewport,
     Outliner,
@@ -62,6 +61,9 @@ pub struct TabViewer<'a>(&'a mut World);
 impl egui_dock::TabViewer for TabViewer<'_> {
     // each tab will be distinguished by an enum which can be converted to a string using strum
     type Tab = Tab;
+    fn id(&mut self, tab: &mut Self::Tab) -> egui_dock::egui::Id {
+        egui_dock::egui::Id::new(*tab)
+    }
     fn ui(&mut self, ui: &mut egui_dock::egui::Ui, tab: &mut Self::Tab) {
         // we can do different things inside the tab depending on its name
         match tab {
@@ -78,15 +80,15 @@ impl egui_dock::TabViewer for TabViewer<'_> {
     }
 }
 
-pub fn show_dock_area(world: &mut World) {
-    let ctx = &get_egui_ctx(world);
-
-    let style = Style::from_egui(ctx.style().as_ref());
+pub fn show_dock_area(ui: &mut egui_dock::egui::Ui, world: &mut World) {
+    let style = Style::from_egui(ui.style().as_ref());
 
     world.resource_scope(|world, mut tree: Mut<DockTree>| {
-        let available = ctx.available_rect();
+        let available = ui.available_rect_before_wrap();
         if available.width() > 1.0 && available.height() > 1.0 {
-            DockArea::new(&mut tree).style(style).show(ctx, &mut TabViewer(world));
+            DockArea::new(&mut tree)
+                .style(style)
+                .show_inside(ui, &mut TabViewer(world));
         }
     });
 }

@@ -8,11 +8,16 @@ use bevy_egui::egui::{
     Align, Button, CollapsingResponse, Color32, Context, DragValue, Image, ImageSource, Popup, Sense, Vec2,
 };
 use bevy_egui::{EguiContext, PrimaryEguiContext};
-use std::{fmt::Display, hash::Hash};
+use std::{
+    fmt::{Debug, Display},
+    hash::Hash,
+};
 
 pub fn get_egui_ctx(world: &mut World) -> Context {
     let mut system_state = SystemState::<Query<&mut EguiContext, With<PrimaryEguiContext>>>::new(world);
-    let mut q = system_state.get_mut(world);
+    let mut q = system_state
+        .get_mut(world)
+        .expect("primary egui context system state should be valid");
     q.single_mut().unwrap().get_mut().clone()
 }
 
@@ -389,7 +394,7 @@ pub fn framed_collapsing_header<R>(
 
 pub fn button_triggered_popup<R>(
     ui: &mut Ui,
-    id: impl Hash,
+    id: impl Hash + Debug,
     btn: Response,
     add_contents: impl FnOnce(&mut Ui) -> R,
 ) -> Option<Response> {

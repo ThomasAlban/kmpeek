@@ -1,6 +1,8 @@
-use super::{file_dialog::show_file_dialog, menu_bar::show_menu_bar, tabs::show_dock_area};
+use super::{file_dialog::show_file_dialog, menu_bar::show_menu_bar, tabs::show_dock_area, util::get_egui_ctx};
 use bevy::{camera::visibility::RenderLayers, prelude::*, transform::TransformSystems, window::PrimaryWindow};
-use bevy_egui::{EguiContexts, EguiGlobalSettings, EguiPostUpdateSet, EguiPrimaryContextPass, PrimaryEguiContext};
+use bevy_egui::{
+    egui, EguiContexts, EguiGlobalSettings, EguiPostUpdateSet, EguiPrimaryContextPass, PrimaryEguiContext,
+};
 use std::path::PathBuf;
 
 #[derive(SystemSet, Hash, PartialEq, Eq, Clone, Debug)]
@@ -63,8 +65,19 @@ fn setup_ui_images(mut contexts: EguiContexts) {
 }
 
 fn update_ui(world: &mut World) {
-    show_menu_bar(world);
-    show_dock_area(world);
+    let ctx = get_egui_ctx(world);
+    let mut viewport_ui = egui::Ui::new(
+        ctx.clone(),
+        "viewport_root".into(),
+        egui::UiBuilder::new()
+            .layer_id(egui::LayerId::background())
+            .max_rect(ctx.viewport_rect()),
+    );
+    show_menu_bar(&mut viewport_ui, world);
+    egui::CentralPanel::default()
+        .frame(egui::Frame::NONE)
+        .show(&mut viewport_ui, |ui| show_dock_area(ui, world));
+
     show_file_dialog(world);
     world.flush();
 }

@@ -1,10 +1,10 @@
 // this is from bevy_more_shapes: https://github.com/redpandamonium/bevy_more_shapes/
 // since it is no longer maintained, I took the cylinder part of it
 
-use bevy::math::Vec3;
-use bevy::prelude::Vec2;
-use bevy::mesh::{Indices, Mesh};
 use bevy::asset::RenderAssetUsages;
+use bevy::math::Vec3;
+use bevy::mesh::{Indices, Mesh};
+use bevy::prelude::Vec2;
 use bevy::render::render_resource::PrimitiveTopology;
 
 // When indexing a mesh we commonly find flat (occupying a 2 dimensional subspace) trapezes.

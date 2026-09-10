@@ -884,7 +884,10 @@ where
 {
     let entity_paths = {
         let mut ss = SystemState::<TraversePath<T>>::new(world);
-        let entity_paths = ss.get_mut(world).traverse();
+        let entity_paths = ss
+            .get_mut(world)
+            .expect("path traversal system state should be valid")
+            .traverse();
         ss.apply(world);
         entity_paths
     };
@@ -938,7 +941,10 @@ mod tests {
 
     fn traverse(world: &mut World) -> EntityPathGroups<TestPathPoint> {
         let mut state = SystemState::<TraversePath<TestPathPoint>>::new(world);
-        let paths = state.get_mut(world).traverse();
+        let paths = state
+            .get_mut(world)
+            .expect("path traversal system state should be valid")
+            .traverse();
         state.apply(world);
         paths
     }

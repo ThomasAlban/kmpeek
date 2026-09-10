@@ -118,6 +118,9 @@ pub fn spawn_model(
     // spawn the KCL model
     for i in 0..32 {
         let vertex_group = kcl.vertex_groups[i].clone();
+        if vertex_group.vertices.is_empty() {
+            continue;
+        }
 
         let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
 
@@ -178,7 +181,7 @@ pub fn update_kcl_model(
         } else {
             Visibility::Hidden
         };
-        let Some(material) = materials.get_mut(standard_material.id()) else {
+        let Some(mut material) = materials.get_mut(standard_material.id()) else {
             continue;
         };
         material.base_color = *color;

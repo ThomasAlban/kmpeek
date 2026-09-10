@@ -376,7 +376,10 @@ mod tests {
         let route_point = world.spawn(KmpPathNode::default().with_prev([stale])).id();
 
         let mut state = SystemState::<GetRouteStart>::new(&mut world);
-        let route_start = state.get_mut(&mut world).get_entity(route_point);
+        let route_start = state
+            .get_mut(&mut world)
+            .expect("route traversal system state should be valid")
+            .get_entity(route_point);
         state.apply(&mut world);
 
         assert_eq!(route_start, route_point);

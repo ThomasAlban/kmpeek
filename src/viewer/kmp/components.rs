@@ -38,7 +38,7 @@ pub struct PathStart;
 pub struct PathOverallStart;
 
 // --- TRACK INFO COMPONENTS ---
-#[derive(Resource, Component, Default, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Resource, Default, Serialize, Deserialize, PartialEq, Clone)]
 pub struct TrackInfo {
     pub track_type: TrackType,
     pub lap_count: u8,

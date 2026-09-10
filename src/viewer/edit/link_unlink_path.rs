@@ -176,6 +176,8 @@ pub fn unlink_points(
 
     struct Unlink(Entity, Entity);
     impl Command for Unlink {
+        type Out = ();
+
         fn apply(self, world: &mut World) {
             if world.get::<KmpPathNode>(self.0).is_none() || world.get::<KmpPathNode>(self.1).is_none() {
                 return;

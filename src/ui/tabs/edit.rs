@@ -24,7 +24,7 @@ use crate::{
 use bevy::{
     ecs::{
         entity::EntityHashSet,
-        query::QueryData,
+        query::{IterQueryData, QueryData},
         system::{SystemParam, SystemState},
     },
     log::warn,
@@ -443,7 +443,7 @@ fn edit_track_info(ui: &mut Ui, world: &mut World) {
     edit_spacing(ui);
 }
 
-fn edit_component<D: QueryData + 'static, P: SystemParam + 'static>(
+fn edit_component<D: QueryData + IterQueryData + 'static, P: SystemParam + 'static>(
     ui: &mut Ui,
     world: &mut World,
     title: &'static str,
@@ -451,7 +451,9 @@ fn edit_component<D: QueryData + 'static, P: SystemParam + 'static>(
 ) {
     let mut system_state = SystemState::<(Query<D, With<Selected>>, P)>::new(world);
     {
-        let (mut q, p) = system_state.get_mut(world);
+        let Ok((mut q, p)) = system_state.get_mut(world) else {
+            return;
+        };
 
         let mut items: Vec<_> = q.iter_mut().collect();
         if items.is_empty() {
@@ -473,7 +475,9 @@ fn edit_component_entities<PEntities: SystemParam + 'static, P: SystemParam + 's
     add_body: impl FnOnce(&mut Ui, EntityHashSet, <P as SystemParam>::Item<'_, '_>),
 ) {
     let mut ss = SystemState::<ParamSet<(PEntities, P)>>::new(world);
-    let mut paramset = ss.get_mut(world);
+    let Ok(mut paramset) = ss.get_mut(world) else {
+        return;
+    };
 
     let p_entities = paramset.p0();
 
