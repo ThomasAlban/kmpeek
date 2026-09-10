@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.17", default-features = false, features = [
+bevy = { version = "0.18.1", default-features = false, features = [
     "bevy_render",
     "bevy_winit",
     "bevy_pbr",
@@ -12,7 +12,7 @@ bevy = { version = "0.17", default-features = false, features = [
     "bevy_post_process",
     "bevy_core_pipeline",
     "bevy_picking",
-    "bevy_mesh_picking_backend",
+    "mesh_picking",
     "multi_threaded",
     "file_watcher",
     "tonemapping_luts",
@@ -20,18 +20,21 @@ bevy = { version = "0.17", default-features = false, features = [
     "zstd_rust",
     "serialize",
     "bevy_gizmos",
+    "bevy_gizmos_render",
+    "keyboard",
+    "mouse",
     "track_location",
     # "dynamic_linking",
 ] }
 
-bevy_egui = "0.38.1"
-bevy_mod_outline = "0.11"
-bevy_pkv = "0.14"
-# there was no official 0.17 so i had to manually look at commits
-# KMPeek integrates the core gizmo directly with its egui-hosted offscreen viewport.
-transform-gizmo = { git = "https://github.com/urholaukkarinen/transform-gizmo", rev = "5bc2dd19b6287098eb00463cd7e3bf619fd436b3" }
-bevy_infinite_grid = "0.17"
-bevy_vector_shapes = "0.11.1"
+bevy_egui = "0.39.1"
+bevy_mod_outline = "0.12.1"
+bevy_pkv = "0.15"
+# KMPeek integrates the framework-independent core directly with its
+# egui-hosted offscreen viewport; do not replace this with transform-gizmo-bevy.
+transform-gizmo = "0.11"
+bevy_infinite_grid = "0.18"
+bevy_vector_shapes = "0.12.1"
 
 egui_dock = { version = "0.18", features = ["serde"] }
 egui_extras = { version = "0.33", default-features = false, features = ["all_loaders"] }

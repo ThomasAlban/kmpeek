@@ -58,7 +58,7 @@ pub struct CameraSettings {
 }
 
 fn add_ambient_light(mut commands: Commands) {
-    commands.insert_resource(AmbientLight {
+    commands.insert_resource(GlobalAmbientLight {
         color: Color::WHITE,
         brightness: 1000.,
         affects_lightmapped_meshes: true,

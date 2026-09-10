@@ -112,6 +112,20 @@ pub struct KmpError {
 #[derive(Resource, Deref, DerefMut, Clone, Default, new)]
 pub struct KmpSectionIdEntityMap<T: Component>(#[deref] pub HashMap<u32, Entity>, PhantomData<T>);
 
+fn despawn_kmp_points(world: &mut World) {
+    let entities: Vec<_> = world
+        .query_filtered::<Entity, With<KmpSelectablePoint>>()
+        .iter(world)
+        .collect();
+    for entity in entities {
+        // Despawning one checkpoint half also despawns its partner, which may
+        // still be present in this snapshot.
+        if let Ok(entity) = world.get_entity_mut(entity) {
+            entity.despawn();
+        }
+    }
+}
+
 pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
     let mut ss = SystemState::<MessageReader<KmpFileSelected>>::new(world);
     let mut ev_kmp_file_selected = ss.get(world);
@@ -130,13 +144,7 @@ pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
     world.insert_resource(KmpFilePath(ev.0.clone()));
 
     // get rid of all kmp points we may currently have in the world
-    let entities: Vec<_> = world
-        .query_filtered::<Entity, With<KmpSelectablePoint>>()
-        .iter(world)
-        .collect();
-    for e in entities {
-        world.entity_mut(e).despawn();
-    }
+    despawn_kmp_points(world);
     world.remove_resource::<EntityPathGroups<EnemyPathPoint>>();
     world.remove_resource::<EntityPathGroups<ItemPathPoint>>();
     world.remove_resource::<EntityPathGroups<Checkpoint>>();
@@ -319,4 +327,38 @@ fn calc_cp_arrow_transform(l_tr: Vec3, r_tr: Vec3) -> Transform {
     let mut trans = Transform::from_translation(mp).looking_at(r_tr, Vec3::Y);
     trans.rotate_local_z(f32::to_radians(90.));
     trans
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::viewer::kmp::checkpoints::{CheckpointLeft, CheckpointRight};
+
+    #[test]
+    fn despawning_kmp_points_handles_checkpoint_partner_cleanup() {
+        let mut app = App::new();
+        app.add_plugins(checkpoint_plugin);
+
+        let line = app.world_mut().spawn_empty().id();
+        let plane = app.world_mut().spawn_empty().id();
+        let arrow = app.world_mut().spawn_empty().id();
+        let left = app.world_mut().spawn(KmpSelectablePoint).id();
+        let right = app.world_mut().spawn(KmpSelectablePoint).id();
+
+        app.world_mut().entity_mut(left).insert(CheckpointLeft {
+            right,
+            line,
+            plane,
+            arrow,
+        });
+        app.world_mut()
+            .entity_mut(right)
+            .insert(CheckpointRight { left, line, plane });
+
+        despawn_kmp_points(app.world_mut());
+
+        for entity in [left, right, line, plane, arrow] {
+            assert!(app.world().get_entity(entity).is_err());
+        }
+    }
 }

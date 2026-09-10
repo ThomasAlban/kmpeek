@@ -60,11 +60,11 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
     commands.spawn((
         Camera3d::default(),
         Camera {
-            // render to the image
-            target: RenderTarget::Image(viewport.handle.clone().into()),
             is_active: false,
             ..default()
         },
+        // Render to the image.
+        RenderTarget::Image(viewport.handle.clone().into()),
         Projection::Orthographic(OrthographicProjection {
             near: topdown_default.near,
             far: topdown_default.far,

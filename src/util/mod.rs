@@ -5,10 +5,10 @@ pub mod kmp_file;
 pub mod read_write_arrays;
 pub mod shapes;
 
-use bevy::ecs::change_detection::MaybeLocation;
+use bevy::ecs::change_detection::{MaybeLocation, Tick};
 use bevy::picking::mesh_picking::ray_cast::*;
 use bevy::{
-    ecs::{component::Tick, entity::EntityHashSet, query::QueryData},
+    ecs::{entity::EntityHashSet, query::QueryData},
     math::vec2,
     prelude::*,
     window::PrimaryWindow,

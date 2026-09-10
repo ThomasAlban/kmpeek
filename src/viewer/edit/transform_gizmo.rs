@@ -14,13 +14,15 @@ use crate::{
 };
 use bevy::{
     ecs::{entity::EntityHashMap, system::SystemState},
-    math::{DQuat, DVec3},
     prelude::*,
 };
 use bevy_egui::egui::{self, epaint::Vertex, Mesh, PointerButton, Rgba, Sense, Ui};
 use transform_gizmo::{
     enum_set,
-    math::{Rect as GizmoRect, Transform as GizmoTransform},
+    math::{
+        DMat4 as GizmoDMat4, DQuat as GizmoDQuat, DVec3 as GizmoDVec3, Pos2 as GizmoPos2, Rect as GizmoRect,
+        Transform as GizmoTransform,
+    },
     Gizmo, GizmoConfig, GizmoInteraction, GizmoMode, GizmoVisuals,
 };
 
@@ -124,16 +126,7 @@ pub fn show_transform_gizmo(ui: &mut Ui, viewport: egui::Rect, world: &mut World
 
     let targets = q_targets
         .iter_mut()
-        .map(|(entity, transform)| {
-            (
-                entity,
-                GizmoTransform {
-                    translation: transform.translation.as_dvec3().into(),
-                    rotation: transform.rotation.as_dquat().into(),
-                    scale: transform.scale.as_dvec3().into(),
-                },
-            )
-        })
+        .map(|(entity, transform)| (entity, to_gizmo_transform(&transform)))
         .collect::<Vec<_>>();
     if targets.is_empty() {
         state.is_focused = false;
@@ -141,9 +134,14 @@ pub fn show_transform_gizmo(ui: &mut Ui, viewport: egui::Rect, world: &mut World
     }
 
     let mut config = state.config;
-    config.view_matrix = camera_transform.to_matrix().inverse().as_dmat4().into();
-    config.projection_matrix = camera.clip_from_view().as_dmat4().into();
-    config.viewport = GizmoRect::from_min_max(viewport.min, viewport.max);
+    let view_matrix = camera_transform.to_matrix().inverse().as_dmat4();
+    let projection_matrix = camera.clip_from_view().as_dmat4();
+    config.view_matrix = GizmoDMat4::from_cols_array(&view_matrix.to_cols_array()).into();
+    config.projection_matrix = GizmoDMat4::from_cols_array(&projection_matrix.to_cols_array()).into();
+    config.viewport = GizmoRect::from_min_max(
+        GizmoPos2::new(viewport.min.x, viewport.min.y),
+        GizmoPos2::new(viewport.max.x, viewport.max.y),
+    );
     config.pixels_per_point = ui.ctx().pixels_per_point();
 
     let cursor_pos = ui.input(|input| input.pointer.hover_pos()).unwrap_or_default();
@@ -211,6 +209,23 @@ fn paint_gizmo(ui: &Ui, viewport: egui::Rect, gizmo: &Gizmo) {
     });
 }
 
+fn to_gizmo_transform(transform: &Transform) -> GizmoTransform {
+    GizmoTransform {
+        translation: GizmoDVec3::from_array(transform.translation.as_dvec3().to_array()).into(),
+        rotation: GizmoDQuat::from_array(transform.rotation.as_dquat().to_array()).into(),
+        scale: GizmoDVec3::from_array(transform.scale.as_dvec3().to_array()).into(),
+    }
+}
+
+fn update_bevy_transform(transform: &mut Transform, updated: GizmoTransform) {
+    let translation = GizmoDVec3::from(updated.translation);
+    let rotation = GizmoDQuat::from(updated.rotation);
+    let scale = GizmoDVec3::from(updated.scale);
+    transform.translation = Vec3::from_array(translation.as_vec3().to_array());
+    transform.rotation = Quat::from_array(rotation.as_quat().to_array());
+    transform.scale = Vec3::from_array(scale.as_vec3().to_array());
+}
+
 fn apply_gizmo_transform(
     q_targets: &mut Query<(Entity, &mut Transform), (With<Selected>, With<GizmoTransformable>)>,
     entity: Entity,
@@ -219,7 +234,36 @@ fn apply_gizmo_transform(
     let Ok((_, mut transform)) = q_targets.get_mut(entity) else {
         return;
     };
-    transform.translation = DVec3::from(updated.translation).as_vec3();
-    transform.rotation = DQuat::from(updated.rotation).as_quat();
-    transform.scale = DVec3::from(updated.scale).as_vec3();
+    update_bevy_transform(&mut transform, updated);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transform_adapter_preserves_bevy_transform() {
+        let original = Transform {
+            translation: Vec3::new(12.5, -45.25, 1_000.75),
+            rotation: Quat::from_euler(EulerRot::YXZ, 0.7, -1.1, 2.4),
+            scale: Vec3::new(2.0, 0.5, 3.25),
+        };
+        let mut roundtrip = Transform::default();
+
+        update_bevy_transform(&mut roundtrip, to_gizmo_transform(&original));
+
+        assert_eq!(roundtrip.translation, original.translation);
+        assert_eq!(roundtrip.rotation, original.rotation);
+        assert_eq!(roundtrip.scale, original.scale);
+    }
+
+    #[test]
+    fn gizmo_defaults_match_editor_behavior() {
+        let state = TransformGizmoState::default();
+
+        assert_eq!(state.config.modes, GizmoMode::all_translate());
+        assert!(state.group_targets);
+        assert!(!state.enabled);
+        assert!(!state.is_focused);
+    }
 }

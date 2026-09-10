@@ -71,11 +71,11 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
     commands.spawn((
         Camera3d::default(),
         Camera {
-            // render to the image
-            target: RenderTarget::Image(viewport.handle.clone().into()),
             is_active: false,
             ..default()
         },
+        // Render to the image.
+        RenderTarget::Image(viewport.handle.clone().into()),
         Transform::from_translation(orbit_default.start_pos).looking_at(Vec3::ZERO, Vec3::Y),
         OrbitCam {
             radius: OrbitSettings::default().start_pos.length(),

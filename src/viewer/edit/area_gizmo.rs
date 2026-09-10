@@ -65,7 +65,7 @@ fn draw_area_bounds(mut gizmos: Gizmos, q_areas: Query<(&mut Transform, &mut Are
         };
 
         match area.shape {
-            AreaShape::Box => gizmos.cuboid(area_transform, gizmo_color),
+            AreaShape::Box => gizmos.cube(area_transform, gizmo_color),
             AreaShape::Cylinder => {
                 let segments = 32;
                 let ellipse_h_size = vec2(area.scale.x, area.scale.z) / 2.;

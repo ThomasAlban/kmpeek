@@ -14,14 +14,14 @@ fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
     commands.spawn((
         Camera2d,
         Camera {
-            // render to the image
-            target: RenderTarget::Image(viewport.handle.clone().into()),
-            // render above the main cameras
+            // Render above the main cameras.
             order: 1,
-            // transparent
+            // Transparent.
             clear_color: ClearColorConfig::None,
             ..default()
         },
+        // Render to the image.
+        RenderTarget::Image(viewport.handle.clone().into()),
         RenderLayers::layer(1),
         Gizmo2dCam,
         Msaa::Sample4,
