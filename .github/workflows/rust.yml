@@ -1,8 +1,8 @@
 name: Rust-Win
 
 on:
+  workflow_dispatch:
   push:
-    workflow_dispatch:
     branches: [ "bevy-migrate" ]
   pull_request:
     branches: [ "bevy-migrate" ]
