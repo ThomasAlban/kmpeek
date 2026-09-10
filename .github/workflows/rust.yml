@@ -3,9 +3,9 @@ name: Rust-Win
 on:
   workflow_dispatch:
   push:
-    branches: [ "bevy-migrate" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "bevy-migrate" ]
+    branches: [ "main" ]
 
 env:
   CARGO_TERM_COLOR: always
