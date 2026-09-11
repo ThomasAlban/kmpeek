@@ -218,6 +218,7 @@ pub fn show_edit_tab(ui: &mut Ui, world: &mut World) {
             );
         }
         edit_spacing(ui);
+        drag_value_edit_row(ui, "Presence", DragSpeed::Slow, map!(items => 0 presence));
         route_edit_row.show(ui, items.iter().map(|x| x.1));
     });
 
