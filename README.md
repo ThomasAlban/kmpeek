@@ -4,12 +4,6 @@ An in-progress 3D KMP editor for Mario Kart Wii. The goal is for it to be the ul
 
 <img width="1412" alt="image" src="https://github.com/ThomasAlban/kmpeek/assets/98399119/ee13fe41-3acb-4912-82eb-7e187417220b">
 
-## Bevy migration
-
-Since the project is old, first thing I'm doing with my fork is updating every single depency, so it's runnable at least.
-
-To speed up compile times, I've added a `.cargo/config.toml` file to add a custom linker, but I've gitignored it also because I'm on linux. if you want, add it yourself.
-
 ## Alpha Release
 
 These are the things I still need to do before an alpha release. Some of these are pretty quick and easy but others more difficult!
