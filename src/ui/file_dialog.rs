@@ -1,4 +1,4 @@
-use super::util::get_egui_ctx;
+use super::{ui_state::KmpFilePath, util::get_egui_ctx};
 use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::egui::Align2;
 use egui_file::{FileDialog, State as FileDialogState};
@@ -14,6 +14,7 @@ pub struct FileDialogRes(pub Option<(FileDialog, DialogType)>);
 #[derive(Clone, Copy)]
 pub enum DialogType {
     OpenKmpKcl,
+    SaveKmp,
     ExportSettings,
     ImportSettings,
     // ExportCsv,
@@ -64,31 +65,11 @@ pub fn show_file_dialog(world: &mut World) {
     });
 }
 
-// #[derive(SystemParam)]
-// pub struct ShowFileDialog<'w, 's> {
-//     contexts: EguiContexts<'w, 's>,
-//     file_dialog: ResMut<'w, FileDialogRes>,
-//     ev_file_dialog_result: MessageWriter<'w, FileDialogResult>,
-// }
-// impl UiSection for ShowFileDialog<'_, '_> {
-//     fn show(&mut self) {
-//         let ctx = self.contexts.ctx_mut();
-//         if let Some((dialog, dialog_type)) = &mut self.file_dialog.0 {
-//             if dialog.show(ctx).selected() {
-//                 if let Some(path) = dialog.path() {
-//                     self.ev_file_dialog_result.write(FileDialogResult {
-//                         path: path.into(),
-//                         dialog_type: *dialog_type,
-//                     });
-//                 }
-//             }
-//         }
-//     }
-// }
-
 #[derive(SystemParam)]
 pub struct FileDialogManager<'w> {
     file_dialog: ResMut<'w, FileDialogRes>,
+    // Optional because the dialog manager also handles opening the first course.
+    kmp_path: Option<Res<'w, KmpFilePath>>,
 }
 
 impl FileDialogManager<'_> {
@@ -112,6 +93,19 @@ impl FileDialogManager<'_> {
             }));
         dialog.open();
         self.file_dialog.0 = Some((dialog, DialogType::OpenKmpKcl));
+    }
+    /// Pick a destination only; the document service selects patch/rebuild mode
+    /// and performs the actual atomic save after the dialog result is delivered.
+    pub fn save_kmp(&mut self) {
+        let mut dialog = FileDialog::save_file()
+            .default_size(FILE_DIALOG_SIZE)
+            .anchor(Align2::CENTER_CENTER, [0., 0.])
+            .default_filename("course.kmp");
+        if let Some(path) = self.kmp_path.as_ref().and_then(|path| path.0.parent()) {
+            dialog = dialog.initial_path(path);
+        }
+        dialog.open();
+        self.file_dialog.0 = Some((dialog, DialogType::SaveKmp));
     }
     pub fn import_settings(&mut self) {
         let mut dialog = FileDialog::open_file()

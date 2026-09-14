@@ -2,7 +2,7 @@ use super::area_gizmo::AreaGizmoOptions;
 use super::create_delete::JustCreatedPoint;
 use super::link_select_mode::LinkSelectMode;
 use super::transform_gizmo::TransformGizmoState;
-use super::EditMode;
+use super::EditorMode;
 use crate::ui::keybinds::{Modifier, ModifiersPressed};
 use crate::ui::update_ui::UpdateUiSet;
 use crate::ui::viewport::ViewportInfo;
@@ -18,7 +18,13 @@ pub struct SelectSet;
 
 pub fn select_plugin(app: &mut App) {
     app.init_resource::<SelectBox>()
-        .add_systems(Update, (select, select_box, select_all).in_set(SelectSet))
+        .init_resource::<SelectPainter>()
+        .add_systems(
+            Update,
+            (select, select_box, select_painter, select_all)
+                .chain()
+                .in_set(SelectSet),
+        )
         .add_systems(Update, update_outlines.after(SelectSet))
         .add_systems(
             Update,
@@ -28,6 +34,22 @@ pub fn select_plugin(app: &mut App) {
 
 #[derive(Component, Default)]
 pub struct Selected;
+
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct SelectPainter {
+    pub radius: f32,
+}
+
+impl Default for SelectPainter {
+    fn default() -> Self {
+        Self { radius: 24.0 }
+    }
+}
+
+impl SelectPainter {
+    pub const MIN_RADIUS: f32 = 2.0;
+    pub const MAX_RADIUS: f32 = 200.0;
+}
 
 fn select(
     viewport_info: Res<ViewportInfo>,
@@ -148,15 +170,22 @@ impl SelectBox {
 fn select_box(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_window: Query<&Window>,
-    edit_mode: Res<EditMode>,
+    editor_mode: Res<EditorMode>,
     viewport_info: Res<ViewportInfo>,
+    area_gizmo_opts: Res<AreaGizmoOptions>,
+    route_selection_mode: Option<Res<LinkSelectMode<RoutePoint>>>,
+    respawn_selection_mode: Option<Res<LinkSelectMode<RespawnPoint>>>,
     q_selectable: Query<(&Transform, Entity, &Visibility, Has<Selected>), With<KmpSelectablePoint>>,
     q_camera: Query<(&Camera, &GlobalTransform), With<EditorCamera>>,
+    mut raycast: MeshRayCast,
     mut commands: Commands,
     mut select_box: ResMut<SelectBox>,
     mut initial_mouse_pos: Local<Vec2>,
+    mut selecting: Local<bool>,
 ) {
-    if *edit_mode != EditMode::SelectBox {
+    if *editor_mode != EditorMode::Default {
+        *select_box = SelectBox::default();
+        *selecting = false;
         return;
     }
 
@@ -165,17 +194,36 @@ fn select_box(
         return;
     };
 
-    // save the initial scaled/unscaled mouse pos into local variables (so that they can be used for one corner of the select box)
     if mouse_buttons.just_pressed(MouseButton::Left) {
-        *initial_mouse_pos = mouse_pos;
+        let started_on_point = q_camera.iter().find(|camera| camera.0.is_active).is_some_and(|camera| {
+            let mouse_pos_ndc = ui_viewport_to_ndc(mouse_pos, viewport_info.viewport_rect);
+            RaycastFromCam::new(camera, mouse_pos_ndc, &mut raycast)
+                .filter(&|entity| q_selectable.contains(entity))
+                .cast()
+                .first()
+                .is_some()
+        });
+        *selecting = viewport_info.mouse_in_viewport
+            && !viewport_info.mouse_on_overlayed_ui
+            && !area_gizmo_opts.mouse_hovering
+            && !started_on_point
+            && route_selection_mode.is_none()
+            && respawn_selection_mode.is_none();
+        if *selecting {
+            *initial_mouse_pos = mouse_pos;
+        } else {
+            *select_box = SelectBox::default();
+        }
     }
 
-    if mouse_buttons.pressed(MouseButton::Left)
+    if *selecting
+        && mouse_buttons.pressed(MouseButton::Left)
         && initial_mouse_pos.distance(mouse_pos) > SelectBox::LENIENCY_BEFORE_SELECT
     {
-        // delete the select box if mouse isn't in viewport
+        // Cancel this gesture if the pointer leaves the viewport.
         if !viewport_info.mouse_in_viewport {
             *select_box = SelectBox::default();
+            *selecting = false;
             return;
         }
 
@@ -185,6 +233,12 @@ fn select_box(
 
     // when we release the mouse button, we actually select stuff
     if mouse_buttons.just_released(MouseButton::Left) {
+        let was_selecting = *selecting;
+        *selecting = false;
+        if !was_selecting {
+            *select_box = SelectBox::default();
+            return;
+        }
         let Some(select_rect) = select_box.0 else {
             return;
         };
@@ -208,6 +262,98 @@ fn select_box(
         }
         // reset the select box after we've selected stuff
         *select_box = SelectBox::default();
+    }
+}
+
+fn select_painter(
+    editor_mode: Res<EditorMode>,
+    painter: Res<SelectPainter>,
+    viewport_info: Res<ViewportInfo>,
+    q_window: Query<&Window>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    q_camera: Query<(&Camera, &GlobalTransform), With<EditorCamera>>,
+    q_selectable: Query<(&Transform, Entity, &Visibility), With<KmpSelectablePoint>>,
+    mut commands: Commands,
+    mut painting: Local<bool>,
+    mut previous_mouse_pos: Local<Option<Vec2>>,
+    route_selection_mode: Option<Res<LinkSelectMode<RoutePoint>>>,
+    respawn_selection_mode: Option<Res<LinkSelectMode<RespawnPoint>>>,
+) {
+    if mouse_buttons.just_released(MouseButton::Left) || *editor_mode != EditorMode::SelectPainter {
+        *painting = false;
+        *previous_mouse_pos = None;
+    }
+
+    if *editor_mode != EditorMode::SelectPainter {
+        return;
+    }
+
+    if mouse_buttons.just_pressed(MouseButton::Left) {
+        *painting = viewport_info.mouse_in_viewport
+            && !viewport_info.mouse_on_overlayed_ui
+            && route_selection_mode.is_none()
+            && respawn_selection_mode.is_none();
+    }
+
+    if !*painting || !mouse_buttons.pressed(MouseButton::Left) || !viewport_info.mouse_in_viewport {
+        return;
+    }
+
+    let Some(mouse_pos) = q_window.single().ok().and_then(Window::cursor_position) else {
+        return;
+    };
+    let Some(camera) = q_camera.iter().find(|camera| camera.0.is_active) else {
+        return;
+    };
+    let stroke_start = previous_mouse_pos.unwrap_or(mouse_pos);
+    let radius = painter
+        .radius
+        .clamp(SelectPainter::MIN_RADIUS, SelectPainter::MAX_RADIUS);
+
+    for (transform, entity, visibility) in q_selectable.iter() {
+        if *visibility != Visibility::Visible {
+            continue;
+        }
+        let Some(point_pos) = world_to_ui_viewport(camera, viewport_info.viewport_rect, transform.translation) else {
+            continue;
+        };
+        if distance_to_segment(point_pos, stroke_start, mouse_pos) <= radius {
+            commands.entity(entity).insert(Selected);
+        }
+    }
+
+    *previous_mouse_pos = Some(mouse_pos);
+}
+
+fn distance_to_segment(point: Vec2, start: Vec2, end: Vec2) -> f32 {
+    let segment = end - start;
+    let length_squared = segment.length_squared();
+    if length_squared == 0.0 {
+        return point.distance(start);
+    }
+    let t = ((point - start).dot(segment) / length_squared).clamp(0.0, 1.0);
+    point.distance(start + segment * t)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn painter_sweep_hits_between_frames() {
+        let start = Vec2::new(0.0, 0.0);
+        let end = Vec2::new(100.0, 0.0);
+
+        assert_eq!(distance_to_segment(Vec2::new(50.0, 0.0), start, end), 0.0);
+        assert_eq!(distance_to_segment(Vec2::new(50.0, 12.0), start, end), 12.0);
+        assert_eq!(distance_to_segment(Vec2::new(120.0, 0.0), start, end), 20.0);
+    }
+
+    #[test]
+    fn painter_radius_has_safe_defaults() {
+        let painter = SelectPainter::default();
+        assert!(painter.radius >= SelectPainter::MIN_RADIUS);
+        assert!(painter.radius <= SelectPainter::MAX_RADIUS);
     }
 }
 

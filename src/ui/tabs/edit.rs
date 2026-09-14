@@ -1,7 +1,10 @@
 use crate::{
     ui::util::{
         combobox_enum, framed_collapsing_header, link_select_btn,
-        multi_edit::{checkbox_multi_edit, combobox_enum_multi_edit, drag_value_multi_edit, map, rotation_multi_edit},
+        multi_edit::{
+            bit_checkbox_multi_edit, checkbox_multi_edit, combobox_enum_multi_edit, drag_value_multi_edit, map,
+            rotation_multi_edit,
+        },
         DragSpeed, Icons, LinkSelectBtnType,
     },
     util::{give_me_a_mut, iter_mut_from_entities},
@@ -30,7 +33,7 @@ use bevy::{
     log::warn,
     prelude::*,
 };
-use bevy_egui::egui::{self, emath::Numeric, Align, Checkbox, DragValue, Layout, Response, Sense, Ui, WidgetText};
+use bevy_egui::egui::{self, emath::Numeric, Checkbox, DragValue, Layout, Response, Sense, Ui, WidgetText};
 use std::{
     fmt::Display,
     ops::{AddAssign, Sub, SubAssign},
@@ -112,7 +115,15 @@ pub fn show_edit_tab(ui: &mut Ui, world: &mut World) {
          entities,
          (mut q_cp, mut path_start_btn, q_cp_respawn_link, mut q_visibility, q_order_id, mut commands)| {
             let mut items = iter_mut_from_entities(&entities, &mut q_cp);
-            combobox_edit_row(ui, "Type", map!(items => kind));
+            if combobox_edit_row(ui, "Type", map!(items => kind)).changed() {
+                // Enum iteration constructs payload variants from Default. Key(0)
+                // would serialize as Lap Count, so start a newly selected Key at 1.
+                for item in items.iter_mut() {
+                    if item.kind == CheckpointKind::Key(0) {
+                        item.kind = CheckpointKind::Key(1);
+                    }
+                }
+            }
 
             // see https://github.com/bevyengine/bevy/pull/14837
             let kcp_ids: Vec<Mut<u8>> = items
@@ -201,13 +212,22 @@ pub fn show_edit_tab(ui: &mut Ui, world: &mut World) {
     );
 
     edit_component::<&mut RespawnPoint, ()>(ui, world, "Respawn Point", |ui, items, _| {
-        drag_value_edit_row(ui, "Sound Trigger", DragSpeed::Slow, map!(items => sound_trigger));
+        drag_value_edit_row(ui, "Extra Data", DragSpeed::Slow, map!(items => extra_data));
     });
 
     edit_component::<(&mut Object, Entity), RouteEditRowParam>(ui, world, "Object", |ui, items, mut route_edit_row| {
         vec3_drag_value_edit_row(ui, "Scale", DragSpeed::Fast, map!(items => 0 scale));
         edit_spacing(ui);
         drag_value_edit_row(ui, "ID", DragSpeed::Slow, map!(items => 0 object_id));
+        edit_row(ui, "1 Player / Time Trial", false, |ui| {
+            bit_checkbox_multi_edit(ui, 0x0001, map!(items => 0 presence))
+        });
+        edit_row(ui, "2 Players", false, |ui| {
+            bit_checkbox_multi_edit(ui, 0x0002, map!(items => 0 presence))
+        });
+        edit_row(ui, "3–4 Players", false, |ui| {
+            bit_checkbox_multi_edit(ui, 0x0004, map!(items => 0 presence))
+        });
         edit_spacing(ui);
         for i in 0..8 {
             drag_value_edit_row(
@@ -291,65 +311,78 @@ pub fn show_edit_tab(ui: &mut Ui, world: &mut World) {
         );
     });
 
-    edit_component::<&mut AreaPoint, ()>(ui, world, "Area", |ui, items, _| {
-        vec3_drag_value_edit_row(ui, "Scale", DragSpeed::Slow, map!(items => scale));
-        edit_spacing(ui);
-        combobox_edit_row(ui, "Shape", map!(items => shape));
-        drag_value_edit_row(ui, "Priority", DragSpeed::Slow, map!(items => priority));
-        combobox_edit_row(ui, "Type", map!(items => kind));
+    edit_component::<(&mut AreaPoint, Entity), RouteEditRowParam>(
+        ui,
+        world,
+        "Area",
+        |ui, items, mut route_edit_row| {
+            vec3_drag_value_edit_row(ui, "Scale", DragSpeed::Slow, map!(items => 0 scale));
+            edit_spacing(ui);
+            combobox_edit_row(ui, "Shape", map!(items => 0 shape));
+            drag_value_edit_row(ui, "Priority", DragSpeed::Slow, map!(items => 0 priority));
+            combobox_edit_row(ui, "Type", map!(items => 0 kind));
 
-        // for now, area type UI settings will only work when 1 point is selected
-        if let Some(item) = items.iter_mut().next() {
-            match &mut item.kind {
-                AreaKind::Camera { cam_index } => {
-                    edit_row(ui, "Camera Index", true, |ui| {
-                        ui.add(DragValue::new(cam_index).speed(DragSpeed::Slow));
-                    });
+            // Variant-specific controls edit exactly one selected area; do not silently
+            // change only the first member of a multi-selection.
+            if items.len() == 1 {
+                let (item, entity) = &mut items[0];
+                match &mut item.kind {
+                    AreaKind::Camera { cam_index } => {
+                        edit_row(ui, "Camera Index", true, |ui| {
+                            ui.add(DragValue::new(cam_index).speed(DragSpeed::Slow));
+                        });
+                    }
+                    AreaKind::EnvEffect(env_effect_obj) => {
+                        edit_row(ui, "Env Effect Object", true, |ui| {
+                            combobox_enum(ui, env_effect_obj, None);
+                        });
+                    }
+                    AreaKind::FogEffect { bfg_entry, setting_2 } => {
+                        edit_row(ui, "BFG Entry", true, |ui| {
+                            ui.add(DragValue::new(bfg_entry).speed(DragSpeed::Slow));
+                        });
+                        edit_row(ui, "Setting 2", true, |ui| {
+                            ui.add(DragValue::new(setting_2).speed(DragSpeed::Slow));
+                        });
+                    }
+                    AreaKind::MovingRoad => {
+                        // Route links belong to the entity, not the AreaPoint payload.
+                        route_edit_row.show(ui, [*entity]);
+                    }
+                    AreaKind::ForceRecalc { enemy_path_id } => {
+                        edit_row(ui, "Enemy Point Index", true, |ui| {
+                            ui.add(DragValue::new(enemy_path_id).speed(DragSpeed::Slow));
+                        });
+                    }
+                    AreaKind::MinimapControl { setting_1, setting_2 } => {
+                        edit_row(ui, "Setting 1", true, |ui| {
+                            ui.add(DragValue::new(setting_1).speed(DragSpeed::Slow));
+                        });
+                        edit_row(ui, "Setting 2", true, |ui| {
+                            ui.add(DragValue::new(setting_2).speed(DragSpeed::Slow));
+                        });
+                    }
+                    AreaKind::BloomEffect { bblm_file, fade_time } => {
+                        edit_row(ui, "BBLM File", true, |ui| {
+                            ui.add(DragValue::new(bblm_file).speed(DragSpeed::Slow));
+                        });
+                        edit_row(ui, "Fade Time", true, |ui| {
+                            ui.add(DragValue::new(fade_time).speed(DragSpeed::Slow));
+                        });
+                    }
+                    AreaKind::ObjectGroup { group_id } | AreaKind::ObjectUnload { group_id } => {
+                        edit_row(ui, "Group ID", true, |ui| {
+                            ui.add(DragValue::new(group_id).speed(DragSpeed::Slow));
+                        });
+                    }
+                    // other types of area don't have any settings
+                    _ => {}
                 }
-                AreaKind::EnvEffect(env_effect_obj) => {
-                    edit_row(ui, "Env Effect Object", true, |ui| {
-                        combobox_enum(ui, env_effect_obj, None);
-                    });
-                }
-                AreaKind::FogEffect { bfg_entry, setting_2 } => {
-                    edit_row(ui, "BFG Entry", true, |ui| {
-                        ui.add(DragValue::new(bfg_entry).speed(DragSpeed::Slow));
-                    });
-                    edit_row(ui, "Setting 2", true, |ui| {
-                        ui.add(DragValue::new(setting_2).speed(DragSpeed::Slow));
-                    });
-                }
-                AreaKind::MovingRoad => {
-                    // TODO - add route link here
-                }
-                AreaKind::MinimapControl { setting_1, setting_2 } => {
-                    edit_row(ui, "Setting 1", true, |ui| {
-                        ui.add(DragValue::new(setting_1).speed(DragSpeed::Slow));
-                    });
-                    edit_row(ui, "Setting 2", true, |ui| {
-                        ui.add(DragValue::new(setting_2).speed(DragSpeed::Slow));
-                    });
-                }
-                AreaKind::BloomEffect { bblm_file, fade_time } => {
-                    edit_row(ui, "BBLM File", true, |ui| {
-                        ui.add(DragValue::new(bblm_file).speed(DragSpeed::Slow));
-                    });
-                    edit_row(ui, "Fade Time", true, |ui| {
-                        ui.add(DragValue::new(fade_time).speed(DragSpeed::Slow));
-                    });
-                }
-                AreaKind::ObjectGroup { group_id } | AreaKind::ObjectUnload { group_id } => {
-                    edit_row(ui, "Group ID", true, |ui| {
-                        ui.add(DragValue::new(group_id).speed(DragSpeed::Slow));
-                    });
-                }
-                // other types of area don't have any settings
-                _ => {}
             }
-        }
-        edit_spacing(ui);
-        checkbox_edit_row(ui, "Always Show Area", map!(items => show_area));
-    });
+            edit_spacing(ui);
+            checkbox_edit_row(ui, "Always Show Area", map!(items => 0 show_area));
+        },
+    );
 
     edit_component::<(&mut KmpCamera, Entity), (RouteEditRowParam, Query<Entity, With<KmpCameraIntroStart>>, Commands)>(
         ui,
@@ -381,13 +414,14 @@ pub fn show_edit_tab(ui: &mut Ui, world: &mut World) {
             route_edit_row.show(ui, items.iter().map(|x| x.1));
 
             edit_spacing(ui);
-            drag_value_edit_row(ui, "Time", DragSpeed::Slow, map!(items => 0 time));
+            drag_value_edit_row(ui, "Duration", DragSpeed::Slow, map!(items => 0 duration));
             edit_spacing(ui);
             drag_value_edit_row(ui, "Point Speed", DragSpeed::Slow, map!(items => 0 point_velocity));
             drag_value_edit_row(ui, "Zoom Speed", DragSpeed::Slow, map!(items => 0 zoom_velocity));
             drag_value_edit_row(ui, "View Speed", DragSpeed::Slow, map!(items => 0 view_velocity));
             edit_spacing(ui);
-            drag_value_edit_row(ui, "Zoom Start", DragSpeed::Slow, map!(items => 0 zoom_end));
+            drag_value_edit_row(ui, "Zoom Start", DragSpeed::Slow, map!(items => 0 zoom_start));
+            drag_value_edit_row(ui, "Zoom End", DragSpeed::Slow, map!(items => 0 zoom_end));
             edit_spacing(ui);
             vec3_drag_value_edit_row(ui, "View Start", DragSpeed::Slow, map!(items => 0 view_start));
             edit_spacing(ui);
@@ -403,6 +437,7 @@ pub fn show_edit_tab(ui: &mut Ui, world: &mut World) {
         combobox_edit_row(ui, "Shoot Effect", map!(items => shoot_effect));
     });
 
+    // MSPT has no user-facing settings with established gameplay semantics.
     edit_component::<&mut BattleFinishPoint, ()>(ui, world, "Battle Finish Point", |_, _, _| {});
 }
 
@@ -416,14 +451,15 @@ fn edit_track_info(ui: &mut Ui, world: &mut World) {
     };
 
     framed_collapsing_header("Track Info", ui, |ui| {
-        edit_row(ui, "Track Type", false, |ui| {
+        edit_row(ui, "Track Type (editor only)", false, |ui| {
             combobox_enum(ui, &mut track_info.track_type, None);
         });
         edit_row(ui, "Lap Count", true, |ui| {
             ui.add(DragValue::new(&mut track_info.lap_count).speed(DragSpeed::Slow))
         });
         edit_row(ui, "Speed Mod", true, |ui| {
-            ui.add(DragValue::new(&mut track_info.speed_mod).speed(DragSpeed::Slow))
+            ui.add(DragValue::new(&mut track_info.speed_mod).speed(0.01))
+                .on_hover_text("LS-Mod extension: 0 means normal (1×) speed. Stored as the high 16 bits of a float; saving truncates precision. Requires game support.");
         });
         edit_spacing(ui);
         edit_row(ui, "Lens Flare Colour", false, |ui| {
@@ -503,11 +539,13 @@ struct PathStartBtn<'w, 's, T: Component + ToPathType> {
 impl<T: Component + ToPathType> PathStartBtn<'_, '_, T> {
     fn show(&mut self, ui: &mut Ui, items: impl IntoIterator<Item = Entity>) {
         let items: Vec<_> = items.into_iter().collect();
-        ui.with_layout(Layout::top_down(Align::Center), |ui| {
-            if items.len() != 1 {
-                ui.disable();
-            }
-            if ui.button("Set As Path Start").clicked() && items.len() == 1 {
+        edit_row(ui, "Path Start", false, |ui| {
+            let mut path_start_in_items = items.iter().any(|entity| self.q_path_start.contains(*entity));
+            let intermediate = path_start_in_items && items.len() > 1;
+            ui.add_enabled_ui(false, |ui| {
+                ui.add(Checkbox::without_text(&mut path_start_in_items).indeterminate(intermediate));
+            });
+            if items.len() == 1 && ui.button("Set").clicked() {
                 for e in self.q_path_start.iter() {
                     self.commands.entity(e).remove::<PathOverallStart>();
                 }

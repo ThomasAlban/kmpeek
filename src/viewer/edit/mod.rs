@@ -13,7 +13,6 @@ use self::{
 use bevy::prelude::*;
 use bevy_mod_outline::OutlinePlugin;
 use link_select_mode::link_select_mode_plugin;
-use strum_macros::EnumIter;
 
 pub fn edit_plugin(app: &mut App) {
     app.add_plugins((
@@ -26,14 +25,16 @@ pub fn edit_plugin(app: &mut App) {
         tweak_plugin,
         link_select_mode_plugin,
     ))
-    .init_resource::<EditMode>();
+    .init_resource::<EditorMode>();
 }
 
-#[derive(Resource, Default, PartialEq, EnumIter, Debug)]
-pub enum EditMode {
+#[derive(Resource, Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EditorMode {
     #[default]
-    Tweak,
-    SelectBox,
+    Default,
+    SelectPainter,
     Translate,
     Rotate,
+    Scale,
+    Transform,
 }

@@ -1,7 +1,8 @@
 use super::{
     create_delete::JustCreatedPoint,
     select::{SelectSet, Selected},
-    EditMode,
+    transform_gizmo::TransformGizmoState,
+    EditorMode,
 };
 use crate::{
     ui::viewport::ViewportInfo,
@@ -40,7 +41,8 @@ pub struct TweakInteraction {
 pub fn tweak_interaction(
     mut tweak_interaction: Local<Option<TweakInteraction>>,
     mut q_selected: Query<(Entity, &mut Transform, &Tweakable), With<Selected>>,
-    edit_mode: Res<EditMode>,
+    editor_mode: Res<EditorMode>,
+    transform_gizmo: Res<TransformGizmoState>,
     viewport_info: Res<ViewportInfo>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     q_window: Query<&Window>,
@@ -50,7 +52,11 @@ pub fn tweak_interaction(
     q_kcl: Query<(), With<KCLModelSection>>,
     mut ev_just_created_point: MessageReader<JustCreatedPoint>,
 ) {
-    if *edit_mode != EditMode::Tweak || !viewport_info.mouse_in_viewport || q_selected.is_empty() {
+    if *editor_mode != EditorMode::Default {
+        *tweak_interaction = None;
+        return;
+    }
+    if transform_gizmo.is_focused || !viewport_info.mouse_in_viewport || q_selected.is_empty() {
         return;
     }
     if !mouse_buttons.pressed(MouseButton::Left) {

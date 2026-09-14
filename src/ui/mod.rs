@@ -1,6 +1,6 @@
 use self::{
     keybinds::keybinds_plugin, settings::app_settings_plugin, tabs::docktree_plugin, ui_state::ui_state_plugin,
-    update_ui::update_ui_plugin, viewport::viewport_plugin,
+    unsaved_changes::unsaved_changes_plugin, update_ui::update_ui_plugin, viewport::viewport_plugin,
 };
 use bevy::app::App;
 use bevy_egui::EguiPlugin;
@@ -12,6 +12,7 @@ mod menu_bar;
 pub mod settings;
 pub mod tabs;
 pub mod ui_state;
+pub mod unsaved_changes;
 pub mod update_ui;
 pub mod util;
 pub mod viewport;
@@ -26,6 +27,7 @@ pub fn ui_plugin(app: &mut App) {
         },
         ui_state_plugin,
         docktree_plugin,
+        unsaved_changes_plugin,
         update_ui_plugin,
         viewport_plugin,
         keybinds_plugin,

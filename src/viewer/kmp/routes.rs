@@ -36,7 +36,9 @@ impl RouteLinkedEntities {
             old_start.remove::<RouteLinkedEntities>();
         }
 
-        let mut moved_links = RouteLinkedEntities::default();
+        // A reconnect can move links into an existing route. Keep its references
+        // as well as ours; replacing the set would break reciprocal RouteLinks.
+        let mut moved_links = world.get::<RouteLinkedEntities>(new_e).cloned().unwrap_or_default();
         for linked_e in self.iter() {
             let Some(mut route_link) = world.get_mut::<RouteLink>(*linked_e) else {
                 continue;
@@ -176,7 +178,7 @@ fn on_add_route_pt(trigger: On<Add, RoutePoint>, q_kmp_path_node: Query<&KmpPath
 
     // if we have started a new route path, add route settings and route linked entities to it because it is the first point
     if kmp_path_node.prev_nodes.is_empty() {
-        commands.entity(e).insert(RouteStartBundle::default());
+        commands.entity(e).insert_if_new(RouteStartBundle::default());
     }
 }
 
@@ -184,21 +186,33 @@ fn on_remove_route_pt(
     trigger: On<Remove, RoutePoint>,
     mut commands: Commands,
     q_kmp_path_node: Query<&KmpPathNode>,
+    q_route_settings: Query<&RouteSettings>,
     mut ev_recalc_paths: MessageWriter<RecalcPaths>,
 ) {
-    // we will have to add 'route settings' and 'route linked entities' components to the next entity,
-    // because that entity is now the start of a new route now that we've been deleted
     let e = trigger.event().entity;
-    // check if there is a next entity because we might be at the end of the route
-    if let Some(new_start_e) = q_kmp_path_node
+    // Capture settings while the removed start is still queryable. Inserting a
+    // default bundle here used to erase both these settings and migrated links,
+    // depending on the order of the two removal observers' deferred commands.
+    let route_settings = q_route_settings.get(e).cloned().unwrap_or_default();
+    let next_e = q_kmp_path_node
         .get(e)
         .ok()
-        .and_then(|node| node.next_nodes.iter().next())
-        .filter(|new_start_e| q_kmp_path_node.contains(**new_start_e))
-    {
-        commands.entity(*new_start_e).insert(RouteStartBundle::default());
-        ev_recalc_paths.write(RecalcPaths::route());
+        .and_then(|node| node.next_nodes.iter().next().copied());
+    if let Some(next_e) = next_e {
+        commands.queue(move |world: &mut World| {
+            if world.get::<RoutePoint>(next_e).is_none() || world.get::<KmpPathNode>(next_e).is_none() {
+                return;
+            }
+            // A merge can leave two competing sets of route settings. Prefer
+            // the existing destination's settings; only fill missing components.
+            // This also preserves links migrated by on_remove_route_linked_entities.
+            world.entity_mut(next_e).insert_if_new(RouteStartBundle {
+                route_settings,
+                ..default()
+            });
+        });
     }
+    ev_recalc_paths.write(RecalcPaths::route());
 }
 
 pub fn spawn_route_section(world: &mut World, kmp: &KmpFile) -> KmpSectionIdEntityMap<RoutePoint> {
@@ -247,7 +261,10 @@ pub fn update_routes(
         let route_start_e = get_route_start.get_entity(e);
 
         if !q_route_start.contains(route_start_e) {
-            commands.entity(route_start_e).insert(RouteStartBundle::default());
+            // Repair incomplete starts without resetting saved settings or links.
+            commands
+                .entity(route_start_e)
+                .insert_if_new(RouteStartBundle::default());
             continue;
         }
 
@@ -258,7 +275,9 @@ pub fn update_routes(
                 continue;
             };
 
-            // Move only live reciprocal links to the actual route start.
+            // Move only live reciprocal links to the actual route start. On a
+            // reconnect, its existing settings win over the absorbed start's:
+            // there is no unambiguous way to combine smooth/loop styles.
             let Ok(mut route_start_linked_entities) = q_linked_entities.get_mut(route_start_e) else {
                 continue;
             };
@@ -317,7 +336,109 @@ impl GetRouteStart<'_, '_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bevy::ecs::system::SystemState;
+    use bevy::ecs::system::{RunSystemOnce, SystemState};
+
+    fn route_app() -> App {
+        let mut app = App::new();
+        // Install the real path observers too: deletion removes reciprocal graph
+        // edges before the route observers' queued migrations are applied.
+        app.add_plugins((super::super::path::path_plugin, routes_plugin));
+        app
+    }
+
+    fn smooth_mirror() -> RouteSettings {
+        RouteSettings {
+            smooth_motion: true,
+            loop_style: super::super::components::RouteLoopStyle::Mirror,
+        }
+    }
+
+    fn spawn_start(world: &mut World, settings: RouteSettings) -> Entity {
+        world.spawn((RoutePoint::default(), KmpPathNode::new(1), settings)).id()
+    }
+
+    #[test]
+    fn deleting_first_route_point_preserves_settings_and_references() {
+        let mut app = route_app();
+        let world = app.world_mut();
+        let first = spawn_start(world, smooth_mirror());
+        let second = world
+            .spawn((RoutePoint::default(), KmpPathNode::new(1).with_prev([first])))
+            .id();
+        let linked = world.spawn(RouteLink(first)).id();
+
+        world.despawn(first);
+        world.run_system_once(update_routes).unwrap();
+
+        assert_eq!(world.get::<RouteSettings>(second), Some(&smooth_mirror()));
+        assert_eq!(world.get::<RouteLink>(linked).unwrap().0, second);
+        assert!(world.get::<RouteLinkedEntities>(second).unwrap().contains(&linked));
+        assert!(world.get::<KmpPathNode>(second).unwrap().prev_nodes.is_empty());
+
+        // Removing the last point must clean up its owners, not leave dead links.
+        world.despawn(second);
+        assert!(world.get::<RouteLink>(linked).is_none());
+    }
+
+    #[test]
+    fn deleting_start_keeps_existing_successor_settings_and_links() {
+        let mut app = route_app();
+        let world = app.world_mut();
+        let first = spawn_start(world, smooth_mirror());
+        let second = spawn_start(world, RouteSettings::default());
+        let first_owner = world.spawn(RouteLink(first)).id();
+        let second_owner = world.spawn(RouteLink(second)).id();
+        assert!(KmpPathNode::link_nodes(first, second, world));
+
+        // Delete before update_routes has consolidated the two starts.
+        world.despawn(first);
+        world.run_system_once(update_routes).unwrap();
+
+        assert_eq!(world.get::<RouteSettings>(second), Some(&RouteSettings::default()));
+        let links = world.get::<RouteLinkedEntities>(second).unwrap();
+        assert_eq!(links.len(), 2);
+        for owner in [first_owner, second_owner] {
+            assert!(links.contains(&owner));
+            assert_eq!(world.get::<RouteLink>(owner).unwrap().0, second);
+        }
+    }
+
+    #[test]
+    fn reconnecting_starts_keeps_canonical_settings_and_both_references() {
+        let mut app = route_app();
+        let world = app.world_mut();
+        let canonical = spawn_start(world, smooth_mirror());
+        let absorbed = spawn_start(world, RouteSettings::default());
+        let canonical_owner = world.spawn(RouteLink(canonical)).id();
+        let absorbed_owner = world.spawn(RouteLink(absorbed)).id();
+        assert!(KmpPathNode::link_nodes(canonical, absorbed, world));
+
+        world.run_system_once(update_routes).unwrap();
+        world.run_system_once(update_routes).unwrap();
+
+        assert_eq!(world.get::<RouteSettings>(canonical), Some(&smooth_mirror()));
+        assert!(world.get::<RouteSettings>(absorbed).is_none());
+        assert!(world.get::<RouteLinkedEntities>(absorbed).is_none());
+        let links = world.get::<RouteLinkedEntities>(canonical).unwrap();
+        assert_eq!(links.len(), 2);
+        for owner in [canonical_owner, absorbed_owner] {
+            assert!(links.contains(&owner));
+            assert_eq!(world.get::<RouteLink>(owner).unwrap().0, canonical);
+        }
+    }
+
+    #[test]
+    fn repairing_partial_start_does_not_reset_settings() {
+        let mut app = route_app();
+        let world = app.world_mut();
+        let start = spawn_start(world, smooth_mirror());
+        world.entity_mut(start).remove::<RouteLinkedEntities>();
+
+        world.run_system_once(update_routes).unwrap();
+
+        assert_eq!(world.get::<RouteSettings>(start), Some(&smooth_mirror()));
+        assert!(world.get::<RouteLinkedEntities>(start).is_some());
+    }
 
     #[test]
     fn moving_route_start_drops_stale_linked_entities() {

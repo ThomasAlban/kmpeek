@@ -39,7 +39,8 @@ pub fn show_menu_bar(ui: &mut egui::Ui, world: &mut World) {
                     .add(Button::new("Save").shortcut_text(format!("{sc_btn}+S")))
                     .clicked()
                 {
-                    world.write_message(SaveFile);
+                    // No destination means save to the loaded path through the shared atomic save handler.
+                    world.write_message(SaveFile(None));
                     ui.close();
                 }
 
@@ -47,6 +48,12 @@ pub fn show_menu_bar(ui: &mut egui::Ui, world: &mut World) {
                     .add(Button::new("Save as...").shortcut_text(format!("{sc_btn}+Shift+S")))
                     .clicked()
                 {
+                    let mut ss = SystemState::<FileDialogManager>::new(world);
+                    let Ok(mut file_dialog) = ss.get_mut(world) else {
+                        return;
+                    };
+                    // The dialog sends the chosen path to the same save handler; opening it does not write a file.
+                    file_dialog.save_kmp();
                     ui.close();
                 }
             });

@@ -7,6 +7,7 @@ pub const MAX_GIZMO_SIZE: f32 = 200.0;
 pub const DEFAULT_GIZMO_LINE_WIDTH: f32 = 6.0;
 pub const MIN_GIZMO_LINE_WIDTH: f32 = 1.0;
 pub const MAX_GIZMO_LINE_WIDTH: f32 = 16.0;
+pub const DEFAULT_CHECKPOINT_HEIGHT: f32 = 15_000.0;
 
 fn default_gizmo_size() -> f32 {
     DEFAULT_GIZMO_SIZE
@@ -14,6 +15,18 @@ fn default_gizmo_size() -> f32 {
 
 fn default_gizmo_line_width() -> f32 {
     DEFAULT_GIZMO_LINE_WIDTH
+}
+
+fn default_checkpoint_height() -> f32 {
+    DEFAULT_CHECKPOINT_HEIGHT
+}
+
+fn default_checkpoint_backface_culling() -> bool {
+    true
+}
+
+fn default_path_start_color() -> Color {
+    Color::WHITE
 }
 
 #[derive(Resource, Serialize, Deserialize)]
@@ -26,7 +39,10 @@ pub struct KmpModelSettings {
     pub gizmo_line_width: f32,
     pub color: KmpModelColors,
     pub outline: OutlineSettings,
+    #[serde(default = "default_checkpoint_height")]
     pub checkpoint_height: f32,
+    #[serde(default = "default_checkpoint_backface_culling")]
+    pub checkpoint_backface_culling: bool,
 }
 impl Default for KmpModelSettings {
     fn default() -> Self {
@@ -37,7 +53,8 @@ impl Default for KmpModelSettings {
             gizmo_line_width: DEFAULT_GIZMO_LINE_WIDTH,
             color: KmpModelColors::default(),
             outline: OutlineSettings::default(),
-            checkpoint_height: 10000.,
+            checkpoint_height: DEFAULT_CHECKPOINT_HEIGHT,
+            checkpoint_backface_culling: true,
         }
     }
 }
@@ -67,11 +84,13 @@ impl Default for KmpModelColors {
             },
             enemy_paths: PathColor {
                 point: Color::srgb(1., 0., 0.),
+                start_point: Color::srgb(1., 1., 1.),
                 line: Color::srgb(1., 0.5, 0.),
                 arrow: Color::srgb(1., 1., 0.),
             },
             item_paths: PathColor {
                 point: Color::srgb(0., 0.6, 0.),
+                start_point: Color::srgb(1., 1., 1.),
                 line: Color::srgb(0., 1., 0.),
                 arrow: Color::srgb(0., 0.6, 0.),
             },
@@ -90,6 +109,7 @@ impl Default for KmpModelColors {
             },
             routes: PathColor {
                 point: Color::srgb(0., 0.75, 0.75),
+                start_point: Color::srgb(1., 1., 1.),
                 line: Color::srgb(0.3, 1., 1.),
                 arrow: Color::srgb(0., 0.6, 0.6),
             },
@@ -130,6 +150,8 @@ impl Default for KmpModelColors {
 #[derive(Serialize, Deserialize, Reflect)]
 pub struct PathColor {
     pub point: Color,
+    #[serde(default = "default_path_start_color")]
+    pub start_point: Color,
     pub line: Color,
     pub arrow: Color,
 }
@@ -170,15 +192,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn missing_path_start_color_uses_default() {
+        let mut serialized = serde_json::to_value(KmpModelSettings::default()).unwrap();
+        serialized["color"]["enemy_paths"]
+            .as_object_mut()
+            .unwrap()
+            .remove("start_point");
+
+        let settings: KmpModelSettings = serde_json::from_value(serialized).unwrap();
+
+        assert_eq!(settings.color.enemy_paths.start_point, default_path_start_color());
+    }
+
+    #[test]
     fn missing_gizmo_visual_settings_use_defaults() {
         let mut serialized = serde_json::to_value(KmpModelSettings::default()).unwrap();
         let object = serialized.as_object_mut().unwrap();
         object.remove("gizmo_size");
         object.remove("gizmo_line_width");
+        object.remove("checkpoint_height");
+        object.remove("checkpoint_backface_culling");
 
         let settings: KmpModelSettings = serde_json::from_value(serialized).unwrap();
 
         assert_eq!(settings.gizmo_size, DEFAULT_GIZMO_SIZE);
         assert_eq!(settings.gizmo_line_width, DEFAULT_GIZMO_LINE_WIDTH);
+        assert_eq!(settings.checkpoint_height, DEFAULT_CHECKPOINT_HEIGHT);
+        assert!(settings.checkpoint_backface_culling);
     }
 }

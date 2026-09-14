@@ -3,7 +3,7 @@ use crate::{
     util::{get_ray_from_cam, ui_viewport_to_ndc, world_to_ui_viewport},
     viewer::{
         camera::{EditorCamera, Gizmo2dCam, TopDownCam},
-        edit::{select::Selected, transform_gizmo::TransformGizmoState},
+        edit::{select::Selected, transform_gizmo::TransformGizmoState, EditorMode},
         kmp::components::{AreaPoint, AreaShape},
     },
 };
@@ -100,6 +100,7 @@ fn draw_area_handles(
     q_window: Query<&Window>,
     mut area_gizmo_opts: ResMut<AreaGizmoOptions>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
+    editor_mode: Res<EditorMode>,
     mut current_interaction: Local<Option<AreaGizmoInteraction>>,
     mut initial_mouse_pos: Local<Vec2>,
     transform_gizmo: Res<TransformGizmoState>,
@@ -119,6 +120,13 @@ fn draw_area_handles(
     ];
 
     let Ok(window) = q_window.single() else { return };
+
+    if *editor_mode != EditorMode::Default {
+        area_gizmo_opts.mouse_hovering = false;
+        area_gizmo_opts.mouse_interacting = false;
+        *current_interaction = None;
+        return;
+    }
 
     // get the active camera
     let Some(cam) = q_cam.iter().find(|cam| cam.0.is_active) else {

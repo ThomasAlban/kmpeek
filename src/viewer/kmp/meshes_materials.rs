@@ -9,7 +9,7 @@ use crate::{
     ui::settings::AppSettings,
     util::shapes::{Cone, Cylinder},
 };
-use bevy::prelude::*;
+use bevy::{prelude::*, render::render_resource::Face};
 
 #[derive(Clone, Resource)]
 pub struct KmpMeshes {
@@ -31,6 +31,7 @@ pub struct PointMaterials<T: Component + Clone> {
 #[derive(Clone, Resource)]
 pub struct PathMaterials<T: Component + Clone> {
     pub point: Handle<StandardMaterial>,
+    pub start_point: Handle<StandardMaterial>,
     pub line: Handle<StandardMaterial>,
     pub arrow: Handle<StandardMaterial>,
     _p: PhantomData<T>,
@@ -65,6 +66,7 @@ impl<T: Component + Clone> MaterialsFromColors<PathColor> for PathMaterials<T> {
     fn from_colors(materials: &mut Assets<StandardMaterial>, colors: &PathColor) -> Self {
         Self {
             point: unlit_material(materials, colors.point),
+            start_point: unlit_material(materials, colors.start_point),
             line: unlit_material(materials, colors.line),
             arrow: unlit_material(materials, colors.arrow),
             _p: PhantomData,
@@ -78,7 +80,6 @@ impl MaterialsFromColors<CheckpointColor> for CheckpointMaterials {
                 base_color: color.with_alpha(0.2),
                 alpha_mode: AlphaMode::Blend,
                 unlit: true,
-                cull_mode: None,
                 ..default()
             })
         };
@@ -93,6 +94,39 @@ impl MaterialsFromColors<CheckpointColor> for CheckpointMaterials {
             arrow: unlit_material(materials, colors.arrow),
         }
     }
+}
+
+fn apply_checkpoint_plane_culling(
+    materials: &mut Assets<StandardMaterial>,
+    checkpoint_materials: &CheckpointMaterials,
+    enabled: bool,
+) {
+    for handle in [
+        &checkpoint_materials.normal_plane,
+        &checkpoint_materials.key_plane,
+        &checkpoint_materials.lap_count_plane,
+    ] {
+        let Some(mut material) = materials.get_mut(handle.id()) else {
+            continue;
+        };
+        material.cull_mode = enabled.then_some(Face::Back);
+        material.double_sided = !enabled;
+    }
+}
+
+pub fn update_checkpoint_plane_culling(
+    settings: Res<AppSettings>,
+    checkpoint_materials: Res<CheckpointMaterials>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut previous: Local<Option<bool>>,
+) {
+    let enabled = settings.kmp_model.checkpoint_backface_culling;
+    if *previous == Some(enabled) {
+        return;
+    }
+
+    apply_checkpoint_plane_culling(&mut materials, &checkpoint_materials, enabled);
+    *previous = Some(enabled);
 }
 
 pub fn unlit_material(materials: &mut Assets<StandardMaterial>, color: Color) -> Handle<StandardMaterial> {
@@ -148,6 +182,11 @@ pub fn setup_kmp_meshes_materials(
     let item_paths = PathMaterials::<ItemPathPoint>::from_colors(&mut materials, &colors.item_paths);
     commands.insert_resource(item_paths);
     let checkpoints = CheckpointMaterials::from_colors(&mut materials, &colors.checkpoints);
+    apply_checkpoint_plane_culling(
+        &mut materials,
+        &checkpoints,
+        settings.kmp_model.checkpoint_backface_culling,
+    );
     commands.insert_resource(checkpoints);
     let respawn_points = PointMaterials::<RespawnPoint>::from_colors(&mut materials, &colors.respawn_points);
     commands.insert_resource(respawn_points);

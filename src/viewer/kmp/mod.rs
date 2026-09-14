@@ -1,10 +1,13 @@
 pub mod checkpoints;
 pub mod components;
 pub mod csv;
+pub mod document;
 pub mod meshes_materials;
 pub mod ordering;
 pub mod path;
 pub mod point;
+pub mod preservation;
+mod rebuild;
 pub mod routes;
 pub mod sections;
 pub mod settings;
@@ -13,7 +16,7 @@ use self::{
     checkpoints::{checkpoint_plugin, spawn_checkpoint_section},
     components::Spawn,
     components::*,
-    meshes_materials::setup_kmp_meshes_materials,
+    meshes_materials::{setup_kmp_meshes_materials, update_checkpoint_plane_culling},
     path::{spawn_enemy_item_path_section, RecalcPaths},
     point::{spawn_point_section, AddRespawnPointPreview},
 };
@@ -27,18 +30,14 @@ use crate::{
     util::kmp_file::*,
 };
 use anyhow::{bail, Context};
-use bevy::{
-    ecs::{entity::EntityHashMap, system::SystemState},
-    platform::collections::HashMap,
-    prelude::*,
-};
+use bevy::{ecs::entity::EntityHashMap, platform::collections::HashMap, prelude::*};
 use derive_new::new;
 use ordering::{ordering_plugin, RefreshOrdering};
-use path::{path_plugin, save_path_section, EntityPathGroups};
+use path::{path_plugin, EntityPathGroups};
 use point::save_point_section;
 use routes::{routes_plugin, spawn_route_section};
 use sections::{add_for_all_components, section_plugin, KmpEditMode};
-use std::{ffi::OsStr, fs::File, marker::PhantomData};
+use std::{ffi::OsStr, io::Cursor, marker::PhantomData, path::PathBuf};
 
 pub fn kmp_plugin(app: &mut App) {
     app.add_plugins((
@@ -49,11 +48,12 @@ pub fn kmp_plugin(app: &mut App) {
         routes_plugin,
     ))
     .add_message::<SaveFile>()
+    .add_message::<OpenKmpRequest>()
+    .init_resource::<SaveStatus>()
     .add_systems(Startup, setup_kmp_meshes_materials.after(SetupAppSettingsSet))
-    .add_systems(
-        Update,
-        (save_kmp.pipe(handle_save_kmp_errors)).run_if(on_message::<SaveFile>),
-    )
+    // Save after UI commands, deletions, and route repair have all been applied;
+    // otherwise a same-frame Save could serialize a half-finished structural edit.
+    .add_systems(Last, save_kmp)
     .add_systems(
         Update,
         (
@@ -62,6 +62,8 @@ pub fn kmp_plugin(app: &mut App) {
                 .run_if(on_message::<KmpFileSelected>)
                 .in_set(FileLoadSet::Load),
             open_kmp_kcl.in_set(FileLoadSet::Select),
+            guard_open_kmp.after(open_kmp_kcl).in_set(FileLoadSet::Select),
+            update_checkpoint_plane_culling,
         ),
     );
 
@@ -71,29 +73,64 @@ pub fn kmp_plugin(app: &mut App) {
     add_for_all_components!(@system app, set_section_visibility);
 }
 
-pub fn open_kmp_kcl(
-    mut ev_file_dialog: MessageReader<FileDialogResult>,
-    mut ev_kmp_file_selected: MessageWriter<KmpFileSelected>,
-    mut ev_kcl_file_selected: MessageWriter<KclFileSelected>,
-    settings: ResMut<AppSettings>,
+#[derive(Message)]
+struct OpenKmpRequest {
+    path: PathBuf,
+    companion_kcl: Option<PathBuf>,
+}
+
+/// Convert file-dialog results into ordinary saves, KCL-only loads, or guarded
+/// KMP replacement requests. MessageReader leaves settings dialog results visible
+/// to their own consumer.
+fn open_kmp_kcl(
+    mut results: MessageReader<FileDialogResult>,
+    mut saves: MessageWriter<SaveFile>,
+    mut kcl_files: MessageWriter<KclFileSelected>,
+    mut kmp_requests: MessageWriter<OpenKmpRequest>,
+    settings: Res<AppSettings>,
 ) {
-    for FileDialogResult { path, dialog_type } in ev_file_dialog.read() {
-        if let DialogType::OpenKmpKcl = dialog_type {
-            if let Some(file_ext) = path.extension() {
-                if file_ext == "kmp" {
-                    ev_kmp_file_selected.write(KmpFileSelected(path.into()));
-                    if settings.open_course_kcl_in_dir {
-                        let mut course_kcl_path = path.to_owned();
-                        course_kcl_path.set_file_name("course.kcl");
-                        if course_kcl_path.exists() {
-                            ev_kcl_file_selected.write(KclFileSelected(course_kcl_path));
-                        }
-                    }
-                } else if file_ext == "kcl" {
-                    ev_kcl_file_selected.write(KclFileSelected(path.into()));
-                }
+    for FileDialogResult { path, dialog_type } in results.read() {
+        match dialog_type {
+            DialogType::SaveKmp => {
+                saves.write(SaveFile(Some(path.clone())));
             }
+            DialogType::OpenKmpKcl => match path.extension().and_then(OsStr::to_str) {
+                Some("kmp") => {
+                    let companion_kcl = settings
+                        .open_course_kcl_in_dir
+                        .then(|| {
+                            let mut kcl = path.clone();
+                            kcl.set_file_name("course.kcl");
+                            kcl
+                        })
+                        .filter(|kcl| kcl.exists());
+                    kmp_requests.write(OpenKmpRequest {
+                        path: path.clone(),
+                        companion_kcl,
+                    });
+                }
+                Some("kcl") => {
+                    kcl_files.write(KclFileSelected(path.clone()));
+                }
+                _ => {}
+            },
+            DialogType::ExportSettings | DialogType::ImportSettings => {}
         }
+    }
+}
+
+/// Dirty-state inspection needs exclusive world access, so guard the lightweight
+/// request message in a second system after dialog routing.
+fn guard_open_kmp(world: &mut World) {
+    let requests: Vec<_> = world.resource_mut::<Messages<OpenKmpRequest>>().drain().collect();
+    for request in requests {
+        crate::ui::unsaved_changes::request(
+            world,
+            crate::ui::unsaved_changes::DocumentAction::OpenKmp {
+                path: request.path,
+                companion_kcl: request.companion_kcl,
+            },
+        );
     }
 }
 
@@ -126,10 +163,10 @@ fn despawn_kmp_points(world: &mut World) {
     }
 }
 
+/// Parse before clearing the current course, then build the editable entities and
+/// their baseline together. This same path refreshes indices after a rebuild save.
 pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
-    let mut ss = SystemState::<MessageReader<KmpFileSelected>>::new(world);
-    let mut ev_kmp_file_selected = ss.get(world)?;
-    let Some(ev) = ev_kmp_file_selected.read().next() else {
+    let Some(ev) = world.resource_mut::<Messages<KmpFileSelected>>().drain().last() else {
         return Ok(());
     };
     // if the file extension is not 'kmp' return
@@ -138,10 +175,10 @@ pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
     }
 
     // open the KMP file and read it
-    let mut kmp_file = File::open(ev.0.clone()).context("could not open kmp file")?;
-    let kmp = KmpFile::read(&mut kmp_file).context("could not read kmp file")?;
-
-    world.insert_resource(KmpFilePath(ev.0.clone()));
+    let loaded_path = ev.0.clone();
+    let original_bytes = std::fs::read(&loaded_path).context("could not open kmp file")?;
+    let kmp = KmpFile::read(&mut Cursor::new(&original_bytes)).context("could not read kmp file")?;
+    let stgi = kmp.stgi.first().context("KMP has no required STGI track information")?;
 
     // get rid of all kmp points we may currently have in the world
     despawn_kmp_points(world);
@@ -151,7 +188,7 @@ pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
 
     world.init_resource::<KmpErrors>();
 
-    let stgi = kmp.stgi.first().unwrap();
+    world.remove_resource::<document::LoadedKmp>();
     let track_info = TrackInfo::from_kmp(stgi, world);
     world.insert_resource(track_info);
 
@@ -202,6 +239,16 @@ pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
 
     world.write_message(RecalcPaths::all());
 
+    // Normalize now rather than waiting for a later frame: the first save must
+    // compare against the settled imported model, not transient spawn ordering.
+    document::normalize_ordering(world, &kmp)?;
+    let document = document::LoadedKmp::capture(world, loaded_path.clone(), original_bytes, kmp)?;
+    world.insert_resource(document);
+    world.insert_resource(KmpFilePath(loaded_path));
+    // Loading itself is not a status that needs a permanent banner. Save failures
+    // remain visible, while save-mode guidance lives next to its Settings toggle.
+    world.insert_resource(SaveStatus::default());
+
     world.remove_resource::<KmpErrors>();
     world.remove_resource::<KmpSectionIdEntityMap<RoutePoint>>();
     world.remove_resource::<KmpSectionIdEntityMap<RespawnPoint>>();
@@ -211,79 +258,54 @@ pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn handle_open_kmp_errors(In(result): In<anyhow::Result<()>>) {
+fn handle_open_kmp_errors(In(result): In<anyhow::Result<()>>, mut status: ResMut<SaveStatus>) {
     if let Err(err) = result {
-        dbg!(err);
+        status.0 = format!("Open failed: {err:#}");
+        warn!("{}", status.0);
     }
 }
 
 #[derive(Resource, Deref, DerefMut, Clone, Default, new)]
-pub struct KmpSectionEntityIdMap<T: Component>(#[deref] pub EntityHashMap<u8>, PhantomData<T>);
+pub struct KmpSectionEntityIdMap<T: Component>(#[deref] pub EntityHashMap<u16>, PhantomData<T>);
 
+/// A save request captures an explicit Save As destination, or uses the current
+/// file for ordinary Save. The shared service applies the user's save-mode setting.
 #[derive(Message)]
-pub struct SaveFile;
+pub struct SaveFile(pub Option<PathBuf>);
 
-pub fn save_kmp(world: &mut World) -> anyhow::Result<()> {
-    let mut kmp = KmpFile::default();
-    let (mut poti, route_id_map) = save_point_section::<RouteSettings>(world);
-    // additional value of poti section header must be set to the total number of points in all routes
-    poti.section_header.additional_value = poti.iter().flat_map(|x| x.iter()).count() as u16;
-    kmp.poti = poti;
-    world.insert_resource(route_id_map);
-    let (jgpt, respawn_id_map) = save_point_section::<RespawnPoint>(world);
-    kmp.jgpt = jgpt;
-    world.insert_resource(respawn_id_map);
+/// Last load/save result shown in the menu area, including actionable failures.
+#[derive(Resource, Default)]
+pub struct SaveStatus(pub String);
 
-    let (ktpt, _) = save_point_section::<StartPoint>(world);
-    kmp.ktpt = ktpt;
-    let (enpt, enph) = save_path_section::<EnemyPathPoint>(world);
-    kmp.enpt = enpt;
-    kmp.enph = enph;
-    let (itpt, itph) = save_path_section::<ItemPathPoint>(world);
-    kmp.itpt = itpt;
-    kmp.itph = itph;
-    let (ckpt, ckph) = save_path_section::<Checkpoint>(world);
-    kmp.ckpt = ckpt;
-    kmp.ckph = ckph;
-    let (gobj, _) = save_point_section::<Object>(world);
-    kmp.gobj = gobj;
-    let (area, _) = save_point_section::<AreaPoint>(world);
-    kmp.area = area;
-    let (mut came, camera_id_map) = save_point_section::<KmpCamera>(world);
-    // additional value of came section is the intro cam start
-    let intro_start_e = world
-        .query_filtered::<Entity, With<KmpCameraIntroStart>>()
-        .iter(world)
-        .next();
-    came.section_header.additional_value = if let Some(e) = intro_start_e {
-        let id = *camera_id_map.get(&e).unwrap() as u16;
-        id << 8
-    } else {
-        0
-    };
-    kmp.came = came;
-    let (cnpt, _) = save_point_section::<CannonPoint>(world);
-    kmp.cnpt = cnpt;
-    let (mspt, _) = save_point_section::<BattleFinishPoint>(world);
-    kmp.mspt = mspt;
-
-    kmp.stgi = Section::new(vec![world.resource::<TrackInfo>().clone().to_kmp(
-        Transform::default(),
-        world,
-        Entity::PLACEHOLDER,
-    )]);
-
-    let kmp_file_path = world.resource::<KmpFilePath>().clone().0;
-    let mut kmp_file = File::create(kmp_file_path)?;
-
-    kmp.write(&mut kmp_file).context("could not write kmp file")?;
-
-    Ok(())
-}
-
-fn handle_save_kmp_errors(In(result): In<anyhow::Result<()>>) {
-    if let Err(err) = result {
-        dbg!(err);
+/// Drain requests explicitly: a newly-created MessageReader would replay saves.
+pub fn save_kmp(world: &mut World) {
+    let requests: Vec<_> = world.resource_mut::<Messages<SaveFile>>().drain().collect();
+    for SaveFile(path) in requests {
+        // Capture the mode before a rebuild refreshes the loaded editor document.
+        let patch = world
+            .get_resource::<AppSettings>()
+            .is_some_and(|settings| settings.patch_saving);
+        let result = document::save(world, path);
+        let completion = result
+            .as_ref()
+            .map(|_| ())
+            .map_err(|error| format!("Save failed: {error:#}"));
+        let status = match &result {
+            Ok(path) => format!(
+                "Saved {} ({}).",
+                path.display(),
+                if patch {
+                    "patch; original layout preserved"
+                } else {
+                    "rebuilt; indices refreshed, unused source data discarded"
+                }
+            ),
+            Err(error) => format!("Save failed: {error:#}"),
+        };
+        world.insert_resource(SaveStatus(status));
+        // This is a no-op for ordinary saves. A modal-triggered save either
+        // continues the queued open/exit action or returns the error to the modal.
+        crate::ui::unsaved_changes::complete_save(world, completion);
     }
 }
 

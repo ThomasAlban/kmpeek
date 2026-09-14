@@ -8,8 +8,8 @@ use crate::{
         edit::{create_delete::CreatePoint, select::Selected},
         kmp::{
             components::{
-                AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, EnemyPathPoint, ItemPathPoint,
-                KmpCamera, Object, RespawnPoint, StartPoint,
+                AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, CheckpointKind, EnemyPathPoint,
+                ItemPathPoint, KmpCamera, Object, RespawnPoint, StartPoint,
             },
             ordering::OrderId,
             sections::KmpEditMode,
@@ -92,16 +92,28 @@ impl ShowKmpTableTrait for ItemPathPoint {
 impl ShowKmpTableTrait for Checkpoint {
     const ROTATION: bool = false;
     const Y_TRANSLATION: bool = false;
-    const COLUMNS: &'static [&'static str] = &["Type"];
+    const COLUMNS: &'static [&'static str] = &["Checkpoint Type"];
     fn show_row(row: &mut TableRow, item: &mut Self) {
-        combobox_column(row, &mut item.kind);
+        let mut cp_type = item.kind.cp_type();
+        let response = row
+            .col(|ui| {
+                ui.with_layout(Layout::centered_and_justified(Direction::TopDown), |ui| {
+                    ui.add(DragValue::new(&mut cp_type).speed(DragSpeed::Slow).range(-1..=127))
+                        .on_hover_text("Raw CKPT type: -1 = Normal, 0 = Lap Count, 1–127 = Key Checkpoint ID");
+                });
+            })
+            .1;
+        if response.changed() {
+            item.kind =
+                CheckpointKind::from_cp_type(cp_type).expect("checkpoint type is constrained to its valid range");
+        }
     }
 }
 
 impl ShowKmpTableTrait for RespawnPoint {
-    const COLUMNS: &'static [&'static str] = &["Sound Trigger"];
+    const COLUMNS: &'static [&'static str] = &["Extra Data"];
     fn show_row(row: &mut TableRow, item: &mut Self) {
-        drag_value_column(row, Slow, &mut item.sound_trigger);
+        drag_value_column(row, Slow, &mut item.extra_data);
     }
 }
 
@@ -117,7 +129,9 @@ impl ShowKmpTableTrait for Object {
         "Setting 6",
         "Setting 7",
         "Setting 8",
-        "Presence",
+        "1P / TT",
+        "2P",
+        "3–4P",
     ];
     fn show_row(row: &mut TableRow, item: &mut Self) {
         drag_vec3_column(row, Slow, &mut item.scale);
@@ -125,7 +139,9 @@ impl ShowKmpTableTrait for Object {
         for setting in item.settings.iter_mut() {
             drag_value_column(row, Slow, setting);
         }
-        drag_value_column(row, Slow, &mut item.presence);
+        bit_checkbox_column(row, &mut item.presence, 0x0001);
+        bit_checkbox_column(row, &mut item.presence, 0x0002);
+        bit_checkbox_column(row, &mut item.presence, 0x0004);
     }
 }
 
@@ -144,10 +160,17 @@ impl ShowKmpTableTrait for AreaPoint {
                 combobox_column(row, env_effect_obj);
             }
             AreaKind::FogEffect { bfg_entry, setting_2 } => {
-                two_labelled_drag_values_column(row, (bfg_entry, Slow, "BFG Entry"), (setting_2, Slow, "BFG Entry"));
+                two_labelled_drag_values_column(row, (bfg_entry, Slow, "BFG Entry"), (setting_2, Slow, "Setting 2"));
             }
             AreaKind::MovingRoad => {
-                // TODO - add route link
+                // This payload-only table has no entity/route queries. Always emit
+                // the Setting cell and direct link editing to the entity-aware panel.
+                row.col(|ui| {
+                    ui.label("Route: use Edit panel");
+                });
+            }
+            AreaKind::ForceRecalc { enemy_path_id } => {
+                labelled_drag_value_column(row, enemy_path_id, Slow, "Enemy Point Index");
             }
             AreaKind::MinimapControl { setting_1, setting_2 } => {
                 two_labelled_drag_values_column(row, (setting_1, Slow, "Setting 1"), (setting_2, Slow, "Setting 2"));
@@ -159,7 +182,10 @@ impl ShowKmpTableTrait for AreaPoint {
             AreaKind::ObjectGroup { group_id } | AreaKind::ObjectUnload { group_id } => {
                 labelled_drag_value_column(row, group_id, Slow, "Group ID");
             }
-            _ => (),
+            _ => {
+                // Even variants without settings need a cell to align the row.
+                row.col(|_| {});
+            }
         };
     }
 }
@@ -168,8 +194,7 @@ impl ShowKmpTableTrait for KmpCamera {
     const COLUMNS: &'static [&'static str] = &[
         "Type",
         "Next Index",
-        "Route Index",
-        "Time",
+        "Duration",
         "Point Speed",
         "Zoom Speed",
         "View Speed",
@@ -184,7 +209,7 @@ impl ShowKmpTableTrait for KmpCamera {
     fn show_row(row: &mut TableRow, item: &mut Self) {
         combobox_column(row, &mut item.kind);
         drag_value_column(row, Slow, &mut item.next_index);
-        drag_value_column(row, Slow, &mut item.time);
+        drag_value_column(row, Slow, &mut item.duration);
         drag_value_column(row, Slow, &mut item.point_velocity);
         drag_value_column(row, Slow, &mut item.zoom_velocity);
         drag_value_column(row, Slow, &mut item.view_velocity);
@@ -582,6 +607,25 @@ fn combobox_column<T: strum::IntoEnumIterator + std::fmt::Display + PartialEq + 
     })
     .1
 }
+fn bit_checkbox_column(row: &mut TableRow, value: &mut u16, mask: u16) -> Response {
+    let mut checked = *value & mask != 0;
+    let response = row
+        .col(|ui| {
+            ui.with_layout(Layout::centered_and_justified(Direction::TopDown), |ui| {
+                ui.add(Checkbox::without_text(&mut checked));
+            });
+        })
+        .1;
+    if response.changed() {
+        if checked {
+            *value |= mask;
+        } else {
+            *value &= !mask;
+        }
+    }
+    response
+}
+
 fn checkbox_column(row: &mut TableRow, item: &mut bool) -> Response {
     row.col(|ui| {
         ui.with_layout(Layout::centered_and_justified(Direction::TopDown), |ui| {

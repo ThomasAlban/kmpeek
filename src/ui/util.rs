@@ -239,6 +239,31 @@ pub mod multi_edit {
         }
         res
     }
+
+    pub fn bit_checkbox_multi_edit<'a>(
+        ui: &mut Ui,
+        mask: u16,
+        items: impl IntoIterator<Item = Mut<'a, u16>>,
+    ) -> Response {
+        let mut items: Vec<_> = items.into_iter().collect();
+        let mut checked = *items[0] & mask != 0;
+        let all_equal = items.iter().all(|value| (**value & mask != 0) == checked);
+        let res = ui.add(Checkbox::without_text(&mut checked).indeterminate(!all_equal));
+        if !all_equal && res.changed() {
+            checked = true;
+        }
+
+        if res.changed() {
+            for value in &mut items {
+                if checked {
+                    **value |= mask;
+                } else {
+                    **value &= !mask;
+                }
+            }
+        }
+        res
+    }
 }
 
 pub fn combobox_enum<T>(ui: &mut Ui, value: &mut T, width: Option<f32>) -> Response
@@ -311,26 +336,11 @@ pub fn drag_vec3(ui: &mut Ui, value: &mut Vec3, speed: impl Into<f64>) -> (Respo
 pub fn get_euler_rot(transform: &Transform) -> Vec3 {
     let euler = transform.rotation.to_euler(EulerRot::XYZ);
 
-    let mut rot = vec3(
+    vec3(
         f32::to_degrees(euler.0),
         f32::to_degrees(euler.1),
         f32::to_degrees(euler.2),
-    );
-
-    let clamp_0_360 = |angle: &mut f32| {
-        *angle %= 360.;
-        if *angle < 0. {
-            *angle += 360.;
-        }
-        if *angle == 360. {
-            *angle = 0.;
-        }
-    };
-
-    clamp_0_360(&mut rot.x);
-    clamp_0_360(&mut rot.y);
-    clamp_0_360(&mut rot.z);
-    rot
+    )
 }
 pub fn set_euler_rot(rot: Vec3, transform: &mut Transform) {
     transform.rotation = Quat::from_euler(
@@ -597,7 +607,9 @@ impl_img!(pivot_median);
 impl_img!(rotate);
 impl_img!(scale);
 impl_img!(select_box);
+impl_img!(select_painter);
 impl_img!(track_info);
+impl_img!(transform);
 impl_img!(translate);
 impl_img!(tweak);
 impl_img!(view_off);
@@ -619,4 +631,18 @@ impl Icons {
         Color32::from_rgb(50, 170, 170), // Battle Finish Points
         Color32::WHITE,                  // Track Info
     ];
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn euler_rotation_keeps_negative_angles() {
+        let transform = Transform::from_rotation(Quat::from_rotation_x(-45_f32.to_radians()));
+
+        let rotation = get_euler_rot(&transform);
+
+        assert!((rotation.x + 45.0).abs() < 0.001);
+    }
 }

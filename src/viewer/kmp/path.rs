@@ -1,9 +1,11 @@
+#[cfg(test)]
+use super::Section;
 use super::{
     checkpoints::CheckpointRight,
     meshes_materials::{CheckpointMaterials, KmpMeshes, PathMaterials},
     ordering::{NextOrderID, OrderId},
     Checkpoint, EnemyPathPoint, ItemPathPoint, KmpComponent, KmpSectionName, KmpSelectablePoint, PathGroup,
-    PathOverallStart, RoutePoint, RouteSettings, Section, Spawn, Spawner, TransformEditOptions,
+    PathOverallStart, RoutePoint, RouteSettings, Spawn, Spawner, TransformEditOptions,
 };
 use crate::{
     ui::settings::AppSettings,
@@ -20,11 +22,10 @@ use crate::{
         normalize::Normalize,
     },
 };
+#[cfg(test)]
+use bevy::ecs::system::SystemState;
 use bevy::{
-    ecs::{
-        entity::EntityHashMap,
-        system::{SystemParam, SystemState},
-    },
+    ecs::{entity::EntityHashMap, system::SystemParam},
     platform::collections::{HashMap, HashSet},
     prelude::*,
     transform::TransformSystems,
@@ -45,6 +46,8 @@ pub fn path_plugin(app: &mut App) {
                 reconcile_node_links::<Checkpoint>,
                 reconcile_node_links::<CheckpointRight>,
                 reconcile_node_links::<RoutePoint>,
+                update_path_start_colors::<EnemyPathPoint>,
+                update_path_start_colors::<ItemPathPoint>,
             )
                 .after(DeleteSet),
         )
@@ -61,6 +64,23 @@ pub fn path_plugin(app: &mut App) {
         )
         .add_observer(on_add_kmp_path_node)
         .add_observer(on_remove_kmp_path_node);
+}
+
+fn update_path_start_colors<T: Component + Clone>(
+    materials: Option<Res<PathMaterials<T>>>,
+    mut q_points: Query<(Has<PathOverallStart>, &mut MeshMaterial3d<StandardMaterial>), With<T>>,
+) {
+    let Some(materials) = materials else {
+        return;
+    };
+    for (is_start, mut material) in q_points.iter_mut() {
+        let expected = if is_start {
+            materials.start_point.clone()
+        } else {
+            materials.point.clone()
+        };
+        material.set_if_neq(MeshMaterial3d(expected));
+    }
 }
 
 // represents a link between 2 nodes
@@ -493,8 +513,16 @@ where
             }
         }
 
-        for i in group.start..(group.start + group.group_length) {
-            let node = &node_entries[i as usize];
+        // Widen before addition: valid ranges can cross the u8 boundary.
+        let start = usize::from(group.start);
+        let end = start + usize::from(group.group_length);
+        let Some(entries) = node_entries.get(start..end) else {
+            warn!("Skipping invalid path group range {start}..{end}");
+            // Keep the group slot so subsequent group indices remain valid.
+            result.push((KmpDataGroup { nodes, next_groups }, kmp_component_group));
+            continue;
+        };
+        for node in entries {
             nodes.push(node.clone());
             let kmp_component = T::from_kmp(node, world);
             kmp_component_group.push(kmp_component);
@@ -503,6 +531,18 @@ where
     }
     result
 }
+// Imported topology is not an interactive edit: reverse edges, self-links and
+// cycles are legal. Validate both endpoints before mutating either, and retain
+// reciprocal links even when imported in-degree exceeds the interactive cap.
+fn link_imported_nodes(world: &mut World, previous: Entity, next: Entity) -> bool {
+    if world.get::<KmpPathNode>(previous).is_none() || world.get::<KmpPathNode>(next).is_none() {
+        return false;
+    }
+    world.get_mut::<KmpPathNode>(previous).unwrap().next_nodes.insert(next);
+    world.get_mut::<KmpPathNode>(next).unwrap().prev_nodes.insert(previous);
+    true
+}
+
 // go through a list of entity groups and link them together
 pub fn link_entity_groups(world: &mut World, entity_groups: Vec<EntityGroup>) {
     // link the entities together
@@ -511,7 +551,7 @@ pub fn link_entity_groups(world: &mut World, entity_groups: Vec<EntityGroup>) {
         // in each group, link the previous node to the current node
         for entity in group.entities.iter() {
             if let Some(prev_entity) = prev_entity {
-                KmpPathNode::link_nodes(prev_entity, *entity, world);
+                link_imported_nodes(world, prev_entity, *entity);
             }
             prev_entity = Some(*entity);
         }
@@ -520,9 +560,15 @@ pub fn link_entity_groups(world: &mut World, entity_groups: Vec<EntityGroup>) {
         // for each next group linked to the current group
         for next_group_index in group.next_groups.iter() {
             // get the first entity in the next group
-            let next_entity = entity_groups[*next_group_index as usize].entities[0];
+            let Some(next_entity) = entity_groups
+                .get(usize::from(*next_group_index))
+                .and_then(|group| group.entities.first())
+            else {
+                warn!("Skipping link to missing or empty path group {next_group_index}");
+                continue;
+            };
             // link the last entity in the current group with the first entity in the next group
-            KmpPathNode::link_nodes(entity, next_entity, world);
+            link_imported_nodes(world, entity, *next_entity);
         }
     }
 }
@@ -764,6 +810,7 @@ pub fn traverse_paths(
 pub struct TraversePath<'w, 's, T: Component> {
     q_start: Query<'w, 's, Entity, (With<PathOverallStart>, With<T>, With<KmpPathNode>)>,
     q: Query<'w, 's, (Entity, &'static KmpPathNode), With<T>>,
+    q_order: Query<'w, 's, &'static OrderId, With<T>>,
 }
 impl<'w, 's, T: Component> TraversePath<'w, 's, T> {
     fn traverse(self) -> EntityPathGroups<T> {
@@ -778,17 +825,24 @@ impl<'w, 's, T: Component> TraversePath<'w, 's, T> {
         if nodes_to_handle.is_empty() {
             return EntityPathGroups::new(Vec::new());
         }
-        let first = self
-            .q_start
-            .single()
-            .ok()
-            .and_then(|x| nodes_to_handle.remove(&x).map(|y| (x, y)));
+        // OrderId is the stable editor order. Entity breaks ties for missing or
+        // duplicate IDs without relying on randomized collection iteration.
+        let mut ordered_nodes: Vec<_> = nodes_to_handle.keys().copied().collect();
+        ordered_nodes.sort_by_key(|e| (self.q_order.get(*e).map_or(u32::MAX, |id| id.0), e.to_bits()));
+        let first = ordered_nodes
+            .iter()
+            .copied()
+            .find(|e| self.q_start.contains(*e))
+            .map(|e| (e, nodes_to_handle[&e]));
 
         let mut first_iter = true;
         while !nodes_to_handle.is_empty() {
             let (node_e, node) = match first.filter(|_| first_iter) {
                 Some(first) => first,
-                None => nodes_to_handle.iter().next().map(|x| (*x.0, *x.1)).unwrap(),
+                None => {
+                    let e = *ordered_nodes.iter().find(|e| nodes_to_handle.contains_key(*e)).unwrap();
+                    (e, nodes_to_handle[&e])
+                }
             };
             first_iter = false;
 
@@ -808,6 +862,7 @@ impl<'w, 's, T: Component> TraversePath<'w, 's, T> {
             // if we are not at the overall first node
             if !first.map(|x| x.0 == node_e).unwrap_or(false) {
                 // while there is only one previous node, and it only has one next node, and it is not a battle dispatcher
+                let mut visited: HashSet<Entity> = HashSet::from_iter([node_e]);
                 while let Some((prev_node_e, prev_node)) = (start_node.prev_nodes.len() == 1)
                     .then(|| self.q.get(*start_node.prev_nodes.iter().next().unwrap()).ok())
                     .flatten()
@@ -818,10 +873,12 @@ impl<'w, 's, T: Component> TraversePath<'w, 's, T> {
                     if node_to_path_index.contains_key(&prev_node_e) {
                         break;
                     }
-                    (start_node_e, start_node) = (prev_node_e, prev_node);
-                    if start_node_e == node_e {
+                    if !visited.insert(prev_node_e) {
+                        // An unanchored cycle starts at its lowest ordered seed.
+                        (start_node_e, start_node) = (node_e, node);
                         break;
                     }
+                    (start_node_e, start_node) = (prev_node_e, prev_node);
                 }
             }
 
@@ -862,6 +919,12 @@ impl<'w, 's, T: Component> TraversePath<'w, 's, T> {
             }
         }
 
+        for path in &mut paths {
+            path.prev_paths.sort_unstable();
+            path.prev_paths.dedup();
+            path.next_paths.sort_unstable();
+            path.next_paths.dedup();
+        }
         EntityPathGroups::new(paths)
     }
 }
@@ -876,6 +939,9 @@ pub struct EntityPathGroup {
 #[derive(Resource, Clone, new, Deref, DerefMut)]
 pub struct EntityPathGroups<T: Component>(#[deref] pub Vec<EntityPathGroup>, PhantomData<T>);
 
+// Kept only for traversal regression tests. Application saving must use the
+// loaded-document patcher: graph regeneration cannot preserve source metadata.
+#[cfg(test)]
 pub fn save_path_section<T: KmpComponent>(
     world: &mut World,
 ) -> (Section<T::KmpFormat>, Section<PathGroup<T::KmpFormat>>)
@@ -895,9 +961,17 @@ where
     let mut points = Vec::new();
     let mut paths = Vec::new();
 
+    assert!(
+        entity_paths.len() <= 255,
+        "path group indices must not use the 0xff sentinel"
+    );
     for entity_path in entity_paths.iter() {
-        let start = points.len() as u8;
-        let group_length = entity_path.path.len() as u8;
+        let start = u8::try_from(points.len()).expect("path group start exceeds u8 index range");
+        let group_length = u8::try_from(entity_path.path.len()).expect("path group length exceeds u8 range");
+        assert!(
+            entity_path.prev_paths.len() <= 6 && entity_path.next_paths.len() <= 6,
+            "path group has more than six links"
+        );
 
         let mut prev_group = [0xffu8; 6];
         for (i, index) in entity_path.prev_paths.iter().enumerate() {
@@ -908,20 +982,42 @@ where
             next_group[i] = *index as u8;
         }
 
-        for e in entity_path.path.iter() {
+        for (offset, e) in entity_path.path.iter().enumerate() {
             let transform = world.entity(*e).get::<Transform>().unwrap();
-            let pt = world
+            let mut pt = world
                 .entity(*e)
                 .get::<T>()
                 .unwrap()
                 .clone()
                 .to_kmp(*transform, world, *e);
+            // CKPT links describe adjacency within the serialized CKPH group,
+            // not editor OrderIds. Keep this format-specific correction local
+            // rather than temporarily mutating the world's ordering components.
+            if let Some(cp) = (&mut pt as &mut dyn std::any::Any).downcast_mut::<crate::util::kmp_file::Ckpt>() {
+                let (previous, next) =
+                    checkpoint_serialized_neighbors(usize::from(start), offset, entity_path.path.len());
+                cp.prev_cp = previous;
+                cp.next_cp = next;
+            }
             points.push(pt);
         }
         paths.push(PathGroup::new(start, group_length, prev_group, next_group, 0));
     }
 
     (Section::new(points), Section::new(paths))
+}
+
+#[cfg(test)]
+fn checkpoint_serialized_neighbors(start: usize, offset: usize, length: usize) -> (u8, u8) {
+    let index = |index| u8::try_from(index).ok().filter(|index| *index != 0xff).unwrap_or(0xff);
+    (
+        if offset > 0 { index(start + offset - 1) } else { 0xff },
+        if offset + 1 < length {
+            index(start + offset + 1)
+        } else {
+            0xff
+        },
+    )
 }
 
 #[cfg(test)]
@@ -954,6 +1050,212 @@ mod tests {
             .iter()
             .position(|path| path.path.contains(&entity))
             .expect("entity should belong to a traversed path")
+    }
+
+    #[test]
+    fn import_ranges_widen_before_addition_and_keep_invalid_slots() {
+        use crate::util::kmp_file::Enpt;
+        let mut world = World::new();
+        let mut kmp = KmpFile::default();
+        kmp.enpt = Section::new(
+            (0..260)
+                .map(|i| Enpt {
+                    leniency: i as f32,
+                    ..default()
+                })
+                .collect(),
+        );
+        kmp.enph = Section::new(vec![
+            PathGroup::new(250, 10, [0xff; 6], [1, 0xff, 0xff, 0xff, 0xff, 0xff], 0),
+            PathGroup::new(255, 10, [0xff; 6], [0xff; 6], 0),
+            PathGroup::new(0, 1, [0xff; 6], [0xff; 6], 0),
+        ]);
+        let groups = get_kmp_data_and_component_groups::<EnemyPathPoint>(&kmp, &mut world);
+        assert_eq!(groups.len(), 3);
+        assert_eq!(groups[0].0.nodes.len(), 10);
+        assert_eq!(groups[0].0.nodes[9].leniency, 259.0);
+        assert!(groups[1].0.nodes.is_empty());
+        assert_eq!(groups[2].0.nodes.len(), 1);
+    }
+
+    #[test]
+    fn imported_edges_allow_reverse_self_cycles_and_ignore_invalid_targets() {
+        let mut world = World::new();
+        let a = spawn_node(&mut world, false);
+        let b = spawn_node(&mut world, false);
+        let c = spawn_node(&mut world, false);
+        link_entity_groups(
+            &mut world,
+            vec![
+                EntityGroup {
+                    entities: vec![a],
+                    next_groups: vec![0, 1, 1, 3, 99],
+                },
+                EntityGroup {
+                    entities: vec![b],
+                    next_groups: vec![0, 2],
+                },
+                EntityGroup {
+                    entities: vec![c],
+                    next_groups: vec![0],
+                },
+                EntityGroup {
+                    entities: vec![],
+                    next_groups: vec![],
+                },
+            ],
+        );
+        for (previous, next) in [(a, a), (a, b), (b, a), (b, c), (c, a)] {
+            assert!(world.get::<KmpPathNode>(previous).unwrap().next_nodes.contains(&next));
+            assert!(world.get::<KmpPathNode>(next).unwrap().prev_nodes.contains(&previous));
+        }
+        assert_eq!(world.get::<KmpPathNode>(a).unwrap().next_nodes.len(), 2);
+        let stale = world.spawn_empty().id();
+        world.despawn(stale);
+        let before = world.get::<KmpPathNode>(a).unwrap().clone();
+        assert!(!link_imported_nodes(&mut world, a, stale));
+        assert_eq!(*world.get::<KmpPathNode>(a).unwrap(), before);
+        assert!(!KmpPathNode::can_link_nodes(a, a, &world));
+        let paths = traverse(&mut world);
+        assert_eq!(paths.iter().map(|p| p.path.len()).sum::<usize>(), 3);
+    }
+
+    #[test]
+    fn traverse_singleton_including_self_link() {
+        let mut world = World::new();
+        let a = spawn_node(&mut world, true);
+        let paths = traverse(&mut world);
+        assert_eq!(paths.len(), 1);
+        assert_eq!(paths[0].path, vec![a]);
+        link_imported_nodes(&mut world, a, a);
+        let paths = traverse(&mut world);
+        assert_eq!(paths[0].path, vec![a]);
+        assert_eq!(paths[0].prev_paths, vec![0]);
+        assert_eq!(paths[0].next_paths, vec![0]);
+    }
+
+    #[test]
+    fn unanchored_cycle_starts_at_lowest_order_id() {
+        let mut world = World::new();
+        let a = spawn_node(&mut world, false);
+        let b = spawn_node(&mut world, false);
+        let c = spawn_node(&mut world, false);
+        world.entity_mut(a).insert(OrderId(30));
+        world.entity_mut(b).insert(OrderId(10));
+        world.entity_mut(c).insert(OrderId(20));
+        for (previous, next) in [(a, b), (b, c), (c, a)] {
+            link_imported_nodes(&mut world, previous, next);
+        }
+        let paths = traverse(&mut world);
+        assert_eq!(paths.len(), 1);
+        assert_eq!(paths[0].path, vec![b, c, a]);
+        assert_eq!(paths[0].next_paths, vec![0]);
+    }
+
+    #[test]
+    fn singleton_exports_one_point_and_one_group() {
+        let mut world = World::new();
+        world.spawn((
+            EnemyPathPoint::default(),
+            KmpPathNode::default(),
+            Transform::default(),
+            OrderId(42),
+            PathOverallStart,
+        ));
+        let (points, groups) = save_path_section::<EnemyPathPoint>(&mut world);
+        assert_eq!(points.len(), 1);
+        assert_eq!(groups.len(), 1);
+        assert_eq!((groups[0].start, groups[0].group_length), (0, 1));
+    }
+
+    #[test]
+    #[should_panic(expected = "path group length exceeds u8 range")]
+    fn export_rejects_group_length_overflow_instead_of_wrapping() {
+        let mut world = World::new();
+        let entities: Vec<_> = (0..256)
+            .map(|order| {
+                world
+                    .spawn((
+                        EnemyPathPoint::default(),
+                        KmpPathNode::default(),
+                        Transform::default(),
+                        OrderId(order),
+                    ))
+                    .id()
+            })
+            .collect();
+        for pair in entities.windows(2) {
+            link_imported_nodes(&mut world, pair[0], pair[1]);
+        }
+        save_path_section::<EnemyPathPoint>(&mut world);
+    }
+
+    #[test]
+    fn export_is_ordered_and_byte_stable_across_spawn_and_link_order() {
+        use binrw::BinWrite;
+        fn export(reverse: bool) -> Vec<u8> {
+            let mut world = World::new();
+            let orders = if reverse { vec![3, 2, 1, 0] } else { vec![0, 1, 2, 3] };
+            let mut entities = vec![Entity::PLACEHOLDER; 4];
+            for order in orders {
+                entities[order] = world
+                    .spawn((
+                        EnemyPathPoint::default(),
+                        Transform::from_xyz(order as f32, 0., 0.),
+                        KmpPathNode::default(),
+                        OrderId(order as u32),
+                    ))
+                    .id();
+            }
+            let targets = if reverse { vec![2, 1] } else { vec![1, 2] };
+            for target in targets {
+                link_imported_nodes(&mut world, entities[0], entities[target]);
+            }
+            let (points, groups) = save_path_section::<EnemyPathPoint>(&mut world);
+            assert_eq!(
+                points.iter().map(|p| p.position[0]).collect::<Vec<_>>(),
+                vec![0., 1., 2., 3.]
+            );
+            assert_eq!(groups[0].next_group, [1, 2, 0xff, 0xff, 0xff, 0xff]);
+            let mut bytes = std::io::Cursor::new(Vec::new());
+            points.write_be(&mut bytes).unwrap();
+            groups.write_be(&mut bytes).unwrap();
+            bytes.into_inner()
+        }
+        assert_eq!(export(false), export(true));
+    }
+
+    #[test]
+    fn checkpoint_export_uses_serialized_indices_not_order_ids() {
+        use super::super::checkpoints::CheckpointLeft;
+        let mut world = World::new();
+        let mut entities = Vec::new();
+        for order in [90, 10, 50] {
+            let right = world.spawn(Transform::default()).id();
+            entities.push(
+                world
+                    .spawn((
+                        Checkpoint::default(),
+                        CheckpointLeft { right, ..default() },
+                        Transform::default(),
+                        KmpPathNode::default(),
+                        OrderId(order),
+                    ))
+                    .id(),
+            );
+        }
+        world.entity_mut(entities[0]).insert(PathOverallStart);
+        link_imported_nodes(&mut world, entities[0], entities[1]);
+        link_imported_nodes(&mut world, entities[1], entities[2]);
+        link_imported_nodes(&mut world, entities[2], entities[0]);
+        let (points, groups) = save_path_section::<Checkpoint>(&mut world);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(
+            points.iter().map(|cp| (cp.prev_cp, cp.next_cp)).collect::<Vec<_>>(),
+            vec![(0xff, 1), (0, 2), (1, 0xff)]
+        );
+        assert_eq!(checkpoint_serialized_neighbors(254, 0, 3), (0xff, 0xff));
+        assert_eq!(checkpoint_serialized_neighbors(254, 2, 3), (0xff, 0xff));
     }
 
     #[test]

@@ -3,6 +3,7 @@ use super::{
     meshes_materials::{CheckpointMaterials, KmpMeshes},
     ordering::{NextOrderID, OrderId},
     path::{get_kmp_data_and_component_groups, link_entity_groups, EntityGroup, KmpPathNode},
+    settings::DEFAULT_CHECKPOINT_HEIGHT,
     Checkpoint, CheckpointKind, CheckpointMarker, KmpFile, KmpSectionIdEntityMap, KmpSelectablePoint, PathOverallStart,
     RespawnPoint, TransformEditOptions,
 };
@@ -35,9 +36,10 @@ pub fn checkpoint_plugin(app: &mut App) {
         .add_systems(
             Update,
             (
+                sync_checkpoint_height,
                 set_checkpoint_right_visibility,
                 update_checkpoint_lines_arrows,
-                update_checkpoint_planes,
+                update_checkpoint_planes.after(sync_checkpoint_height),
                 update_checkpoint_colors,
             ),
         )
@@ -121,14 +123,19 @@ fn calc_cp_plane_transform(left: Vec2, right: Vec2, height: f32) -> Transform {
         .with_scale(vec3(left.distance(right), 1., pos.y * 2.))
 }
 
-const DEFAULT_CP_HEIGHT: f32 = 15000.;
+fn sync_checkpoint_height(settings: Res<AppSettings>, mut checkpoint_height: ResMut<CheckpointHeight>) {
+    let height = settings.kmp_model.checkpoint_height;
+    if height.is_finite() {
+        checkpoint_height.set_if_neq(CheckpointHeight(height));
+    }
+}
 
-#[derive(Resource, Deref, DerefMut)]
+#[derive(Resource, Deref, DerefMut, PartialEq)]
 pub struct CheckpointHeight(pub f32);
 
 impl Default for CheckpointHeight {
     fn default() -> Self {
-        Self(DEFAULT_CP_HEIGHT)
+        Self(DEFAULT_CHECKPOINT_HEIGHT)
     }
 }
 
@@ -163,7 +170,7 @@ pub fn checkpoint_spawner(
     cp: Checkpoint,
     #[builder(default)] pos: (Vec2, Vec2),
     visible: Option<bool>,
-    #[builder(default = DEFAULT_CP_HEIGHT)] height: f32,
+    #[builder(default = DEFAULT_CHECKPOINT_HEIGHT)] height: f32,
     order_id: Option<u32>,
     right_e: Option<Entity>,
 ) -> (Entity, Entity) {
@@ -370,8 +377,9 @@ fn set_checkpoint_node_height(
     mut q_cp: Query<&mut Transform, Or<(With<Checkpoint>, With<CheckpointRight>)>>,
     cp_height: Res<CheckpointHeight>,
 ) {
+    let height_changed = cp_height.is_changed();
     for mut cp in q_cp.iter_mut() {
-        if cp.is_changed() {
+        if cp.is_changed() || height_changed {
             cp.translation.y = cp_height.0;
         }
     }
@@ -445,12 +453,13 @@ fn update_checkpoint_planes(
     q_cp_node: Query<(Ref<Transform>, &Visibility), Without<CheckpointPlane>>,
     cp_height: Res<CheckpointHeight>,
 ) {
+    let height_changed = cp_height.is_changed();
     for (plane, mut plane_trans, mut plane_vis) in q_cp_plane.iter_mut() {
         let Ok([(l_trans, l_vis), (r_trans, _)]) = q_cp_node.get_many([plane.left, plane.right]) else {
             continue;
         };
         plane_vis.set_if_neq(*l_vis);
-        if !l_trans.is_changed() && !r_trans.is_changed() {
+        if !l_trans.is_changed() && !r_trans.is_changed() && !height_changed {
             continue;
         }
         let new_plane_trans = calc_cp_plane_transform(l_trans.translation.xz(), r_trans.translation.xz(), cp_height.0);

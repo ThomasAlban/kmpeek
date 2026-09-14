@@ -9,9 +9,9 @@ use crate::{
         camera::{CameraMode, CameraModeChanged},
         edit::{
             link_select_mode::LinkSelectMode,
-            select::SelectBox,
+            select::{SelectBox, SelectPainter},
             transform_gizmo::{show_transform_gizmo, TransformGizmoState},
-            EditMode,
+            EditorMode,
         },
         kmp::components::{RespawnPoint, RoutePoint},
     },
@@ -99,7 +99,7 @@ pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
         show_transform_gizmo(ui, egui_viewport_rect, world);
     });
 
-    show_select_box(ui, world);
+    show_selection_overlay(ui, world);
 
     let responses = show_overlayed_ui(ui, world);
 
@@ -117,7 +117,7 @@ pub fn show_viewport_tab(ui: &mut Ui, world: &mut World) {
     }
 }
 
-fn show_select_box(ui: &mut Ui, world: &mut World) {
+fn show_selection_overlay(ui: &mut Ui, world: &mut World) {
     let vp_rect = world.resource::<ViewportInfo>().viewport_rect.to_egui_rect();
     ui.scope_builder(UiBuilder::new().max_rect(vp_rect), |ui| {
         ui.set_clip_rect(vp_rect);
@@ -134,6 +134,24 @@ fn show_select_box(ui: &mut Ui, world: &mut World) {
                 },
                 StrokeKind::Inside,
             );
+        }
+
+        if *world.resource::<EditorMode>() == EditorMode::SelectPainter {
+            let radius = world
+                .resource::<SelectPainter>()
+                .radius
+                .clamp(SelectPainter::MIN_RADIUS, SelectPainter::MAX_RADIUS);
+            if let Some(pointer_pos) = ui
+                .input(|input| input.pointer.hover_pos())
+                .filter(|pos| vp_rect.contains(*pos))
+            {
+                painter.circle(
+                    pointer_pos,
+                    radius,
+                    Color32::from_rgba_unmultiplied(200, 200, 200, 12),
+                    Stroke::new(1.5, Color32::LIGHT_GRAY),
+                );
+            }
         }
     });
 }
@@ -207,6 +225,23 @@ fn show_overlayed_ui(ui: &mut Ui, world: &mut World) -> Vec<Response> {
                     responses.push(r);
                 }
 
+                let painter_btn = ui.button("Painter Options");
+                responses.push(painter_btn.clone());
+                let r = button_triggered_popup(ui, "painter_options_popup", painter_btn, |ui| {
+                    let mut painter = world.resource_mut::<SelectPainter>();
+                    ui.add(
+                        egui::Slider::new(
+                            &mut painter.radius,
+                            SelectPainter::MIN_RADIUS..=SelectPainter::MAX_RADIUS,
+                        )
+                        .text("Painter Radius")
+                        .suffix(" px"),
+                    );
+                });
+                if let Some(r) = r {
+                    responses.push(r);
+                }
+
                 let camera_mode = &mut world.resource_mut::<AppSettings>().camera.mode;
                 let mut ev_camera_mode_change = None;
                 let camera_btn = ui.button(format!("Camera: {}", camera_mode));
@@ -235,21 +270,30 @@ fn show_overlayed_ui(ui: &mut Ui, world: &mut World) -> Vec<Response> {
                     responses.push(r);
                 }
             });
-            // cursor/gizmo mode
+            // Blender-style mutually exclusive editor tools.
             let vertical_res = ui
                 .vertical(|ui| {
                     ui.style_mut().spacing.button_padding = egui::Vec2::ZERO;
-                    let mode = &mut *world.resource_mut::<EditMode>();
                     let size = 35.;
-
-                    image_selectable_value(ui, mode, EditMode::Tweak, Icons::tweak(ui.ctx(), size), size)
-                        .on_hover_text_at_pointer("Drag points around freely");
-                    image_selectable_value(ui, mode, EditMode::SelectBox, Icons::select_box(ui.ctx(), size), size)
-                        .on_hover_text_at_pointer("Select points with a selection box");
-                    image_selectable_value(ui, mode, EditMode::Translate, Icons::translate(ui.ctx(), size), size)
-                        .on_hover_text_at_pointer("Translate points with a gizmo");
-                    image_selectable_value(ui, mode, EditMode::Rotate, Icons::rotate(ui.ctx(), size), size)
-                        .on_hover_text_at_pointer("Rotate points with a gizmo");
+                    let mode = &mut *world.resource_mut::<EditorMode>();
+                    image_selectable_value(ui, mode, EditorMode::Default, Icons::select_box(ui.ctx(), size), size)
+                        .on_hover_text_at_pointer("Select and drag points, or box-select from empty space");
+                    image_selectable_value(
+                        ui,
+                        mode,
+                        EditorMode::SelectPainter,
+                        Icons::select_painter(ui.ctx(), size),
+                        size,
+                    )
+                    .on_hover_text_at_pointer("Paint-select points within the brush radius");
+                    image_selectable_value(ui, mode, EditorMode::Translate, Icons::translate(ui.ctx(), size), size)
+                        .on_hover_text_at_pointer("Translate gizmo");
+                    image_selectable_value(ui, mode, EditorMode::Rotate, Icons::rotate(ui.ctx(), size), size)
+                        .on_hover_text_at_pointer("Rotate gizmo");
+                    image_selectable_value(ui, mode, EditorMode::Scale, Icons::scale(ui.ctx(), size), size)
+                        .on_hover_text_at_pointer("Scale point spacing with grouped multiple selection");
+                    image_selectable_value(ui, mode, EditorMode::Transform, Icons::transform(ui.ctx(), size), size)
+                        .on_hover_text_at_pointer("Combined translate, rotate, and scale gizmo");
                 })
                 .response;
             responses.push(vertical_res);

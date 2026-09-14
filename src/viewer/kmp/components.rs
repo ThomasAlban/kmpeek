@@ -43,6 +43,9 @@ pub struct TrackInfo {
     pub track_type: TrackType,
     pub lap_count: u8,
     pub speed_mod: f32,
+    /// STGI bytes 8..10 have no verified interpretation; retain the full word.
+    #[serde(default)]
+    pub padding_1: u16,
     pub lens_flare_color: [u8; 4],
     pub lens_flare_flashing: bool,
     pub first_player_pos: FirstPlayerPos,
@@ -65,10 +68,16 @@ pub enum FirstPlayerPos {
 #[derive(Component, Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub struct StartPoint {
     pub player_index: i16,
+    /// Unknown trailing KTPT word, not an editor ordering index.
+    #[serde(default)]
+    pub padding: u16,
 }
 impl Default for StartPoint {
     fn default() -> Self {
-        Self { player_index: -1 }
+        Self {
+            player_index: -1,
+            padding: 0,
+        }
     }
 }
 
@@ -149,6 +158,24 @@ pub enum CheckpointKind {
     #[strum(serialize = "Lap Count")]
     LapCount,
 }
+impl CheckpointKind {
+    pub fn from_cp_type(cp_type: i8) -> Option<Self> {
+        match cp_type {
+            -1 => Some(Self::Normal),
+            0 => Some(Self::LapCount),
+            id @ 1..=127 => Some(Self::Key(id as u8)),
+            _ => None,
+        }
+    }
+
+    pub fn cp_type(&self) -> i8 {
+        match self {
+            Self::Normal => -1,
+            Self::LapCount => 0,
+            Self::Key(id) => *id as i8,
+        }
+    }
+}
 
 #[derive(Component, Clone, PartialEq, Debug, Serialize, Deserialize, Default)]
 pub struct CheckpointMarker;
@@ -157,6 +184,10 @@ pub struct CheckpointMarker;
 #[derive(Component, Default, Clone, PartialEq, Serialize, Deserialize, Debug)]
 pub struct Object {
     pub object_id: u16,
+    /// GOBJ's second word participates in extended presence flags. Zeroing it
+    /// during conversion can change valid custom objects even without an edit.
+    #[serde(default)]
+    pub padding: u16,
     pub scale: Vec3,
     pub settings: [u16; 8],
     pub presence: u16,
@@ -190,6 +221,9 @@ pub struct AreaPoint {
     pub priority: u8,
     pub scale: Vec3,
     pub show_area: bool,
+    /// Opaque AREA trailing word, independent of the type-specific settings.
+    #[serde(default)]
+    pub padding: u16,
 }
 impl Default for AreaPoint {
     fn default() -> Self {
@@ -199,6 +233,7 @@ impl Default for AreaPoint {
             priority: 0,
             scale: vec3(10000., 10000., 10000.),
             show_area: false,
+            padding: 0,
         }
     }
 }
@@ -281,7 +316,7 @@ pub struct KmpCamera {
     pub zoom_end: f32,
     pub view_start: Vec3,
     pub view_end: Vec3,
-    pub time: f32,
+    pub duration: f32,
 }
 #[derive(
     Default, Clone, Copy, PartialEq, Display, EnumString, IntoStaticStr, EnumIter, Serialize, Deserialize, Debug,
@@ -308,12 +343,20 @@ pub struct KmpCameraIntroStart;
 // --- RESPAWN POINT COMPONENTS ---
 #[derive(Component, Default, Clone, PartialEq, Serialize, Deserialize, Debug)]
 pub struct RespawnPoint {
-    pub sound_trigger: i8,
+    /// Stored local ID, separate from OrderId and checkpoint entity links.
+    /// Kept internally for patch preservation; rebuild assigns it automatically.
+    #[serde(default)]
+    pub respawn_id: u16,
+    /// Full signed JGPT payload; dividing by 100 discarded valid source data.
+    pub extra_data: i16,
 }
 
 // --- CANNON POINT COMPONENTS
 #[derive(Component, Default, Clone, PartialEq, Serialize, Deserialize, Debug)]
 pub struct CannonPoint {
+    /// Stored CNPT ID; canonical rebuild owns dense renumbering, not conversion.
+    #[serde(default)]
+    pub id: u16,
     pub shoot_effect: CannonShootEffect,
 }
 #[derive(
@@ -328,7 +371,14 @@ pub enum CannonShootEffect {
 }
 
 #[derive(Component, Default, Clone, PartialEq, Serialize, Deserialize, Debug)]
-pub struct BattleFinishPoint;
+pub struct BattleFinishPoint {
+    /// Stored MSPT ID, intentionally renumbered only by canonical rebuild.
+    #[serde(default)]
+    pub id: u16,
+    /// Preserve this word without claiming an unverified gameplay meaning.
+    #[serde(default)]
+    pub unknown: u16,
+}
 
 //
 // --- CONVERT COMPONENTS FROM KMP STORAGE FORMAT ---
@@ -355,7 +405,8 @@ impl KmpComponent for TrackInfo {
         Self {
             track_type: TrackType::Race,
             lap_count: data.lap_count,
-            speed_mod: 0.,
+            speed_mod: data.speed_mod(),
+            padding_1: data.padding_1,
             lens_flare_color: data.flare_color,
             lens_flare_flashing: data.lens_flare_flashing == 1,
             first_player_pos: match data.pole_pos {
@@ -381,8 +432,8 @@ impl KmpComponent for TrackInfo {
                 FirstPlayerPos::Right => 1,
             },
             driver_distance: self.narrow_player_spacing as u8,
-            padding_1: 0,
-            padding_2: 0,
+            padding_1: self.padding_1,
+            padding_2: Stgi::encode_speed_mod(self.speed_mod),
         }
     }
 }
@@ -391,6 +442,7 @@ impl KmpComponent for StartPoint {
     fn from_kmp(data: &Ktpt, _: &mut World) -> Self {
         Self {
             player_index: data.player_index,
+            padding: data.padding,
         }
     }
     fn to_kmp(&self, transform: Transform, _: &mut World, _: Entity) -> Ktpt {
@@ -398,6 +450,7 @@ impl KmpComponent for StartPoint {
             position: transform.translation.into(),
             rotation: get_euler_rot(&transform).into(),
             player_index: self.player_index,
+            padding: self.padding,
         }
     }
 }
@@ -455,18 +508,20 @@ impl KmpComponent for ItemPathPoint {
                     ItemPathBulletHeight::default()
                 }
             },
-            bullet_cant_drop: data.setting_2 == 1 || data.setting_2 == 3 || data.setting_1 == 5 || data.setting_2 == 7,
-            low_shell_priority: data.setting_2 == 2
-                || data.setting_2 == 3
-                || data.setting_2 == 6
-                || data.setting_2 == 7,
+            bullet_cant_drop: data.setting_2 & 0x1 != 0,
+            low_shell_priority: data.setting_2 & 0x2 != 0,
         }
     }
     fn to_kmp(&self, transform: Transform, _: &mut World, _: Entity) -> Itpt {
         Itpt {
             position: transform.translation.into(),
             bullet_control: self.bullet_control,
-            setting_1: self.bullet_height as u16,
+            setting_1: match self.bullet_height {
+                ItemPathBulletHeight::IgnorePointHeight => 0,
+                ItemPathBulletHeight::Auto => 1,
+                ItemPathBulletHeight::FollowPointHeight => 2,
+                ItemPathBulletHeight::MushroomPads => 3,
+            },
             setting_2: match (self.bullet_cant_drop, self.low_shell_priority) {
                 (true, true) => 3,
                 (true, false) => 1,
@@ -480,15 +535,10 @@ impl KmpComponent for Checkpoint {
     type KmpFormat = Ckpt;
     fn from_kmp(data: &Ckpt, world: &mut World) -> Self {
         Self {
-            kind: match data.cp_type {
-                -1 => CheckpointKind::Normal,
-                0 => CheckpointKind::LapCount,
-                id @ 1..=127 => CheckpointKind::Key(id as u8),
-                _ => {
-                    world.resource_mut::<KmpErrors>().add("Invalid CKPT setting found");
-                    CheckpointKind::Normal
-                }
-            },
+            kind: CheckpointKind::from_cp_type(data.cp_type).unwrap_or_else(|| {
+                world.resource_mut::<KmpErrors>().add("Invalid CKPT setting found");
+                CheckpointKind::Normal
+            }),
         }
     }
     fn to_kmp(&self, transform: Transform, world: &mut World, e: Entity) -> Ckpt {
@@ -501,18 +551,16 @@ impl KmpComponent for Checkpoint {
                 .translation
                 .xz()
                 .into(),
-            cp_type: match self.kind {
-                CheckpointKind::Normal => -1,
-                CheckpointKind::LapCount => 0,
-                CheckpointKind::Key(id) => id as i8,
-            },
+            cp_type: self.kind.cp_type(),
             respawn_pos: {
                 const FALLBACK_RESPAWN_ID: u8 = 0;
                 let maybe_respawn_e = world.entity(e).get::<CheckpointRespawnLink>();
                 if let Some(respawn_e) = maybe_respawn_e {
                     let respawn_entity_id_map = world.resource::<KmpSectionEntityIdMap<RespawnPoint>>();
                     let maybe_respawn_id = respawn_entity_id_map.get(&**respawn_e).copied();
-                    maybe_respawn_id.unwrap_or(FALLBACK_RESPAWN_ID)
+                    maybe_respawn_id
+                        .and_then(|id| u8::try_from(id).ok())
+                        .unwrap_or(FALLBACK_RESPAWN_ID)
                 } else {
                     FALLBACK_RESPAWN_ID
                 }
@@ -557,6 +605,7 @@ impl KmpComponent for Object {
     fn from_kmp(data: &Gobj, _: &mut World) -> Self {
         Self {
             object_id: data.object_id,
+            padding: data.padding,
             scale: data.scale.into(),
             settings: data.settings,
             presence: data.presence_flags,
@@ -565,7 +614,7 @@ impl KmpComponent for Object {
     fn to_kmp(&self, transform: Transform, world: &mut World, e: Entity) -> Gobj {
         Gobj {
             object_id: self.object_id,
-            padding: 0,
+            padding: self.padding,
             position: transform.translation.into(),
             rotation: get_euler_rot(&transform).into(),
             scale: self.scale.into(),
@@ -574,7 +623,7 @@ impl KmpComponent for Object {
                 if let Some(route) = maybe_route {
                     let id = world.resource::<KmpSectionEntityIdMap<RouteSettings>>().get(&**route);
                     if let Some(id) = id {
-                        *id as u16
+                        *id
                     } else {
                         0xffff
                     }
@@ -715,7 +764,7 @@ impl KmpComponent for AreaPoint {
                     group_id: data.setting_1,
                 },
                 9 => AreaKind::ObjectUnload {
-                    group_id: data.setting_2,
+                    group_id: data.setting_1,
                 },
                 10 => AreaKind::FallBoundary,
                 _ => {
@@ -724,6 +773,7 @@ impl KmpComponent for AreaPoint {
                 }
             },
             show_area: false,
+            padding: data.padding,
         }
     }
     fn to_kmp(&self, transform: Transform, world: &mut World, e: Entity) -> Area {
@@ -798,6 +848,7 @@ impl KmpComponent for AreaPoint {
             setting_2,
             route,
             enpt_id,
+            padding: self.padding,
         }
     }
 }
@@ -832,7 +883,7 @@ impl KmpComponent for KmpCamera {
             zoom_end: data.zoom_end,
             view_start: data.view_start.into(),
             view_end: data.view_end.into(),
-            time: data.time,
+            duration: data.duration,
         }
     }
     fn to_kmp(&self, transform: Transform, world: &mut World, e: Entity) -> Came {
@@ -844,7 +895,7 @@ impl KmpComponent for KmpCamera {
             shake: self.shake,
             route: if let Some(route) = world.entity(e).get::<RouteLink>() {
                 let id = world.resource::<KmpSectionEntityIdMap<RouteSettings>>().get(&**route);
-                id.copied().unwrap_or(0xff)
+                id.copied().unwrap_or(0xff) as u8
             } else {
                 0xff
             },
@@ -857,27 +908,26 @@ impl KmpComponent for KmpCamera {
             zoom_end: self.zoom_end,
             view_start: self.view_start.into(),
             view_end: self.view_end.into(),
-            time: self.time,
+            duration: self.duration,
         }
     }
 }
+// Local IDs are internal file data, not editor OrderIds or user settings. Keep
+// conversions inverse for patch preservation; canonical rebuild renumbers them.
 impl KmpComponent for RespawnPoint {
     type KmpFormat = Jgpt;
     fn from_kmp(data: &Jgpt, _: &mut World) -> Self {
         Self {
-            sound_trigger: if data.extra_data >= 0 {
-                ((data.extra_data / 100) - 1) as i8
-            } else {
-                -1
-            },
+            respawn_id: data.respawn_id,
+            extra_data: data.extra_data,
         }
     }
-    fn to_kmp(&self, transform: Transform, world: &mut World, e: Entity) -> Jgpt {
+    fn to_kmp(&self, transform: Transform, _: &mut World, _: Entity) -> Jgpt {
         Jgpt {
             position: transform.translation.into(),
             rotation: get_euler_rot(&transform).into(),
-            respawn_id: **world.entity(e).get::<OrderId>().unwrap() as u16,
-            extra_data: ((self.sound_trigger as i16 + 1) * 100),
+            respawn_id: self.respawn_id,
+            extra_data: self.extra_data,
         }
     }
 }
@@ -885,6 +935,7 @@ impl KmpComponent for CannonPoint {
     type KmpFormat = Cnpt;
     fn from_kmp(data: &Cnpt, world: &mut World) -> Self {
         Self {
+            id: data.id,
             shoot_effect: match data.shoot_effect {
                 0 => CannonShootEffect::Straight,
                 1 => CannonShootEffect::Curved,
@@ -900,20 +951,25 @@ impl KmpComponent for CannonPoint {
         Cnpt {
             position: transform.translation.into(),
             rotation: get_euler_rot(&transform).into(),
+            id: self.id,
             shoot_effect: self.shoot_effect as i16,
         }
     }
 }
 impl KmpComponent for BattleFinishPoint {
     type KmpFormat = Mspt;
-    fn from_kmp(_: &Mspt, _: &mut World) -> Self {
-        Self
+    fn from_kmp(data: &Mspt, _: &mut World) -> Self {
+        Self {
+            id: data.id,
+            unknown: data.unknown,
+        }
     }
     fn to_kmp(&self, transform: Transform, _: &mut World, _: Entity) -> Mspt {
         Mspt {
             position: transform.translation.into(),
             rotation: get_euler_rot(&transform).into(),
-            unknown: 0,
+            id: self.id,
+            unknown: self.unknown,
         }
     }
 }
@@ -1037,4 +1093,190 @@ impl MaxConnectedPath for Checkpoint {
 }
 impl MaxConnectedPath for RoutePoint {
     const MAX_CONNECTED: u8 = 1;
+}
+
+#[cfg(test)]
+mod conversion_tests {
+    use super::*;
+
+    #[test]
+    fn checkpoint_type_raw_values_round_trip() {
+        for cp_type in -1..=127 {
+            let kind = CheckpointKind::from_cp_type(cp_type).unwrap();
+            assert_eq!(kind.cp_type(), cp_type);
+        }
+        assert!(CheckpointKind::from_cp_type(-2).is_none());
+        assert!(CheckpointKind::from_cp_type(i8::MIN).is_none());
+    }
+
+    #[test]
+    fn respawn_extra_data_retains_full_signed_word() {
+        let mut world = World::new();
+        let entity = world.spawn(OrderId(123)).id();
+        // Non-multiples of 100, negatives and extremes used to be quantized/wrapped.
+        for extra_data in [i16::MIN, -101, -1, 0, 1, 199, 32767] {
+            let raw = Jgpt {
+                extra_data,
+                ..default()
+            };
+            let point = RespawnPoint::from_kmp(&raw, &mut world);
+            let encoded = point.to_kmp(Transform::IDENTITY, &mut world, entity);
+            assert_eq!(encoded.extra_data, extra_data);
+            assert_eq!(encoded.respawn_id, raw.respawn_id);
+        }
+    }
+
+    /// Stored IDs are internal file bookkeeping, independent of editor order.
+    #[test]
+    fn cannon_and_finish_ids_preserve_raw_values() {
+        let mut world = World::new();
+        let entity = world.spawn(OrderId(65536)).id();
+        let cannon = CannonPoint { id: 4321, ..default() };
+        let finish = BattleFinishPoint {
+            id: 1234,
+            unknown: 0xabcd,
+        };
+        assert_eq!(cannon.to_kmp(Transform::IDENTITY, &mut world, entity).id, 4321);
+        let encoded = finish.to_kmp(Transform::IDENTITY, &mut world, entity);
+        assert_eq!(encoded.id, 1234);
+        assert_eq!(encoded.unknown, 0xabcd);
+    }
+
+    /// Newly exposed opaque words must survive component conversion in both modes;
+    /// they are actual stored data, not scratch padding for the editor to zero.
+    #[test]
+    fn raw_record_words_survive_editor_conversion() {
+        let mut world = World::new();
+        world.init_resource::<KmpErrors>();
+        let raw = Ktpt {
+            padding: 0x1234,
+            ..default()
+        };
+        assert_eq!(
+            StartPoint::from_kmp(&raw, &mut world)
+                .to_kmp(Transform::IDENTITY, &mut world, Entity::PLACEHOLDER)
+                .padding,
+            0x1234
+        );
+        let raw = Gobj {
+            padding: 0x4321,
+            ..default()
+        };
+        let entity = world.spawn_empty().id();
+        assert_eq!(
+            Object::from_kmp(&raw, &mut world)
+                .to_kmp(Transform::IDENTITY, &mut world, entity)
+                .padding,
+            0x4321
+        );
+        let raw = Area {
+            padding: 0x5678,
+            ..default()
+        };
+        assert_eq!(
+            AreaPoint::from_kmp(&raw, &mut world)
+                .to_kmp(Transform::IDENTITY, &mut world, entity)
+                .padding,
+            0x5678
+        );
+        let raw = Stgi {
+            padding_1: 0x8765,
+            ..default()
+        };
+        assert_eq!(
+            TrackInfo::from_kmp(&raw, &mut world)
+                .to_kmp(Transform::IDENTITY, &mut world, entity)
+                .padding_1,
+            0x8765
+        );
+    }
+
+    #[test]
+    fn track_speed_uses_high_float_word_without_normalizing_zero() {
+        let mut world = World::new();
+        for (bits, value) in [(0, 0.), (0x3f00, 0.5), (0x3f80, 1.), (0x3fc0, 1.5), (0x4000, 2.)] {
+            let raw = Stgi {
+                padding_2: bits,
+                ..default()
+            };
+            let track = TrackInfo::from_kmp(&raw, &mut world);
+            assert_eq!(track.speed_mod, value);
+            assert_eq!(
+                track
+                    .to_kmp(Transform::IDENTITY, &mut world, Entity::PLACEHOLDER)
+                    .padding_2,
+                bits
+            );
+        }
+        assert_eq!(Stgi::encode_speed_mod(f32::from_bits(0x3f81abcd)), 0x3f81);
+    }
+
+    #[test]
+    fn item_path_height_encoding_matches_kmp_values() {
+        let mut world = World::new();
+        let entity = world.spawn_empty().id();
+        for (setting_1, bullet_height) in [
+            (0, ItemPathBulletHeight::IgnorePointHeight),
+            (1, ItemPathBulletHeight::Auto),
+            (2, ItemPathBulletHeight::FollowPointHeight),
+            (3, ItemPathBulletHeight::MushroomPads),
+        ] {
+            let raw = Itpt {
+                setting_1,
+                bullet_control: 42.,
+                ..Default::default()
+            };
+            let point = ItemPathPoint::from_kmp(&raw, &mut world);
+            assert_eq!(point.bullet_height, bullet_height);
+            let encoded = point.to_kmp(Transform::IDENTITY, &mut world, entity);
+            assert_eq!(encoded.setting_1, setting_1);
+            assert_eq!(encoded.bullet_control, raw.bullet_control);
+        }
+    }
+
+    #[test]
+    fn item_path_flags_decode_independently_of_height_and_unknown_bits() {
+        let mut world = World::new();
+        world.init_resource::<KmpErrors>();
+        let entity = world.spawn_empty().id();
+        // Height 5 used to incorrectly enable bullet_cant_drop.
+        for setting_1 in [0, 1, 2, 3, 5] {
+            for unknown_bits in [0, 4, 0x8000, 0xfffc] {
+                for flags in 0..=3 {
+                    let raw = Itpt {
+                        setting_1,
+                        setting_2: unknown_bits | flags,
+                        ..Default::default()
+                    };
+                    let point = ItemPathPoint::from_kmp(&raw, &mut world);
+                    assert_eq!(point.bullet_cant_drop, flags & 1 != 0);
+                    assert_eq!(point.low_shell_priority, flags & 2 != 0);
+                    let encoded = point.to_kmp(Transform::IDENTITY, &mut world, entity);
+                    // Unsupported bits belong to the original/baseline preservation layer.
+                    assert_eq!(encoded.setting_2, flags);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn object_unload_group_uses_setting_one_in_both_directions() {
+        let mut world = World::new();
+        let entity = world.spawn_empty().id();
+        for group_id in [0, 1, 255, u16::MAX] {
+            let raw = Area {
+                kind: 9,
+                setting_1: group_id,
+                setting_2: group_id ^ u16::MAX,
+                ..Default::default()
+            };
+            let point = AreaPoint::from_kmp(&raw, &mut world);
+            assert_eq!(point.kind, AreaKind::ObjectUnload { group_id });
+            let encoded = point.to_kmp(Transform::IDENTITY, &mut world, entity);
+            assert_eq!(encoded.kind, 9);
+            assert_eq!(encoded.setting_1, group_id);
+            assert_eq!(encoded.setting_2, 0);
+            assert_eq!(AreaPoint::from_kmp(&encoded, &mut world).kind, point.kind);
+        }
+    }
 }

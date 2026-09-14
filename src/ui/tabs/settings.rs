@@ -1,5 +1,8 @@
 use crate::{
-    ui::{file_dialog::FileDialogManager, settings::AppSettings},
+    ui::{
+        file_dialog::FileDialogManager,
+        settings::{AppSettings, REBUILD_SAVING_WARNING},
+    },
     util::kcl_file::KclFlag,
     viewer::{
         camera::{CameraSettings, FlyCam, FlySettings, OrbitCam, OrbitSettings, TopDownCam, TopDownSettings},
@@ -45,6 +48,24 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
         return;
     };
 
+    egui::CollapsingHeader::new("General")
+        .default_open(true)
+        .show(ui, |ui| {
+            if ui
+                .checkbox(&mut settings.patch_saving, "Patch saving (preserve original KMP data)")
+                .on_hover_text("ON: patch supported field edits into the source file. OFF: rebuild the KMP, allowing structural edits but losing unused/unsupported data and renumbering indices.")
+                .changed()
+            {
+                // Persist this safety choice immediately so a restart cannot silently change save mode.
+                if let Err(error) = pkv.set("settings", settings.as_ref()) {
+                    error!("could not save patch saving preference: {error}");
+                }
+            }
+            if !settings.patch_saving {
+                ui.colored_label(ui.visuals().warn_fg_color, REBUILD_SAVING_WARNING);
+            }
+        });
+
     egui::CollapsingHeader::new("KMP Viewer")
         .default_open(true)
         .show(ui, |ui| {
@@ -68,6 +89,21 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
                 .text("Transform Gizmo Line Width")
                 .suffix(" px")
                 .step_by(0.5),
+            );
+            ui.horizontal(|ui| {
+                ui.add(
+                    egui::DragValue::new(&mut settings.kmp_model.checkpoint_height)
+                        .speed(100.0)
+                        .range(0.0..=1_000_000.0),
+                );
+                ui.label("Checkpoint Height");
+            });
+            ui.checkbox(
+                &mut settings.kmp_model.checkpoint_backface_culling,
+                "Checkpoint Backface Culling",
+            )
+            .on_hover_text_at_pointer(
+                "Show checkpoint planes only from their front side. Disable this to see them from both directions.",
             );
             ui.checkbox(
                 &mut settings.open_course_kcl_in_dir,
@@ -152,6 +188,55 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
             }
         });
 
+    egui::CollapsingHeader::new("Editor Key Bindings")
+        .default_open(true)
+        .show(ui, |ui| {
+            ui.label("Add alternative keys with +. Click an assigned key to remove it.");
+            ui.label("Editor tool shortcuts are ignored while Ctrl/Cmd or Alt is held.");
+            key_binding_row(
+                ui,
+                &keys,
+                SettingsKeyBinding::DefaultMode,
+                "Default Mode",
+                &mut settings.editor_key_bindings.default_mode,
+            );
+            key_binding_row(
+                ui,
+                &keys,
+                SettingsKeyBinding::SelectPainter,
+                "Select Painter Mode",
+                &mut settings.editor_key_bindings.select_painter,
+            );
+            key_binding_row(
+                ui,
+                &keys,
+                SettingsKeyBinding::Translate,
+                "Translate Gizmo",
+                &mut settings.editor_key_bindings.translate,
+            );
+            key_binding_row(
+                ui,
+                &keys,
+                SettingsKeyBinding::Rotate,
+                "Rotate Gizmo",
+                &mut settings.editor_key_bindings.rotate,
+            );
+            key_binding_row(
+                ui,
+                &keys,
+                SettingsKeyBinding::Scale,
+                "Scale Gizmo",
+                &mut settings.editor_key_bindings.scale,
+            );
+            key_binding_row(
+                ui,
+                &keys,
+                SettingsKeyBinding::Transform,
+                "Transform Gizmo",
+                &mut settings.editor_key_bindings.transform,
+            );
+        });
+
     egui::CollapsingHeader::new("Camera").default_open(true).show(ui, |ui| {
         ui.horizontal(|ui| {
             if ui.button("Reset Positions").clicked() {
@@ -204,49 +289,49 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
             key_binding_row(
                 ui,
                 &keys,
-                CameraKeyBinding::FlyForward,
+                SettingsKeyBinding::FlyForward,
                 "Move Forward",
                 &mut settings.camera.fly.key_bindings.move_forward,
             );
             key_binding_row(
                 ui,
                 &keys,
-                CameraKeyBinding::FlyBackward,
+                SettingsKeyBinding::FlyBackward,
                 "Move Backward",
                 &mut settings.camera.fly.key_bindings.move_backward,
             );
             key_binding_row(
                 ui,
                 &keys,
-                CameraKeyBinding::FlyLeft,
+                SettingsKeyBinding::FlyLeft,
                 "Move Left",
                 &mut settings.camera.fly.key_bindings.move_left,
             );
             key_binding_row(
                 ui,
                 &keys,
-                CameraKeyBinding::FlyRight,
+                SettingsKeyBinding::FlyRight,
                 "Move Right",
                 &mut settings.camera.fly.key_bindings.move_right,
             );
             key_binding_row(
                 ui,
                 &keys,
-                CameraKeyBinding::FlyAscend,
+                SettingsKeyBinding::FlyAscend,
                 "Ascend",
                 &mut settings.camera.fly.key_bindings.move_ascend,
             );
             key_binding_row(
                 ui,
                 &keys,
-                CameraKeyBinding::FlyDescend,
+                SettingsKeyBinding::FlyDescend,
                 "Descend",
                 &mut settings.camera.fly.key_bindings.move_descend,
             );
             key_binding_row(
                 ui,
                 &keys,
-                CameraKeyBinding::FlySpeedBoost,
+                SettingsKeyBinding::FlySpeedBoost,
                 "Speed Boost",
                 &mut settings.camera.fly.key_bindings.speed_boost,
             );
@@ -280,7 +365,7 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
             key_binding_row(
                 ui,
                 &keys,
-                CameraKeyBinding::OrbitPan,
+                SettingsKeyBinding::OrbitPan,
                 "Pan Modifier",
                 &mut settings.camera.orbit.key_bindings.pan,
             );
@@ -333,7 +418,13 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum CameraKeyBinding {
+enum SettingsKeyBinding {
+    DefaultMode,
+    SelectPainter,
+    Translate,
+    Rotate,
+    Scale,
+    Transform,
     FlyForward,
     FlyBackward,
     FlyLeft,
@@ -347,21 +438,21 @@ enum CameraKeyBinding {
 fn key_binding_row(
     ui: &mut Ui,
     keys: &ButtonInput<KeyCode>,
-    binding: CameraKeyBinding,
+    binding: SettingsKeyBinding,
     label: &str,
     key_codes: &mut Vec<KeyCode>,
 ) {
-    let capture_id = egui::Id::new("camera_key_binding_capture");
+    let capture_id = egui::Id::new("settings_key_binding_capture");
     let mut is_capturing = ui
         .ctx()
-        .data(|data| data.get_temp::<CameraKeyBinding>(capture_id) == Some(binding));
+        .data(|data| data.get_temp::<SettingsKeyBinding>(capture_id) == Some(binding));
 
     if is_capturing {
         if let Some(key_code) = keys.get_just_pressed().next().copied() {
             if key_code != KeyCode::Escape && !key_codes.contains(&key_code) {
                 key_codes.push(key_code);
             }
-            ui.ctx().data_mut(|data| data.remove::<CameraKeyBinding>(capture_id));
+            ui.ctx().data_mut(|data| data.remove::<SettingsKeyBinding>(capture_id));
             is_capturing = false;
         }
     }
@@ -390,7 +481,7 @@ fn key_binding_row(
                 .on_hover_text("Press Escape or click to cancel")
                 .clicked()
             {
-                ui.ctx().data_mut(|data| data.remove::<CameraKeyBinding>(capture_id));
+                ui.ctx().data_mut(|data| data.remove::<SettingsKeyBinding>(capture_id));
             }
         } else if ui.small_button("+ Add key").clicked() {
             ui.ctx().data_mut(|data| data.insert_temp(capture_id, binding));

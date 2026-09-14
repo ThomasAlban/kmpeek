@@ -1,4 +1,7 @@
-use super::{file_dialog::show_file_dialog, menu_bar::show_menu_bar, tabs::show_dock_area, util::get_egui_ctx};
+use super::{
+    file_dialog::show_file_dialog, menu_bar::show_menu_bar, tabs::show_dock_area,
+    unsaved_changes::show_unsaved_changes, util::get_egui_ctx,
+};
 use bevy::{camera::visibility::RenderLayers, prelude::*, transform::TransformSystems, window::PrimaryWindow};
 use bevy_egui::{
     egui, EguiContexts, EguiGlobalSettings, EguiPostUpdateSet, EguiPrimaryContextPass, PrimaryEguiContext,
@@ -79,5 +82,6 @@ fn update_ui(world: &mut World) {
         .show(&mut viewport_ui, |ui| show_dock_area(ui, world));
 
     show_file_dialog(world);
+    show_unsaved_changes(world);
     world.flush();
 }

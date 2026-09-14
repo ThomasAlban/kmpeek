@@ -147,6 +147,10 @@ impl Command for AddRespawnPointPreview {
     }
 }
 
+/// Export represented scalar values in display order for patch snapshots. The
+/// caller validates identity/counts first; rebuild uses its own fallible planner.
+/// The returned index map uses 16 bits because object routes are wider than
+/// camera/area routes. Each consumer must still enforce its own field width.
 pub fn save_point_section<T: KmpComponent>(world: &mut World) -> (Section<T::KmpFormat>, KmpSectionEntityIdMap<T>) {
     let mut q = world.query::<(&T, &Transform, Entity, &OrderId)>();
     let components: Vec<_> = q
@@ -165,7 +169,7 @@ pub fn save_point_section<T: KmpComponent>(world: &mut World) -> (Section<T::Kmp
                 .iter()
                 .map(|x| x.2)
                 .enumerate()
-                .map(|x| (x.1, x.0 as u8))
+                .map(|x| (x.1, u16::try_from(x.0).expect("section index exceeds u16")))
                 .collect(),
         ),
     )
