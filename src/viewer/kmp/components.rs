@@ -799,7 +799,7 @@ impl KmpComponent for AreaPoint {
             AreaKind::MovingRoad => {
                 let route_id = if let Some(route) = world.entity(e).get::<RouteLink>() {
                     let id = world.resource::<KmpSectionEntityIdMap<RouteSettings>>().get(&**route);
-                    id.map(|x| *x as u16).unwrap_or(0xffff)
+                    id.copied().unwrap_or(0xffff)
                 } else {
                     0xffff
                 };

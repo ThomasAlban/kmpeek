@@ -1,6 +1,6 @@
 use super::{CameraMode, EditorCamera, UpdateCameraSet};
 use crate::ui::{
-    settings::AppSettings,
+    settings::{AppSettings, SetupAppSettingsSet},
     viewport::{SetupViewportSet, ViewportImage, ViewportInfo},
 };
 use bevy::{
@@ -12,7 +12,7 @@ use bevy::{
 use serde::{Deserialize, Serialize};
 
 pub fn orbit_cam_plugin(app: &mut App) {
-    app.add_systems(Startup, camera_setup.after(SetupViewportSet))
+    app.add_systems(Startup, camera_setup.after(SetupViewportSet).after(SetupAppSettingsSet))
         .add_systems(Update, orbit_cam.in_set(UpdateCameraSet));
 }
 
@@ -65,13 +65,13 @@ impl Default for OrbitKeyBindings {
     }
 }
 
-fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
+fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>, settings: Res<AppSettings>) {
     let orbit_default = OrbitSettings::default();
 
     commands.spawn((
         Camera3d::default(),
         Camera {
-            is_active: false,
+            is_active: settings.camera.mode == CameraMode::Orbit,
             ..default()
         },
         // Render to the image.

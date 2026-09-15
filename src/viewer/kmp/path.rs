@@ -1056,20 +1056,22 @@ mod tests {
     fn import_ranges_widen_before_addition_and_keep_invalid_slots() {
         use crate::util::kmp_file::Enpt;
         let mut world = World::new();
-        let mut kmp = KmpFile::default();
-        kmp.enpt = Section::new(
-            (0..260)
-                .map(|i| Enpt {
-                    leniency: i as f32,
-                    ..default()
-                })
-                .collect(),
-        );
-        kmp.enph = Section::new(vec![
-            PathGroup::new(250, 10, [0xff; 6], [1, 0xff, 0xff, 0xff, 0xff, 0xff], 0),
-            PathGroup::new(255, 10, [0xff; 6], [0xff; 6], 0),
-            PathGroup::new(0, 1, [0xff; 6], [0xff; 6], 0),
-        ]);
+        let kmp = KmpFile {
+            enpt: Section::new(
+                (0..260)
+                    .map(|i| Enpt {
+                        leniency: i as f32,
+                        ..default()
+                    })
+                    .collect(),
+            ),
+            enph: Section::new(vec![
+                PathGroup::new(250, 10, [0xff; 6], [1, 0xff, 0xff, 0xff, 0xff, 0xff], 0),
+                PathGroup::new(255, 10, [0xff; 6], [0xff; 6], 0),
+                PathGroup::new(0, 1, [0xff; 6], [0xff; 6], 0),
+            ]),
+            ..default()
+        };
         let groups = get_kmp_data_and_component_groups::<EnemyPathPoint>(&kmp, &mut world);
         assert_eq!(groups.len(), 3);
         assert_eq!(groups[0].0.nodes.len(), 10);
@@ -1196,7 +1198,7 @@ mod tests {
         fn export(reverse: bool) -> Vec<u8> {
             let mut world = World::new();
             let orders = if reverse { vec![3, 2, 1, 0] } else { vec![0, 1, 2, 3] };
-            let mut entities = vec![Entity::PLACEHOLDER; 4];
+            let mut entities = [Entity::PLACEHOLDER; 4];
             for order in orders {
                 entities[order] = world
                     .spawn((

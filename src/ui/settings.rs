@@ -26,6 +26,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub editor_key_bindings: EditorKeyBindings,
     pub open_course_kcl_in_dir: bool,
+    #[serde(default)]
+    pub preserve_visibility_on_section_select: bool,
     /// Patch mode is an opt-in preservation tool; normal saves rebuild editor data.
     #[serde(default)]
     pub patch_saving: bool,
@@ -39,6 +41,7 @@ impl Default for AppSettings {
             kmp_model: KmpModelSettings::default(),
             editor_key_bindings: EditorKeyBindings::default(),
             open_course_kcl_in_dir: true,
+            preserve_visibility_on_section_select: false,
             patch_saving: false,
             increment: 1,
         }
@@ -73,6 +76,18 @@ mod tests {
         assert!(!restored.patch_saving);
         assert_eq!(restored.increment, 7);
         assert!(!restored.open_course_kcl_in_dir);
+    }
+
+    #[test]
+    fn preserved_section_visibility_defaults_off_for_existing_settings() {
+        let mut json = serde_json::to_value(AppSettings::default()).unwrap();
+        json.as_object_mut()
+            .unwrap()
+            .remove("preserve_visibility_on_section_select");
+
+        let restored: AppSettings = serde_json::from_value(json).unwrap();
+
+        assert!(!restored.preserve_visibility_on_section_select);
     }
 
     #[test]

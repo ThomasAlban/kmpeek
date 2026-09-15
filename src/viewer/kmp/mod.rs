@@ -49,6 +49,7 @@ pub fn kmp_plugin(app: &mut App) {
     ))
     .add_message::<SaveFile>()
     .add_message::<OpenKmpRequest>()
+    .add_message::<ResetSectionVisibilities>()
     .init_resource::<SaveStatus>()
     .add_systems(Startup, setup_kmp_meshes_materials.after(SetupAppSettingsSet))
     // Save after UI commands, deletions, and route repair have all been applied;
@@ -326,11 +327,17 @@ fn set_section_visibility<T: Component>(
     }
 }
 
+#[derive(Message, Default)]
+pub struct ResetSectionVisibilities;
+
 fn update_visible_on_mode_change<T: Component>(
     mode: Res<KmpEditMode>,
+    settings: Res<AppSettings>,
+    mut reset: MessageReader<ResetSectionVisibilities>,
     mut ev_set_sect_visibility: MessageWriter<SetSectionVisibility<T>>,
 ) {
-    if !mode.is_changed() {
+    let reset_requested = reset.read().next().is_some();
+    if !reset_requested && (!mode.is_changed() || settings.preserve_visibility_on_section_select) {
         return;
     }
     ev_set_sect_visibility.write(SetSectionVisibility::new(mode.in_mode::<T>()));

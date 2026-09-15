@@ -605,6 +605,7 @@ impl_img!(pivot_first_selected);
 impl_img!(pivot_individual);
 impl_img!(pivot_median);
 impl_img!(rotate);
+impl_img!(reset_visibility);
 impl_img!(scale);
 impl_img!(select_box);
 impl_img!(select_painter);
@@ -615,6 +616,7 @@ impl_img!(tweak);
 impl_img!(view_off);
 impl_img!(view_on);
 impl_img!(eyedropper);
+impl_img!(visibility_lock);
 
 impl Icons {
     pub const SECTION_COLORS: [Color32; 12] = [

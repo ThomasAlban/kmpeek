@@ -503,8 +503,10 @@ pub fn rebuild(world: &mut World, source: &LoadedKmp) -> Result<KmpFile> {
         respawns.iter().map(|(&e, &i)| (e, i as u16)).collect(),
     ));
     let result = (|| -> Result<KmpFile> {
-        let mut file = KmpFile::default();
-        file.ktpt = points::<StartPoint>(world, &ktpt)?;
+        let mut file = KmpFile {
+            ktpt: points::<StartPoint>(world, &ktpt)?,
+            ..Default::default()
+        };
         (file.enpt, file.enph) = paths::<EnemyPathPoint>(world, &enemies)?;
         (file.itpt, file.itph) = paths::<ItemPathPoint>(world, &items)?;
         (file.ckpt, file.ckph) = paths::<Checkpoint>(world, &checkpoints)?;
@@ -604,8 +606,10 @@ mod tests {
         world.init_resource::<TrackInfo>();
         world.init_resource::<KmpSectionIdEntityMap<RoutePoint>>();
         world.init_resource::<KmpSectionIdEntityMap<RespawnPoint>>();
-        let mut original = KmpFile::default();
-        original.stgi = Section::new(vec![Stgi::default()]);
+        let mut original = KmpFile {
+            stgi: Section::new(vec![Stgi::default()]),
+            ..Default::default()
+        };
         let cameras = ordered::<KmpCamera>(world).unwrap();
         original.came = points::<KmpCamera>(world, &cameras).unwrap();
         let path = std::env::temp_dir().join(format!(

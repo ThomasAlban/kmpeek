@@ -39,8 +39,8 @@ pub struct UpdateCameraSet;
 
 #[derive(PartialEq, Clone, Copy, Serialize, Deserialize, Default, Debug, IntoStaticStr, EnumString, Display)]
 pub enum CameraMode {
-    #[default]
     Fly,
+    #[default]
     Orbit,
     #[strum(serialize = "Top Down")]
     TopDown,
@@ -119,5 +119,16 @@ fn update_active_camera(
         fly_cam.is_active = active_states.0;
         orbit_cam.is_active = active_states.1;
         topdown_cam.is_active = active_states.2;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn orbit_is_the_default_camera_mode() {
+        assert_eq!(CameraMode::default(), CameraMode::Orbit);
+        assert_eq!(CameraSettings::default().mode, CameraMode::Orbit);
     }
 }

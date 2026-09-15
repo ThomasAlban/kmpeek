@@ -1,6 +1,6 @@
 use crate::ui::{
     keybinds::ModifiersPressed,
-    settings::AppSettings,
+    settings::{AppSettings, SetupAppSettingsSet},
     viewport::{SetupViewportSet, ViewportImage, ViewportInfo},
 };
 use bevy::{
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use super::{CameraMode, EditorCamera, UpdateCameraSet};
 
 pub fn fly_cam_plugin(app: &mut App) {
-    app.add_systems(Startup, camera_setup.after(SetupViewportSet))
+    app.add_systems(Startup, camera_setup.after(SetupViewportSet).after(SetupAppSettingsSet))
         .add_systems(Update, (fly_cam_look, fly_cam_move).in_set(UpdateCameraSet));
 }
 
@@ -71,12 +71,15 @@ impl Default for FlyKeyBindings {
     }
 }
 
-fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
+fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>, settings: Res<AppSettings>) {
     let fly_default = FlySettings::default();
 
     commands.spawn((
         Camera3d::default(),
-        Camera::default(),
+        Camera {
+            is_active: settings.camera.mode == CameraMode::Fly,
+            ..default()
+        },
         // Render to the image.
         RenderTarget::Image(viewport.handle.clone().into()),
         Transform::from_translation(fly_default.start_pos).looking_at(Vec3::ZERO, Vec3::Y),

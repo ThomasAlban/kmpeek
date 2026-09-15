@@ -238,36 +238,38 @@ mod tests {
     /// baseline. Extended headers, shuffled sections, gaps, opaque bytes, and
     /// extra STGI records make accidental whole-file regeneration observable.
     fn fixture() -> (Vec<u8>, KmpFile, KmpFile) {
-        let mut file = KmpFile::default();
-        file.ktpt = Section::new(vec![
-            Ktpt {
-                position: [1.234567, 2.0, 3.0],
-                player_index: -1,
+        let mut file = KmpFile {
+            ktpt: Section::new(vec![
+                Ktpt {
+                    position: [1.234567, 2.0, 3.0],
+                    player_index: -1,
+                    ..Default::default()
+                },
+                Ktpt::default(),
+            ]),
+            itpt: Section::new(vec![Itpt {
+                setting_1: 0x1234,
+                setting_2: 0xa580,
                 ..Default::default()
-            },
-            Ktpt::default(),
-        ]);
-        file.itpt = Section::new(vec![Itpt {
-            setting_1: 0x1234,
-            setting_2: 0xa580,
+            }]),
+            cnpt: Section::new(vec![Cnpt::default()]),
+            mspt: Section::new(vec![Mspt::default()]),
+            stgi: Section::new(vec![
+                Stgi {
+                    padding_2: 0xabcd,
+                    ..Default::default()
+                },
+                Stgi {
+                    lap_count: 7,
+                    ..Default::default()
+                },
+            ]),
+            poti: Section::new(vec![Poti {
+                points: vec![PotiPoint::default()],
+                ..Default::default()
+            }]),
             ..Default::default()
-        }]);
-        file.cnpt = Section::new(vec![Cnpt::default()]);
-        file.mspt = Section::new(vec![Mspt::default()]);
-        file.stgi = Section::new(vec![
-            Stgi {
-                padding_2: 0xabcd,
-                ..Default::default()
-            },
-            Stgi {
-                lap_count: 7,
-                ..Default::default()
-            },
-        ]);
-        file.poti = Section::new(vec![Poti {
-            points: vec![PotiPoint::default()],
-            ..Default::default()
-        }]);
+        };
         file.came.section_header.additional_value = 0x127e;
         let packed = canonical(&file).unwrap();
         let starts = section_starts(&packed).unwrap();

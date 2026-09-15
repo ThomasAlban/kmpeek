@@ -1,6 +1,6 @@
 use super::{CameraMode, EditorCamera, UpdateCameraSet};
 use crate::ui::{
-    settings::AppSettings,
+    settings::{AppSettings, SetupAppSettingsSet},
     viewport::{SetupViewportSet, ViewportImage, ViewportInfo},
 };
 use bevy::{
@@ -12,7 +12,7 @@ use bevy::{
 use serde::{Deserialize, Serialize};
 
 pub fn topdown_cam_plugin(app: &mut App) {
-    app.add_systems(Startup, camera_setup.after(SetupViewportSet))
+    app.add_systems(Startup, camera_setup.after(SetupViewportSet).after(SetupAppSettingsSet))
         .add_systems(Update, topdown_cam.in_set(UpdateCameraSet));
 }
 
@@ -54,13 +54,13 @@ impl Default for TopDownKeyBindings {
     }
 }
 
-fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>) {
+fn camera_setup(mut commands: Commands, viewport: Res<ViewportImage>, settings: Res<AppSettings>) {
     let topdown_default = TopDownSettings::default();
 
     commands.spawn((
         Camera3d::default(),
         Camera {
-            is_active: false,
+            is_active: settings.camera.mode == CameraMode::TopDown,
             ..default()
         },
         // Render to the image.

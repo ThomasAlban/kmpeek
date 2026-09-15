@@ -335,6 +335,22 @@ fn distance_to_segment(point: Vec2, start: Vec2, end: Vec2) -> f32 {
     point.distance(start + segment * t)
 }
 
+// put outlines on any entities which are selected, and remove them if they aren't selected
+fn update_outlines(
+    q_entities: Query<(Entity, Has<Selected>, &Visibility), With<KmpSelectablePoint>>,
+    mut q_outline: Query<&mut OutlineVolume>,
+) {
+    for (entity, is_selected, visibility) in q_entities.iter() {
+        let Ok(mut outline) = q_outline.get_mut(entity) else {
+            continue;
+        };
+        outline.visible = is_selected;
+        if visibility != Visibility::Visible {
+            outline.visible = false;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -354,21 +370,5 @@ mod tests {
         let painter = SelectPainter::default();
         assert!(painter.radius >= SelectPainter::MIN_RADIUS);
         assert!(painter.radius <= SelectPainter::MAX_RADIUS);
-    }
-}
-
-// put outlines on any entities which are selected, and remove them if they aren't selected
-fn update_outlines(
-    q_entities: Query<(Entity, Has<Selected>, &Visibility), With<KmpSelectablePoint>>,
-    mut q_outline: Query<&mut OutlineVolume>,
-) {
-    for (entity, is_selected, visibility) in q_entities.iter() {
-        let Ok(mut outline) = q_outline.get_mut(entity) else {
-            continue;
-        };
-        outline.visible = is_selected;
-        if visibility != Visibility::Visible {
-            outline.visible = false;
-        }
     }
 }

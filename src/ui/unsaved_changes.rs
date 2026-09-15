@@ -72,7 +72,6 @@ pub fn complete_save(world: &mut World, result: Result<(), String>) {
     let Some(pending) = pending_resource.0.take() else {
         return;
     };
-    drop(pending_resource);
     if pending.state != PromptState::Saving {
         world.resource_mut::<PendingDocumentAction>().0 = Some(pending);
         return;
@@ -185,7 +184,6 @@ fn apply_prompt_response(world: &mut World, response: Option<PromptResponse>) {
             };
             if matches!(pending.state, PromptState::Confirm { .. }) {
                 pending.state = PromptState::Saving;
-                drop(pending_resource);
                 world.write_message(SaveFile(None));
             }
         }

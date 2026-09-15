@@ -1,6 +1,7 @@
 use crate::{
     ui::{
         keybinds::ModifiersPressed,
+        settings::AppSettings,
         util::{view_icon_btn, Icons},
     },
     viewer::{
@@ -12,21 +13,51 @@ use crate::{
             },
             path::{EntityPathGroup, EntityPathGroups},
             sections::KmpEditMode,
-            SetSectionVisibility,
+            ResetSectionVisibilities, SetSectionVisibility,
         },
     },
 };
 use bevy::prelude::*;
 use bevy_egui::egui::{self, collapsing_header::CollapsingState, Align, Color32, Layout, Ui};
+use bevy_pkv::PkvStore;
 
 pub fn show_outliner_tab(ui: &mut Ui, world: &mut World) {
-    // show the buttons at the top
-
     ui.horizontal(|ui| {
-        // ui.add_space(18.);
-        if ui.button("Reset Visibilities").clicked() {
-            world.resource_mut::<KmpEditMode>().set_changed();
-        }
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            const TOOLBAR_ICON_SIZE: f32 = 18.;
+            const TOOLBAR_BUTTON_SIZE: f32 = 22.;
+
+            let preserve_visibility = world.resource::<AppSettings>().preserve_visibility_on_section_select;
+            if ui
+                .add_sized(
+                    [TOOLBAR_BUTTON_SIZE; 2],
+                    egui::Button::image(Icons::visibility_lock(ui.ctx(), TOOLBAR_ICON_SIZE))
+                        .selected(preserve_visibility),
+                )
+                .on_hover_text("Enable to leave visibility unchanged when changing section selection.")
+                .clicked()
+            {
+                world
+                    .resource_mut::<AppSettings>()
+                    .preserve_visibility_on_section_select = !preserve_visibility;
+                world.resource_scope(|world, settings: Mut<AppSettings>| {
+                    if let Err(error) = world.resource_mut::<PkvStore>().set("settings", settings.as_ref()) {
+                        error!("could not save preserve visibility preference: {error}");
+                    }
+                });
+            }
+
+            if ui
+                .add_sized(
+                    [TOOLBAR_BUTTON_SIZE; 2],
+                    egui::Button::image(Icons::reset_visibility(ui.ctx(), TOOLBAR_ICON_SIZE)),
+                )
+                .on_hover_text("Reset visibility to show only the selected KMP section")
+                .clicked()
+            {
+                world.write_message_default::<ResetSectionVisibilities>();
+            }
+        });
     });
     ui.add_space(2.);
 

@@ -633,47 +633,48 @@ mod tests {
     /// Exercise source-order restoration, an empty route ID slot, extra STGI
     /// records, and checkpoint/group metadata the editor must not regenerate.
     fn fixture() -> KmpFile {
-        let mut kmp = KmpFile::default();
-        kmp.stgi = Section::new(vec![
-            Stgi::default(),
-            Stgi {
-                lap_count: 7,
+        KmpFile {
+            stgi: Section::new(vec![
+                Stgi::default(),
+                Stgi {
+                    lap_count: 7,
+                    ..default()
+                },
+            ]),
+            ktpt: Section::new(vec![Ktpt::default()]),
+            jgpt: Section::new(vec![Jgpt::default()]),
+            ckpt: Section::new(vec![Ckpt {
+                prev_cp: 17,
+                next_cp: 23,
                 ..default()
-            },
-        ]);
-        kmp.ktpt = Section::new(vec![Ktpt::default()]);
-        kmp.jgpt = Section::new(vec![Jgpt::default()]);
-        kmp.ckpt = Section::new(vec![Ckpt {
-            prev_cp: 17,
-            next_cp: 23,
+            }]),
+            ckph: Section::new(vec![PathGroup::new(0, 1, [255; 6], [255; 6], 789)]),
+            enpt: Section::new(vec![
+                Enpt {
+                    leniency: 10.,
+                    ..default()
+                },
+                Enpt {
+                    leniency: 20.,
+                    ..default()
+                },
+            ]),
+            // Deliberately not in source-point order.
+            enph: Section::new(vec![
+                PathGroup::new(1, 1, [255; 6], [255; 6], 123),
+                PathGroup::new(0, 1, [255; 6], [255; 6], 456),
+            ]),
+            poti: Section::new(vec![
+                Poti::default(),
+                Poti {
+                    num_points: 1,
+                    points: vec![PotiPoint::default()],
+                    ..default()
+                },
+            ]),
+            gobj: Section::new(vec![Gobj { route: 1, ..default() }]),
             ..default()
-        }]);
-        kmp.ckph = Section::new(vec![PathGroup::new(0, 1, [255; 6], [255; 6], 789)]);
-        kmp.enpt = Section::new(vec![
-            Enpt {
-                leniency: 10.,
-                ..default()
-            },
-            Enpt {
-                leniency: 20.,
-                ..default()
-            },
-        ]);
-        // Deliberately not in source-point order.
-        kmp.enph = Section::new(vec![
-            PathGroup::new(1, 1, [255; 6], [255; 6], 123),
-            PathGroup::new(0, 1, [255; 6], [255; 6], 456),
-        ]);
-        kmp.poti = Section::new(vec![
-            Poti::default(),
-            Poti {
-                num_points: 1,
-                points: vec![PotiPoint::default()],
-                ..default()
-            },
-        ]);
-        kmp.gobj = Section::new(vec![Gobj { route: 1, ..default() }]);
-        kmp
+        }
     }
 
     /// Encode a disposable fixture and use the real open path, returning the
