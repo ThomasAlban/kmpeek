@@ -2,7 +2,7 @@ use crate::viewer::{edit::EditorMode, kmp::SaveFile};
 
 use super::{
     file_dialog::FileDialogManager, settings::AppSettings, ui_state::KmpFilePath,
-    unsaved_changes::PendingDocumentAction,
+    unsaved_changes::PendingDocumentAction
 };
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -118,7 +118,8 @@ fn binding_pressed(keys: &ButtonInput<KeyCode>, bindings: &[KeyCode]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ui::file_dialog::{DialogType, FileDialogRes};
+    use crate::ui::file_dialog::FileDialogRes;
+    use crate::ui::util::FileSource;
 
     fn save_app(modifier: KeyCode, shift: bool, loaded: bool, dialog_open: bool) -> App {
         let mut app = App::new();
@@ -133,7 +134,7 @@ mod tests {
         }
         if dialog_open {
             app.world_mut().resource_mut::<FileDialogRes>().0 =
-                Some((egui_file::FileDialog::open_file(), DialogType::OpenKmpKcl));
+                Some((egui_file::FileDialog::open_file(), FileSource::OpenKmpKclDialog));
         }
         let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
         keys.press(modifier);
@@ -155,7 +156,7 @@ mod tests {
                     assert!(messages.is_empty());
                     assert!(matches!(
                         app.world().resource::<FileDialogRes>().0,
-                        Some((_, DialogType::SaveKmp))
+                        Some((_, FileSource::SaveKmpDialog))
                     ));
                 } else {
                     assert_eq!(messages.len(), 1);
@@ -175,7 +176,7 @@ mod tests {
                 assert!(app.world().resource::<Messages<SaveFile>>().is_empty());
                 let dialog = &app.world().resource::<FileDialogRes>().0;
                 if dialog_open {
-                    assert!(matches!(dialog, Some((_, DialogType::OpenKmpKcl))));
+                    assert!(matches!(dialog, Some((_, FileSource::OpenKmpKclDialog))));
                 } else {
                     assert!(dialog.is_none());
                 }
