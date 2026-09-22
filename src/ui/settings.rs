@@ -9,7 +9,7 @@ use bevy_pkv::PkvStore;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    file_dialog::{DialogType, FileDialogResult},
+    util::{FileSource, FileResult},
     keybinds::EditorKeyBindings,
 };
 
@@ -140,19 +140,19 @@ pub fn setup_app_settings(mut commands: Commands, pkv: Res<PkvStore>) {
 }
 
 pub fn export_import_app_settings(
-    mut ev_file_dialog: MessageReader<FileDialogResult>,
+    mut ev_file_dialog: MessageReader<FileResult>,
     mut settings: ResMut<AppSettings>,
 ) {
-    for FileDialogResult { path, dialog_type } in ev_file_dialog.read() {
-        match dialog_type {
-            DialogType::ImportSettings => match read_to_string(path) {
+    for FileResult { path, file_source } in ev_file_dialog.read() {
+        match file_source {
+            FileSource::ImportSettings => match read_to_string(path) {
                 Ok(input_settings_string) => match serde_json::from_str::<AppSettings>(&input_settings_string) {
                     Ok(input_settings) => *settings = input_settings,
                     Err(error) => error!("could not parse settings file {}: {error}", path.display()),
                 },
                 Err(error) => error!("could not read settings file {}: {error}", path.display()),
             },
-            DialogType::ExportSettings => match serde_json::to_string_pretty(settings.as_ref()) {
+            FileSource::ExportSettings => match serde_json::to_string_pretty(settings.as_ref()) {
                 Ok(settings_string) => match File::create(path) {
                     Ok(mut file) => {
                         if let Err(error) = file.write_all(settings_string.as_bytes()) {

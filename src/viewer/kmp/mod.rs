@@ -22,7 +22,7 @@ use self::{
 };
 use crate::{
     ui::{
-        file_dialog::{DialogType, FileDialogResult},
+        util::{FileSource, FileResult},
         settings::{AppSettings, SetupAppSettingsSet},
         ui_state::KmpFilePath,
         update_ui::{FileLoadSet, KclFileSelected, KmpFileSelected},
@@ -84,18 +84,18 @@ struct OpenKmpRequest {
 /// KMP replacement requests. MessageReader leaves settings dialog results visible
 /// to their own consumer.
 fn open_kmp_kcl(
-    mut results: MessageReader<FileDialogResult>,
+    mut results: MessageReader<FileResult>,
     mut saves: MessageWriter<SaveFile>,
     mut kcl_files: MessageWriter<KclFileSelected>,
     mut kmp_requests: MessageWriter<OpenKmpRequest>,
     settings: Res<AppSettings>,
 ) {
-    for FileDialogResult { path, dialog_type } in results.read() {
-        match dialog_type {
-            DialogType::SaveKmp => {
+    for FileResult { path, file_source } in results.read() {
+        match file_source {
+            FileSource::SaveKmpDialog => {
                 saves.write(SaveFile(Some(path.clone())));
             }
-            DialogType::OpenKmpKcl => match path.extension().and_then(OsStr::to_str) {
+            FileSource::OpenKmpKclDialog => match path.extension().and_then(OsStr::to_str) {
                 Some("kmp") => {
                     let companion_kcl = settings
                         .open_course_kcl_in_dir
@@ -115,7 +115,7 @@ fn open_kmp_kcl(
                 }
                 _ => {}
             },
-            DialogType::ExportSettings | DialogType::ImportSettings => {}
+            FileSource::ExportSettings | FileSource::ImportSettings => {}
         }
     }
 }

@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use bevy::ecs::system::SystemState;
 use bevy::math::{vec3, Dir3, EulerRot, Quat};
-use bevy::prelude::{Query, With, World};
+use bevy::prelude::{Query, With, World, Message};
 use bevy::{math::Vec3, transform::components::Transform};
 use bevy_egui::egui::{self, pos2, vec2, Rect, Response, TextStyle, Ui, WidgetText};
 use bevy_egui::egui::{
@@ -11,7 +11,24 @@ use bevy_egui::{EguiContext, PrimaryEguiContext};
 use std::{
     fmt::{Debug, Display},
     hash::Hash,
+    path::PathBuf
 };
+
+#[derive(Clone, Copy)]
+pub enum FileSource {
+    OpenKmpKclDialog,
+    SaveKmpDialog,
+    ExportSettings,
+    ImportSettings,
+    // ExportCsv,
+    // ImportCsv,
+}
+
+#[derive(Message)]
+pub struct FileResult {
+    pub path: PathBuf,
+    pub file_source: FileSource,
+}
 
 pub fn get_egui_ctx(world: &mut World) -> Context {
     let mut system_state = SystemState::<Query<&mut EguiContext, With<PrimaryEguiContext>>>::new(world);
