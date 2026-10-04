@@ -102,10 +102,28 @@ fn draw_area_handles(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     editor_mode: Res<EditorMode>,
     mut current_interaction: Local<Option<AreaGizmoInteraction>>,
+    generation: Option<Res<crate::viewer::kmp::history::RestoreGeneration>>,
+    mut seen_generation: Local<u64>,
+    mut wait_for_release: Local<bool>,
     mut initial_mouse_pos: Local<Vec2>,
     transform_gizmo: Res<TransformGizmoState>,
     mut painter: ShapePainter,
 ) {
+    // Local gesture state outlives ECS replacement. Drop it on restore, then
+    // require release so a still-held button cannot start a new AREA edit.
+    let generation = generation.as_ref().map_or(0, |g| g.0);
+    if *seen_generation != generation {
+        *seen_generation = generation;
+        *current_interaction = None;
+        *wait_for_release = mouse_buttons.pressed(MouseButton::Left);
+        area_gizmo_opts.mouse_interacting = false;
+        area_gizmo_opts.mouse_hovering = false;
+        return;
+    }
+    if *wait_for_release {
+        *wait_for_release = mouse_buttons.pressed(MouseButton::Left);
+        return;
+    }
     const HANDLE_RADIUS: f32 = 12.;
     const HANDLE_HOVER_RADIUS: f32 = 15.;
     const HANDLE_HITBOX_RADIUS: f32 = 10.;

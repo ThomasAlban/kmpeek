@@ -37,12 +37,33 @@ pub struct TransformGizmoState {
     pub config: GizmoConfig,
     pub group_targets: bool,
     pub is_focused: bool,
+    wait_for_release: bool,
 }
 
 struct GroupScaleInteraction {
     start_positions: EntityHashMap<Vec3>,
     pivot: Vec3,
     orientation: Quat,
+}
+
+impl TransformGizmoState {
+    /// Forget target/drag caches after document replacement, not user settings.
+    /// Latch until release so undo during a drag cannot immediately redo motion.
+    pub fn reset_interaction(&mut self) {
+        self.gizmo = Gizmo::default();
+        self.individual_gizmos.clear();
+        self.group_scale_interaction = None;
+        self.is_focused = false;
+        self.wait_for_release = true;
+    }
+
+    fn pointer_blocked(&mut self, down: bool) -> bool {
+        if !self.wait_for_release {
+            return false;
+        }
+        self.wait_for_release = down;
+        true
+    }
 }
 
 impl Default for TransformGizmoState {
@@ -62,6 +83,7 @@ impl Default for TransformGizmoState {
             },
             group_targets: true,
             is_focused: false,
+            wait_for_release: false,
         }
     }
 }
@@ -149,6 +171,9 @@ pub fn show_transform_gizmo(ui: &mut Ui, viewport: egui::Rect, world: &mut World
         return;
     };
 
+    if state.pointer_blocked(ui.input(|input| input.pointer.primary_down())) {
+        return;
+    }
     if !matches!(
         *editor_mode,
         EditorMode::Translate | EditorMode::Rotate | EditorMode::Scale | EditorMode::Transform

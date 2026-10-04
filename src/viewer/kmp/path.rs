@@ -645,7 +645,7 @@ fn spawn_node_link<T: Component + Clone + ToPathType>(
 }
 
 // Reconcile link entities during Update, before Bevy's PostUpdate render bookkeeping.
-fn reconcile_node_links<T: Component + Clone + ToPathType>(
+pub(crate) fn reconcile_node_links<T: Component + Clone + ToPathType>(
     q_kmp_node: Query<(Entity, &KmpPathNode), With<T>>,
     q_kmp_node_link: Query<(Entity, &KmpPathNodeLink)>,
     mut commands: Commands,
@@ -804,6 +804,15 @@ pub fn traverse_paths(
             commands.insert_resource(p.p3().traverse());
         }
     }
+}
+
+/// Rebuild UI group caches synchronously after history replaces ECS identities.
+/// This only derives caches; it never repairs or normalizes document graph data.
+pub(crate) fn refresh_groups<T: Component>(world: &mut World) {
+    let mut state = bevy::ecs::system::SystemState::<TraversePath<T>>::new(world);
+    let groups = state.get_mut(world).expect("path cache queries are valid").traverse();
+    state.apply(world);
+    world.insert_resource(groups);
 }
 
 #[derive(SystemParam)]

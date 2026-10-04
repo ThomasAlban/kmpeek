@@ -209,6 +209,9 @@ fn index_map(entities: &[Entity]) -> HashMap<Entity, usize> {
     entities.iter().enumerate().map(|(i, &e)| (e, i)).collect()
 }
 
+// Fallback when no matching NumericReferences binding exists (e.g. data-only
+// planner callers). Editor captures normally bind earlier, so moving a target
+// after typing its index cannot reinterpret the edit at save time.
 // Resolve unchanged raw references through source identity, but edited numbers through editor order.
 fn raw_target(
     value: u8,
@@ -451,16 +454,20 @@ pub fn rebuild(world: &mut World, source: &LoadedKmp) -> Result<KmpFile> {
     for &e in &came {
         let camera = world.get::<KmpCamera>(e).context("Missing camera")?;
         let index = source.original_index("KmpCamera", e);
-        camera_next.push(raw_target(
-            camera.next_index,
-            index.and_then(|i| source.baseline.came.get(i)).map(|c| c.next_index),
-            index.and_then(|i| source.original.came.get(i)).map(|c| c.next_index),
-            source,
-            "KmpCamera",
-            &came,
-            &cameras,
-            true,
-        )?);
+        camera_next.push(
+            super::references::resolve(world, e, false, camera.next_index, &cameras, true).unwrap_or_else(|| {
+                raw_target(
+                    camera.next_index,
+                    index.and_then(|i| source.baseline.came.get(i)).map(|c| c.next_index),
+                    index.and_then(|i| source.original.came.get(i)).map(|c| c.next_index),
+                    source,
+                    "KmpCamera",
+                    &came,
+                    &cameras,
+                    true,
+                )
+            })?,
+        );
     }
     let mut area_targets = Vec::new();
     for &e in &area {
@@ -469,26 +476,36 @@ pub fn rebuild(world: &mut World, source: &LoadedKmp) -> Result<KmpFile> {
         let baseline = index.and_then(|i| source.baseline.area.get(i));
         let original = index.and_then(|i| source.original.area.get(i));
         let target = match point.kind {
-            AreaKind::Camera { cam_index } => Some(raw_target(
-                cam_index,
-                baseline.filter(|a| a.kind == 0).map(|a| a.came_index),
-                original.map(|a| a.came_index),
-                source,
-                "KmpCamera",
-                &came,
-                &cameras,
-                true,
-            )?),
-            AreaKind::ForceRecalc { enemy_path_id } => Some(raw_target(
-                enemy_path_id,
-                baseline.filter(|a| a.kind == 4).map(|a| a.enpt_id),
-                original.map(|a| a.enpt_id),
-                source,
-                "EnemyPathPoint",
-                &enpt,
-                &enemies.indices,
-                false,
-            )?),
+            AreaKind::Camera { cam_index } => Some(
+                super::references::resolve(world, e, true, cam_index, &cameras, true).unwrap_or_else(|| {
+                    raw_target(
+                        cam_index,
+                        baseline.filter(|a| a.kind == 0).map(|a| a.came_index),
+                        original.map(|a| a.came_index),
+                        source,
+                        "KmpCamera",
+                        &came,
+                        &cameras,
+                        true,
+                    )
+                })?,
+            ),
+            AreaKind::ForceRecalc { enemy_path_id } => Some(
+                super::references::resolve(world, e, true, enemy_path_id, &enemies.indices, false).unwrap_or_else(
+                    || {
+                        raw_target(
+                            enemy_path_id,
+                            baseline.filter(|a| a.kind == 4).map(|a| a.enpt_id),
+                            original.map(|a| a.enpt_id),
+                            source,
+                            "EnemyPathPoint",
+                            &enpt,
+                            &enemies.indices,
+                            false,
+                        )
+                    },
+                )?,
+            ),
             _ => None,
         };
         area_targets.push(target);

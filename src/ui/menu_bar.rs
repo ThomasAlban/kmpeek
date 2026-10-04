@@ -58,19 +58,30 @@ pub fn show_menu_bar(ui: &mut egui::Ui, world: &mut World) {
                 }
             });
             ui.menu_button("Edit", |ui| {
-                // haven't implemented undo/redo yet
-                ui.disable();
+                use crate::viewer::kmp::history::DocumentHistory;
+                if crate::viewer::kmp::history::requests_blocked(world) {
+                    ui.disable();
+                }
+                // Pending field/drag edits count as undoable before release.
+                // Like shortcuts, menu clicks only request end-of-frame restore.
+                let (can_undo, can_redo) = world
+                    .get_resource::<DocumentHistory>()
+                    .map_or((false, false), |h| (h.can_undo(), h.can_redo()));
                 if ui
-                    .add(Button::new("Undo").shortcut_text(format!("{sc_btn}+Z")))
+                    .add_enabled(can_undo, Button::new("Undo").shortcut_text(format!("{sc_btn}+Z")))
                     .clicked()
                 {
-                    // undo!();
+                    ui.ctx().memory_mut(|m| m.stop_text_input());
+                    world.resource_mut::<DocumentHistory>().request = Some(false);
+                    ui.close();
                 }
                 if ui
-                    .add(Button::new("Redo").shortcut_text(format!("{sc_btn}+Shift+Z")))
+                    .add_enabled(can_redo, Button::new("Redo").shortcut_text(format!("{sc_btn}+Shift+Z")))
                     .clicked()
                 {
-                    // redo!();
+                    ui.ctx().memory_mut(|m| m.stop_text_input());
+                    world.resource_mut::<DocumentHistory>().request = Some(true);
+                    ui.close();
                 }
             });
 

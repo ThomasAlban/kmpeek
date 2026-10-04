@@ -182,7 +182,16 @@ fn select_box(
     mut select_box: ResMut<SelectBox>,
     mut initial_mouse_pos: Local<Vec2>,
     mut selecting: Local<bool>,
+    generation: Option<Res<crate::viewer::kmp::history::RestoreGeneration>>,
+    mut seen: Local<u64>,
 ) {
+    let generation = generation.as_ref().map_or(0, |g| g.0);
+    if *seen != generation {
+        *seen = generation;
+        *selecting = false;
+        *select_box = SelectBox::default();
+        return;
+    }
     if *editor_mode != EditorMode::Default {
         *select_box = SelectBox::default();
         *selecting = false;
@@ -276,9 +285,18 @@ fn select_painter(
     mut commands: Commands,
     mut painting: Local<bool>,
     mut previous_mouse_pos: Local<Option<Vec2>>,
+    generation: Option<Res<crate::viewer::kmp::history::RestoreGeneration>>,
+    mut seen: Local<u64>,
     route_selection_mode: Option<Res<LinkSelectMode<RoutePoint>>>,
     respawn_selection_mode: Option<Res<LinkSelectMode<RespawnPoint>>>,
 ) {
+    let generation = generation.as_ref().map_or(0, |g| g.0);
+    if *seen != generation {
+        *seen = generation;
+        *painting = false;
+        *previous_mouse_pos = None;
+        return;
+    }
     if mouse_buttons.just_released(MouseButton::Left) || *editor_mode != EditorMode::SelectPainter {
         *painting = false;
         *previous_mouse_pos = None;

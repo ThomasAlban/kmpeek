@@ -138,10 +138,15 @@ pub struct RouteLink(pub Entity);
 
 fn on_add_route_link(
     trigger: On<Add, RouteLink>,
+    restoring: Option<Res<super::history::RestoringDocument>>,
     q_route_link: Query<&RouteLink>,
     mut q_route_linked_es: Query<&mut RouteLinkedEntities>,
     mut commands: Commands,
 ) {
+    // Restore permits dangling links and rebuilds owners explicitly.
+    if restoring.is_some() {
+        return;
+    }
     let e = trigger.event().entity;
     let Ok(linked_e) = q_route_link.get(e).map(|link| link.0) else {
         return;

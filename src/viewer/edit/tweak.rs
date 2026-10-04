@@ -40,6 +40,8 @@ pub struct TweakInteraction {
 
 pub fn tweak_interaction(
     mut tweak_interaction: Local<Option<TweakInteraction>>,
+    generation: Option<Res<crate::viewer::kmp::history::RestoreGeneration>>,
+    mut seen_generation: Local<u64>,
     mut q_selected: Query<(Entity, &mut Transform, &Tweakable), With<Selected>>,
     editor_mode: Res<EditorMode>,
     transform_gizmo: Res<TransformGizmoState>,
@@ -52,6 +54,15 @@ pub fn tweak_interaction(
     q_kcl: Query<(), With<KCLModelSection>>,
     mut ev_just_created_point: MessageReader<JustCreatedPoint>,
 ) {
+    // A restored point has a new allocation and must not inherit a stale drag
+    // or a queued create-and-drag event from the document we just replaced.
+    let generation = generation.as_ref().map_or(0, |g| g.0);
+    if *seen_generation != generation {
+        *seen_generation = generation;
+        *tweak_interaction = None;
+        ev_just_created_point.clear();
+        return;
+    }
     if *editor_mode != EditorMode::Default {
         *tweak_interaction = None;
         return;

@@ -45,6 +45,7 @@ fn keybinds(
     kmp_path: Option<Res<KmpFilePath>>,
     mut save: MessageWriter<SaveFile>,
     pending_action: Option<Res<PendingDocumentAction>>,
+    mut contexts: Query<&mut bevy_egui::EguiContext, With<bevy_egui::PrimaryEguiContext>>,
 ) {
     // A modal owns the user's decision; no global file shortcut may create a
     // second action or dialog behind it.
@@ -53,14 +54,11 @@ fn keybinds(
     }
     // Capture this before Open can close a dialog in the same frame.
     let dialog_was_open = file_dialog.is_open();
-    if keys.keybind_pressed([Modifier::Ctrl], [KeyCode::KeyZ]) {
-        // undo
-    }
-    if keys.keybind_pressed([Modifier::Ctrl, Modifier::Shift], [KeyCode::KeyZ])
-        || keys.keybind_pressed([Modifier::Ctrl], [KeyCode::KeyY])
-    {
-        // redo
-    }
+    // Single-key tool shortcuts still yield to any focused egui widget.
+    // History shortcuts run inside the egui pass, before widgets see input.
+    let text_editing = contexts
+        .single_mut()
+        .is_ok_and(|mut ctx| ctx.get_mut().egui_wants_keyboard_input());
 
     if keys.keybind_pressed([Modifier::Ctrl], [KeyCode::KeyO]) {
         // open or close file dialog
@@ -88,7 +86,7 @@ fn keybinds(
 
     // Editor tool bindings are single-key alternatives. Suppress them while a
     // command modifier is held so bindings such as S do not conflict with Save.
-    if !keys.control_or_super_pressed() && !keys.alt_pressed() {
+    if !dialog_was_open && !text_editing && !keys.control_or_super_pressed() && !keys.alt_pressed() {
         let bindings = &settings.editor_key_bindings;
         if binding_pressed(&keys, &bindings.default_mode) {
             *editor_mode = EditorMode::Default;
@@ -108,6 +106,54 @@ fn keybinds(
         if binding_pressed(&keys, &bindings.transform) {
             *editor_mode = EditorMode::Transform;
         }
+    }
+}
+
+/// Run after egui begins its pass, but before TextEdit handles shortcuts.
+/// Merely focusing the next field with Tab must not steal document history.
+/// Both this path and the Edit menu queue the same end-of-frame operation.
+pub(crate) fn history_shortcuts(ctx: &bevy_egui::egui::Context, world: &mut World) {
+    use crate::viewer::kmp::history::{requests_blocked, DocumentHistory};
+    use bevy_egui::egui::{Event, Key};
+    if requests_blocked(world) {
+        return;
+    }
+    let Some(mut history) = world.get_resource_mut::<DocumentHistory>() else {
+        return;
+    };
+    if history.owns_text_undo(ctx.memory(|m| m.focused())) {
+        return; // Preserve native undo AND redo throughout the active session.
+    }
+    let mut request = None;
+    ctx.input_mut(|input| {
+        input.events.retain(|event| {
+            if let Event::Key {
+                key,
+                pressed: true,
+                modifiers,
+                ..
+            } = event
+            {
+                if !modifiers.alt && (modifiers.ctrl || modifiers.command || modifiers.mac_cmd) {
+                    let redo = match key {
+                        Key::Z => Some(modifiers.shift),
+                        Key::Y => Some(true),
+                        _ => None,
+                    };
+                    if let Some(redo) = redo {
+                        request.get_or_insert(redo);
+                        return false; // Never let native and document undo both run.
+                    }
+                }
+            }
+            true
+        });
+    });
+    if let Some(redo) = request {
+        history.request = Some(redo);
+        // Drop the numeric widget's edit buffer before restoring document data.
+        // Otherwise its stale text can write the undone value back next frame.
+        ctx.memory_mut(|m| m.stop_text_input());
     }
 }
 
@@ -142,6 +188,41 @@ mod tests {
         }
         keys.press(KeyCode::KeyS);
         app
+    }
+
+    #[test]
+    fn undo_shortcuts_choose_one_action_and_do_not_run_behind_dialogs() {
+        use crate::viewer::kmp::history::DocumentHistory;
+        use bevy_egui::egui::{Context, Event, Key, Modifiers, RawInput};
+        for (key, shift, expected) in [(Key::Z, false, false), (Key::Z, true, true), (Key::Y, false, true)] {
+            for blocked in [false, true] {
+                let mut app = save_app(KeyCode::ControlLeft, shift, true, blocked);
+                app.init_resource::<DocumentHistory>();
+                let ctx = Context::default();
+                ctx.begin_pass(RawInput {
+                    events: vec![Event::Key {
+                        key,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: false,
+                        modifiers: Modifiers {
+                            ctrl: true,
+                            command: true,
+                            shift,
+                            ..Default::default()
+                        },
+                    }],
+                    ..Default::default()
+                });
+                history_shortcuts(&ctx, app.world_mut());
+                assert_eq!(ctx.input(|i| i.key_pressed(key)), blocked);
+                ctx.end_pass().textures_delta.clear();
+                assert_eq!(
+                    app.world().resource::<DocumentHistory>().request,
+                    if blocked { None } else { Some(expected) }
+                );
+            }
+        }
     }
 
     #[test]

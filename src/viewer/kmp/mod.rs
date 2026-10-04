@@ -2,12 +2,14 @@ pub mod checkpoints;
 pub mod components;
 pub mod csv;
 pub mod document;
+pub mod history;
 pub mod meshes_materials;
 pub mod ordering;
 pub mod path;
 pub mod point;
 pub mod preservation;
 mod rebuild;
+mod references;
 pub mod routes;
 pub mod sections;
 pub mod settings;
@@ -46,6 +48,7 @@ pub fn kmp_plugin(app: &mut App) {
         ordering_plugin,
         section_plugin,
         routes_plugin,
+        history::plugin,
     ))
     .add_message::<SaveFile>()
     .add_message::<OpenKmpRequest>()
@@ -165,7 +168,7 @@ fn despawn_kmp_points(world: &mut World) {
 }
 
 /// Parse before clearing the current course, then build the editable entities and
-/// their baseline together. This same path refreshes indices after a rebuild save.
+/// their import baseline together. Saves never call this path or reload entities.
 pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
     let Some(ev) = world.resource_mut::<Messages<KmpFileSelected>>().drain().last() else {
         return Ok(());
@@ -255,6 +258,7 @@ pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
     world.remove_resource::<KmpSectionIdEntityMap<RespawnPoint>>();
 
     world.write_message(RefreshOrdering);
+    history::reset(world);
 
     Ok(())
 }
@@ -282,7 +286,7 @@ pub struct SaveStatus(pub String);
 pub fn save_kmp(world: &mut World) {
     let requests: Vec<_> = world.resource_mut::<Messages<SaveFile>>().drain().collect();
     for SaveFile(path) in requests {
-        // Capture the mode before a rebuild refreshes the loaded editor document.
+        // Capture the mode for the completion message; neither mode reloads.
         let patch = world
             .get_resource::<AppSettings>()
             .is_some_and(|settings| settings.patch_saving);
@@ -298,7 +302,7 @@ pub fn save_kmp(world: &mut World) {
                 if patch {
                     "patch; original layout preserved"
                 } else {
-                    "rebuilt; indices refreshed, unused source data discarded"
+                    "rebuilt; output IDs generated, unused source data discarded"
                 }
             ),
             Err(error) => format!("Save failed: {error:#}"),

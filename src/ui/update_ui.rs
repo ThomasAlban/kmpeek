@@ -69,6 +69,7 @@ fn setup_ui_images(mut contexts: EguiContexts) {
 
 fn update_ui(world: &mut World) {
     let ctx = get_egui_ctx(world);
+    super::keybinds::history_shortcuts(&ctx, world);
     let mut viewport_ui = egui::Ui::new(
         ctx.clone(),
         "viewport_root".into(),

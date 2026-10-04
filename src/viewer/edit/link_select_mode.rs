@@ -16,6 +16,8 @@ use std::marker::PhantomData;
 use super::select::SelectSet;
 
 pub fn link_select_mode_plugin(app: &mut App) {
+    app.init_resource::<LinkSelectionVisibility<RoutePoint>>()
+        .init_resource::<LinkSelectionVisibility<RespawnPoint>>();
     app.add_systems(
         Update,
         (
@@ -33,6 +35,32 @@ pub struct LinkSelectMode<T: Component>(#[deref] pub Vec<Entity>, PhantomData<T>
 impl<T: Component> LinkSelectMode<T> {
     pub fn new(e: impl IntoIterator<Item = Entity>) -> Self {
         Self(e.into_iter().collect(), PhantomData)
+    }
+}
+
+/// Saved visibility belongs to the interaction, not to document history.
+#[derive(Resource, Deref, DerefMut)]
+pub struct LinkSelectionVisibility<T: Component>(#[deref] pub HashMap<Entity, Visibility>, PhantomData<T>);
+impl<T: Component> Default for LinkSelectionVisibility<T> {
+    fn default() -> Self {
+        Self(HashMap::default(), PhantomData)
+    }
+}
+
+/// Restore temporary visibility before history caches views or despawns points;
+/// otherwise link-picking's isolation display would become their remembered view.
+pub fn cancel<T: Component>(world: &mut World) {
+    let active = world.remove_resource::<LinkSelectMode<T>>().is_some();
+    if let Some(mut saved) = world.get_resource_mut::<LinkSelectionVisibility<T>>() {
+        let entries = std::mem::take(&mut saved.0);
+        if !active {
+            return;
+        }
+        for (e, visibility) in entries {
+            if let Some(mut current) = world.get_mut::<Visibility>(e) {
+                *current = visibility;
+            }
+        }
     }
 }
 
@@ -79,7 +107,7 @@ fn update_link_selection_mode<T: Component + CreateLink>(
     keys: Res<ButtonInput<KeyCode>>,
     mut q_visibility: Query<(Entity, &mut Visibility)>,
     // saves the visibility state of everything before we went into route selection mode
-    mut e_v_map: Local<HashMap<Entity, Visibility>>,
+    mut e_v_map: ResMut<LinkSelectionVisibility<T>>,
     mut commands: Commands,
     q_camera: Query<(&mut Camera, &GlobalTransform), With<EditorCamera>>,
     viewport_info: Res<ViewportInfo>,
@@ -89,9 +117,13 @@ fn update_link_selection_mode<T: Component + CreateLink>(
     mut raycast: MeshRayCast,
     q_every_other_pt: Query<Entity, (With<KmpSelectablePoint>, Without<T>)>,
 ) {
-    let Some(res) = res else { return };
+    let Some(res) = res else {
+        e_v_map.clear();
+        return;
+    };
 
     if res.is_added() {
+        e_v_map.clear();
         // we only just went into link selection mode so we need to set everything up
         for (e, v) in q_visibility.iter() {
             e_v_map.insert(e, *v);

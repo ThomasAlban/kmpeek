@@ -17,8 +17,8 @@ use std::{
 /// snapshots: importing can normalize rotations, flags, and ordering. Comparing
 /// later editor values with `baseline`, rather than `original`, prevents those
 /// import conversions from becoming unintended edits to the source bytes.
-/// Patch saves keep these snapshots fixed; a successful rebuild reloads its
-/// committed output to establish new source identities and a fresh baseline.
+/// Both save modes keep import provenance fixed. Rebuild advances a separate
+/// committed layout baseline without reloading entities or replacing history.
 #[derive(Resource, Clone)]
 pub struct LoadedKmp {
     /// Physical source layout, including bytes the parser does not model.
@@ -34,9 +34,14 @@ pub struct LoadedKmp {
     respawn_ids: EntityHashMap<u32>,
     route_links: EntityHashMap<Entity>,
     respawn_links: EntityHashMap<Entity>,
+    // These are disk facts, not undoable content: undo after Save As must still
+    // compare against the latest written bytes at the new active destination.
     // Track every successfully written destination, including the opened file.
     disk_versions: Vec<(PathBuf, Vec<u8>)>,
     permissions: Permissions,
+    // A rebuild establishes a new patch layout, but never replaces the import
+    // provenance used to interpret unchanged numeric references in editor data.
+    rebuilt_baseline: Option<(Vec<u8>, KmpFile, StructuralSignature)>,
 }
 
 /// Entity identity, export order, and connectivity that field-only patches must
@@ -62,6 +67,33 @@ fn ordered<T: Component>(world: &mut World) -> Vec<Entity> {
 }
 
 impl StructuralSignature {
+    fn remap(&mut self, map: &EntityHashMap<Entity>) {
+        let key = |e: &mut Entity| {
+            if let Some(&new) = map.get(e) {
+                *e = new;
+            }
+        };
+        for (_, entities) in &mut self.sections {
+            for e in entities {
+                key(e);
+            }
+        }
+        for (e, previous, next, _) in &mut self.graph {
+            key(e);
+            for e in previous.iter_mut().chain(next.iter_mut()) {
+                key(e);
+            }
+            previous.sort_unstable();
+            next.sort_unstable();
+        }
+        self.graph.sort_unstable();
+        for (left, right) in &mut self.checkpoint_pairs {
+            key(left);
+            key(right);
+        }
+        self.checkpoint_pairs.sort_unstable();
+    }
+
     /// Record structure without editable values. Sort adjacency sets and query
     /// results so ECS iteration order cannot masquerade as a topology change.
     fn capture(world: &mut World) -> Self {
@@ -178,6 +210,43 @@ pub fn normalize_ordering(world: &mut World, kmp: &KmpFile) -> Result<()> {
 }
 
 impl LoadedKmp {
+    /// Resolve immutable import identities to the current ECS allocation. Deleted
+    /// source rows remain unresolved rather than acquiring another row's meaning.
+    pub(crate) fn live(&self, world: &mut World) -> Self {
+        let map = super::history::identities(world);
+        let key = |e: Entity| map.get(&e).copied().unwrap_or(e);
+        let mut live = self.clone();
+        live.signature.remap(&map);
+        live.route_ids = self.route_ids.iter().map(|(&e, &id)| (key(e), id)).collect();
+        live.respawn_ids = self.respawn_ids.iter().map(|(&e, &id)| (key(e), id)).collect();
+        live.route_links = self
+            .route_links
+            .iter()
+            .map(|(&e, &target)| (key(e), key(target)))
+            .collect();
+        live.respawn_links = self
+            .respawn_links
+            .iter()
+            .map(|(&e, &target)| (key(e), key(target)))
+            .collect();
+        live
+    }
+
+    fn projected_bytes(&self, world: &mut World) -> Result<Vec<u8>> {
+        references::refresh(world);
+        if let Some((bytes, baseline, signature)) = &self.rebuilt_baseline {
+            let mut signature = signature.clone();
+            signature.remap(&super::history::identities(world));
+            signature.validate(&StructuralSignature::capture(world))?;
+            let source = self.live(world);
+            let current = rebuild::rebuild(world, &source)?;
+            preservation::patch(bytes, baseline, baseline, &current)
+        } else {
+            let current = self.snapshot(world)?;
+            preservation::patch(&self.original_bytes, &self.original, &self.baseline, &current)
+        }
+    }
+
     /// Find the source row behind an imported entity. Editor OrderIds can change
     /// after deletions, so reference remapping must use the frozen load-time list.
     /// Grouped sections may have holes or aliases; their raw indices are not the
@@ -244,6 +313,7 @@ impl LoadedKmp {
             respawn_ids,
             route_links,
             respawn_links,
+            rebuilt_baseline: None,
         };
         document.baseline = document.snapshot(world)?;
         Ok(document)
@@ -309,6 +379,10 @@ impl LoadedKmp {
     /// preservation::patch later decides which exported values actually changed.
     /// This also installs source-ID lookup resources needed by point exporters.
     pub fn snapshot(&self, world: &mut World) -> Result<KmpFile> {
+        self.live(world).snapshot_live(world)
+    }
+
+    fn snapshot_live(&self, world: &mut World) -> Result<KmpFile> {
         self.signature.validate(&StructuralSignature::capture(world))?;
         for (section, entities) in &self.signature.sections {
             for &entity in entities {
@@ -344,6 +418,33 @@ impl LoadedKmp {
         macro_rules! points { ($($field:ident: $ty:ty),*) => { $(kmp.$field = save_point_section::<$ty>(world).0;)* }; }
         points!(ktpt: StartPoint, gobj: Object, area: AreaPoint, came: KmpCamera,
             jgpt: RespawnPoint, cnpt: CannonPoint, mspt: BattleFinishPoint);
+        // Numeric controls carry logical target bindings. Re-encode these in
+        // source coordinates; a temporary reorder may have changed what the
+        // displayed number meant even though source structure matches again.
+        let camera_ids: std::collections::HashMap<_, _> = ordered::<KmpCamera>(world)
+            .into_iter()
+            .filter_map(|e| self.original_index("KmpCamera", e).map(|i| (e, i)))
+            .collect();
+        let enemy_ids: std::collections::HashMap<_, _> = ordered::<EnemyPathPoint>(world)
+            .into_iter()
+            .filter_map(|e| self.original_index("EnemyPathPoint", e).map(|i| (e, i)))
+            .collect();
+        for (record, e) in kmp.came.iter_mut().zip(ordered::<KmpCamera>(world)) {
+            if let Some(value) = references::resolve_patch(world, e, false, record.next_index, &camera_ids, true) {
+                record.next_index = value?;
+            }
+        }
+        for (record, e) in kmp.area.iter_mut().zip(ordered::<AreaPoint>(world)) {
+            if record.kind == 0 {
+                if let Some(value) = references::resolve_patch(world, e, true, record.came_index, &camera_ids, true) {
+                    record.came_index = value?;
+                }
+            } else if record.kind == 4 {
+                if let Some(value) = references::resolve_patch(world, e, true, record.enpt_id, &enemy_ids, false) {
+                    record.enpt_id = value?;
+                }
+            }
+        }
         // Unreferenced points are not spawned by the importer. Leave their raw
         // records in place while mapping represented points back to source IDs.
         macro_rules! path_points {
@@ -435,13 +536,7 @@ pub fn has_unsaved_changes(world: &mut World) -> Result<bool> {
     let Some(document) = world.get_resource::<LoadedKmp>().cloned() else {
         return Ok(false);
     };
-    let current = document.snapshot(world)?;
-    let projected = preservation::patch(
-        &document.original_bytes,
-        &document.original,
-        &document.baseline,
-        &current,
-    )?;
+    let projected = document.projected_bytes(world)?;
     let path = world
         .get_resource::<KmpFilePath>()
         .context("Loaded KMP has no active file path")?;
@@ -456,8 +551,8 @@ pub fn has_unsaved_changes(world: &mut World) -> Result<bool> {
 }
 
 /// Save or Save As through the selected encoder and a shared atomic commit.
-/// Patch saves keep their original/baseline pair so reverted edits restore original
-/// bytes. Rebuild saves refresh the editor only after the new file is committed.
+/// Patch saves keep their layout/baseline pair so reverted edits restore its bytes.
+/// Rebuild advances that pair only after commit; neither mode reloads the editor.
 pub fn save(world: &mut World, destination: Option<PathBuf>) -> Result<PathBuf> {
     let path = destination
         .or_else(|| world.get_resource::<KmpFilePath>().map(|p| p.0.clone()))
@@ -475,20 +570,16 @@ pub fn save(world: &mut World, destination: Option<PathBuf>) -> Result<PathBuf> 
     let patch_saving = world
         .get_resource::<AppSettings>()
         .is_some_and(|settings| settings.patch_saving);
+    super::history::checkpoint(world);
     let bytes = if patch_saving {
-        let current = document.snapshot(world).map_err(|error| {
+        document.projected_bytes(world).map_err(|error| {
             anyhow::anyhow!("{error:#}. Turn off Patch saving in Settings → General to rebuild the KMP")
-        })?;
-        preservation::patch(
-            &document.original_bytes,
-            &document.original,
-            &document.baseline,
-            &current,
-        )?
+        })?
     } else {
         // Rebuild creates a complete checked model before any disk I/O. The
         // canonical encoder packs records and updates all header lengths/counts.
-        let rebuilt = rebuild::rebuild(world, &document)?;
+        let source = document.live(world);
+        let rebuilt = rebuild::rebuild(world, &source)?;
         let mut encoded = Cursor::new(Vec::new());
         rebuilt.write(&mut encoded)?;
         let bytes = encoded.into_inner();
@@ -501,25 +592,31 @@ pub fn save(world: &mut World, destination: Option<PathBuf>) -> Result<PathBuf> 
         .iter()
         .find(|(p, _)| p == &target)
         .map(|(_, b)| b.as_slice());
+    let rebuilt_baseline = if patch_saving {
+        None
+    } else {
+        let parsed = KmpFile::read(&mut Cursor::new(&bytes))?;
+        let mut signature = StructuralSignature::capture(world);
+        let inverse = super::history::identities(world)
+            .into_iter()
+            .map(|(id, e)| (e, id))
+            .collect();
+        signature.remap(&inverse);
+        Some((bytes.clone(), parsed, signature))
+    };
     atomic_replace(&target, &bytes, expected, &document.permissions)?;
     let mut document = world.resource_mut::<LoadedKmp>();
+    if let Some(baseline) = rebuilt_baseline {
+        document.rebuilt_baseline = Some(baseline);
+    }
     if let Some((_, version)) = document.disk_versions.iter_mut().find(|(p, _)| p == &target) {
         *version = bytes;
     } else {
         document.disk_versions.push((target, bytes));
     }
     world.insert_resource(KmpFilePath(path.clone()));
-    if !patch_saving {
-        // A structural rebuild changes the meaning of numeric row IDs. Reload
-        // the committed bytes so controls, references, and the next patch baseline
-        // all use those new IDs. This deliberately clears the old selection.
-        // Disk-version history survives the reload to retain overwrite protection
-        // when switching back to a destination previously saved in this session.
-        let versions = world.resource::<LoadedKmp>().disk_versions.clone();
-        world.write_message(KmpFileSelected(path.clone()));
-        open_kmp(world).context("KMP was saved, but refreshing the editor failed; reopen the saved file")?;
-        world.resource_mut::<LoadedKmp>().disk_versions = versions;
-    }
+    // Do not reload: live entities, component payloads, view state and the import
+    // reference epoch survive. Only the persisted-byte baseline advances.
     Ok(path)
 }
 
@@ -598,6 +695,7 @@ fn atomic_replace(
 #[cfg(test)]
 mod tests {
     use super::*;
+    include!("document_history_tests.rs");
 
     /// Isolate disk tests from course data; remove temporary artifacts on drop.
     struct TestDir(PathBuf);
@@ -689,11 +787,128 @@ mod tests {
         bytes
     }
 
-    /// Cover every section through real import and Save As, including normalized
-    /// rotations and opaque padding; a later camera edit may change only its field.
-    /// Exercise the UI mode switch through the real save service, not only the
-    /// planner: rebuild renumbers references, reloads the committed document, and
-    /// leaves a fresh baseline suitable for subsequent lossless patch saves.
+    /// Numeric references retain their chosen identity through reordering,
+    /// entity reallocation by undo/redo, and repeated rebuild/patch saves.
+    #[test]
+    fn numeric_bindings_survive_reorder_undo_redo_and_saves() {
+        use super::super::history;
+        let dir = TestDir::new();
+        let path = dir.0.join("references.kmp");
+        let mut app = headless_app();
+        let fixture = KmpFile {
+            stgi: Section::new(vec![Stgi::default()]),
+            came: Section::new(vec![
+                Came {
+                    next_index: 1,
+                    ..default()
+                },
+                Came {
+                    next_index: 255,
+                    ..default()
+                },
+                Came {
+                    next_index: 255,
+                    ..default()
+                },
+            ]),
+            ..default()
+        };
+        load(&mut app, &path, &fixture);
+        let world = app.world_mut();
+        let cameras = ordered::<KmpCamera>(world);
+        let (a, b, c) = (cameras[0], cameras[1], cameras[2]);
+        // The imported reference still means B when B moves to row zero.
+        world.entity_mut(a).insert(OrderId(1));
+        world.entity_mut(b).insert(OrderId(0));
+        history::checkpoint(world);
+        let source = world.resource::<LoadedKmp>().clone().live(world);
+        assert_eq!(rebuild::rebuild(world, &source).unwrap().came[1].next_index, 0);
+        // Explicitly enter row zero, then move B again. Resolving only at save
+        // time would incorrectly retarget this edited number to C.
+        world.get_mut::<KmpCamera>(a).unwrap().next_index = 0;
+        history::checkpoint(world);
+        world.entity_mut(b).insert(OrderId(2));
+        world.entity_mut(c).insert(OrderId(0));
+        history::checkpoint(world);
+        for redo in [false, false, true, true] {
+            history::undo(world, redo);
+        }
+        let live = history::identities(world);
+        assert_ne!(live[&a], a);
+        assert_eq!(world.get::<KmpCamera>(live[&a]).unwrap().next_index, 0);
+        let source = world.resource::<LoadedKmp>().clone().live(world);
+        assert_eq!(rebuild::rebuild(world, &source).unwrap().came[1].next_index, 2);
+        world.resource_mut::<AppSettings>().patch_saving = false;
+        save(world, None).unwrap();
+        let first = fs::read(&path).unwrap();
+        save(world, None).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), first);
+        world.resource_mut::<AppSettings>().patch_saving = true;
+        save(world, None).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), first);
+        assert!(!has_unsaved_changes(world).unwrap());
+        // An edited out-of-range optional reference is an error, not 'none'.
+        world.get_mut::<KmpCamera>(live[&a]).unwrap().next_index = 7;
+        history::checkpoint(world);
+        let source = world.resource::<LoadedKmp>().clone().live(world);
+        assert!(rebuild::rebuild(world, &source)
+            .unwrap_err()
+            .to_string()
+            .contains("does not exist"));
+    }
+
+    #[test]
+    fn numeric_bindings_distinguish_area_kind_and_deleted_targets() {
+        use super::super::history;
+        let dir = TestDir::new();
+        let path = dir.0.join("area-references.kmp");
+        let mut app = headless_app();
+        let fixture = KmpFile {
+            stgi: Section::new(vec![Stgi::default()]),
+            came: Section::new(vec![Came {
+                next_index: 255,
+                ..default()
+            }]),
+            enpt: Section::new(vec![Enpt::default(), Enpt::default()]),
+            enph: Section::new(vec![PathGroup::new(0, 2, [255; 6], [255; 6], 0)]),
+            area: Section::new(vec![Area {
+                kind: 0,
+                came_index: 0,
+                ..default()
+            }]),
+            ..default()
+        };
+        load(&mut app, &path, &fixture);
+        let world = app.world_mut();
+        let area = ordered::<AreaPoint>(world)[0];
+        let camera = ordered::<KmpCamera>(world)[0];
+        let enemies = ordered::<EnemyPathPoint>(world);
+        // Same number, different field meaning: must bind to an enemy, not to
+        // the camera identity left in the previous AREA variant.
+        world.get_mut::<AreaPoint>(area).unwrap().kind = AreaKind::ForceRecalc { enemy_path_id: 0 };
+        history::checkpoint(world);
+        let source = world.resource::<LoadedKmp>().clone().live(world);
+        assert_eq!(rebuild::rebuild(world, &source).unwrap().area[0].enpt_id, 0);
+        world.despawn(enemies[0]);
+        history::checkpoint(world);
+        let source = world.resource::<LoadedKmp>().clone().live(world);
+        assert!(rebuild::rebuild(world, &source)
+            .unwrap_err()
+            .to_string()
+            .contains("relink"));
+        history::undo(world, false);
+        let live = history::identities(world);
+        let area = live[&area];
+        world.get_mut::<AreaPoint>(area).unwrap().kind = AreaKind::Camera { cam_index: 0 };
+        history::checkpoint(world);
+        world.despawn(live[&camera]);
+        history::checkpoint(world);
+        let source = world.resource::<LoadedKmp>().clone().live(world);
+        assert_eq!(rebuild::rebuild(world, &source).unwrap().area[0].came_index, 255);
+    }
+
+    /// Exercise mode switching through the real service: rebuild remaps output
+    /// references without reloading, then establishes a lossless patch baseline.
     #[test]
     fn rebuild_mode_saves_structural_edits_and_rebases_patch_mode() {
         let dir = TestDir::new();

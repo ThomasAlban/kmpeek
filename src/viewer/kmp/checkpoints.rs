@@ -139,13 +139,23 @@ impl Default for CheckpointHeight {
     }
 }
 
-fn on_remove_cp_left(trigger: On<Remove, CheckpointLeft>, q_cp_left: Query<&CheckpointLeft>, mut commands: Commands) {
+fn on_remove_cp_left(
+    trigger: On<Remove, CheckpointLeft>,
+    q_cp_left: Query<&CheckpointLeft>,
+    q_cp_right: Query<&CheckpointRight>,
+    mut commands: Commands,
+) {
     let Ok(cp_left) = q_cp_left.get(trigger.event().entity) else {
         return;
     };
     let cp_right = cp_left.right;
 
-    try_despawn(&mut commands, cp_right);
+    if q_cp_right
+        .get(cp_right)
+        .is_ok_and(|right| right.left == trigger.event().entity)
+    {
+        try_despawn(&mut commands, cp_right);
+    }
     try_despawn(&mut commands, cp_left.line);
     try_despawn(&mut commands, cp_left.plane);
     try_despawn(&mut commands, cp_left.arrow);
@@ -154,6 +164,7 @@ fn on_remove_cp_left(trigger: On<Remove, CheckpointLeft>, q_cp_left: Query<&Chec
 fn on_remove_cp_right(
     trigger: On<Remove, CheckpointRight>,
     q_cp_right: Query<&CheckpointRight>,
+    q_cp_left: Query<&CheckpointLeft>,
     mut commands: Commands,
 ) {
     let Ok(cp_right) = q_cp_right.get(trigger.event().entity) else {
@@ -161,7 +172,12 @@ fn on_remove_cp_right(
     };
     let cp_left = cp_right.left;
 
-    try_despawn(&mut commands, cp_left);
+    if q_cp_left
+        .get(cp_left)
+        .is_ok_and(|left| left.right == trigger.event().entity)
+    {
+        try_despawn(&mut commands, cp_left);
+    }
 }
 
 #[builder]
@@ -173,6 +189,7 @@ pub fn checkpoint_spawner(
     #[builder(default = DEFAULT_CHECKPOINT_HEIGHT)] height: f32,
     order_id: Option<u32>,
     right_e: Option<Entity>,
+    left_e: Option<Entity>,
 ) -> (Entity, Entity) {
     let (left_pos, right_pos) = (pos.0, pos.1);
     let left_transform = Transform::from_xyz(left_pos.x, height, left_pos.y);
@@ -207,7 +224,7 @@ pub fn checkpoint_spawner(
         Visibility::Hidden
     };
 
-    let left_e = world.spawn_empty().id();
+    let left_e = left_e.unwrap_or_else(|| world.spawn_empty().id());
     let right_e = right_e.unwrap_or_else(|| world.spawn_empty().id());
 
     let line_e = world.spawn_empty().id();
