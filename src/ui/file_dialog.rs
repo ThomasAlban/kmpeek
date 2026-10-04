@@ -1,31 +1,14 @@
-use super::{ui_state::KmpFilePath, util::get_egui_ctx};
+use super::{ui_state::KmpFilePath, util::get_egui_ctx, util::FileResult, util::FileSource};
 use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::egui::Align2;
 use egui_file::{FileDialog, State as FileDialogState};
-use std::path::PathBuf;
 
 pub fn file_dialog_plugin(app: &mut App) {
-    app.init_resource::<FileDialogRes>().add_message::<FileDialogResult>();
+    app.init_resource::<FileDialogRes>().add_message::<FileResult>();
 }
 
 #[derive(Resource, Default)]
-pub struct FileDialogRes(pub Option<(FileDialog, DialogType)>);
-
-#[derive(Clone, Copy)]
-pub enum DialogType {
-    OpenKmpKcl,
-    SaveKmp,
-    ExportSettings,
-    ImportSettings,
-    // ExportCsv,
-    // ImportCsv,
-}
-
-#[derive(Message)]
-pub struct FileDialogResult {
-    pub path: PathBuf,
-    pub dialog_type: DialogType,
-}
+pub struct FileDialogRes(pub Option<(FileDialog, FileSource)>);
 
 const FILE_DIALOG_SIZE: (f32, f32) = (500., 250.);
 
@@ -36,13 +19,13 @@ pub fn show_file_dialog(world: &mut World) {
         let mut result = None;
         let mut close_dialog = false;
 
-        if let Some((dialog, dialog_type)) = &mut file_dialog.0 {
+        if let Some((dialog, file_source)) = &mut file_dialog.0 {
             dialog.show(ctx);
             match dialog.state() {
                 FileDialogState::Selected => {
-                    result = dialog.path().map(|path| FileDialogResult {
+                    result = dialog.path().map(|path| FileResult {
                         path: path.into(),
-                        dialog_type: *dialog_type,
+                        file_source: *file_source,
                     });
                     close_dialog = true;
                 }
@@ -92,7 +75,7 @@ impl FileDialogManager<'_> {
                 false
             }));
         dialog.open();
-        self.file_dialog.0 = Some((dialog, DialogType::OpenKmpKcl));
+        self.file_dialog.0 = Some((dialog, FileSource::OpenKmpKclDialog));
     }
     /// Pick a destination only; the document service selects patch/rebuild mode
     /// and performs the actual atomic save after the dialog result is delivered.
@@ -105,7 +88,7 @@ impl FileDialogManager<'_> {
             dialog = dialog.initial_path(path);
         }
         dialog.open();
-        self.file_dialog.0 = Some((dialog, DialogType::SaveKmp));
+        self.file_dialog.0 = Some((dialog, FileSource::SaveKmpDialog));
     }
     pub fn import_settings(&mut self) {
         let mut dialog = FileDialog::open_file()
@@ -120,7 +103,7 @@ impl FileDialogManager<'_> {
                 false
             }));
         dialog.open();
-        self.file_dialog.0 = Some((dialog, DialogType::ImportSettings));
+        self.file_dialog.0 = Some((dialog, FileSource::ImportSettings));
     }
     pub fn export_settings(&mut self) {
         let mut dialog = FileDialog::save_file()
@@ -129,7 +112,7 @@ impl FileDialogManager<'_> {
             .default_filename("kmpeek_settings.json");
         dialog.open();
 
-        self.file_dialog.0 = Some((dialog, DialogType::ExportSettings));
+        self.file_dialog.0 = Some((dialog, FileSource::ExportSettings));
     }
     // pub fn export_csv(&mut self, name: impl Into<String>) {
     //     let mut dialog = FileDialog::save_file()
