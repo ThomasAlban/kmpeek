@@ -1,8 +1,11 @@
-use crate::viewer::{edit::EditorMode, kmp::SaveFile};
+use crate::viewer::{
+    edit::{select::Selected, EditorMode},
+    kmp::{components::KmpEulerRotation, SaveFile},
+};
 
 use super::{
     file_dialog::FileDialogManager, settings::AppSettings, ui_state::KmpFilePath,
-    unsaved_changes::PendingDocumentAction
+    unsaved_changes::PendingDocumentAction, util::get_euler_rot,
 };
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -18,6 +21,7 @@ pub struct EditorKeyBindings {
     pub translate: Vec<KeyCode>,
     pub rotate: Vec<KeyCode>,
     pub scale: Vec<KeyCode>,
+    pub normalise_rotation: Vec<KeyCode>,
 }
 
 impl Default for EditorKeyBindings {
@@ -29,6 +33,7 @@ impl Default for EditorKeyBindings {
             translate: vec![KeyCode::KeyT],
             rotate: vec![KeyCode::KeyR],
             scale: vec![KeyCode::KeyX],
+            normalise_rotation: vec![KeyCode::KeyN],
         }
     }
 }
@@ -46,6 +51,7 @@ fn keybinds(
     mut save: MessageWriter<SaveFile>,
     pending_action: Option<Res<PendingDocumentAction>>,
     mut contexts: Query<&mut bevy_egui::EguiContext, With<bevy_egui::PrimaryEguiContext>>,
+    mut rotations: Query<(&mut KmpEulerRotation, &mut Transform), With<Selected>>,
 ) {
     // A modal owns the user's decision; no global file shortcut may create a
     // second action or dialog behind it.
@@ -105,6 +111,57 @@ fn keybinds(
         }
         if binding_pressed(&keys, &bindings.transform) {
             *editor_mode = EditorMode::Transform;
+        }
+        if binding_pressed(&keys, &bindings.normalise_rotation) {
+            for (mut rotation, transform) in &mut rotations {
+                rotation.0 = get_euler_rot(&transform);
+            }
+        }
+    }
+}
+
+pub(crate) fn key_binding_label(bindings: &[KeyCode]) -> String {
+    if bindings.is_empty() {
+        return "Unbound".into();
+    }
+    bindings
+        .iter()
+        .copied()
+        .map(key_code_label)
+        .collect::<Vec<_>>()
+        .join(" / ")
+}
+
+pub(crate) fn normalise_rotation_tooltip(bindings: &EditorKeyBindings) -> String {
+    format!(
+        "Normalise rotation by pressing {}",
+        key_binding_label(&bindings.normalise_rotation)
+    )
+}
+
+pub(crate) fn key_code_label(key_code: KeyCode) -> String {
+    match key_code {
+        KeyCode::ShiftLeft => "Left Shift".into(),
+        KeyCode::ShiftRight => "Right Shift".into(),
+        KeyCode::ControlLeft => "Left Ctrl".into(),
+        KeyCode::ControlRight => "Right Ctrl".into(),
+        KeyCode::AltLeft => "Left Alt".into(),
+        KeyCode::AltRight => "Right Alt".into(),
+        KeyCode::SuperLeft => "Left Super".into(),
+        KeyCode::SuperRight => "Right Super".into(),
+        KeyCode::ArrowUp => "Up Arrow".into(),
+        KeyCode::ArrowDown => "Down Arrow".into(),
+        KeyCode::ArrowLeft => "Left Arrow".into(),
+        KeyCode::ArrowRight => "Right Arrow".into(),
+        KeyCode::PageUp => "Page Up".into(),
+        KeyCode::PageDown => "Page Down".into(),
+        key_code => {
+            let debug_name = format!("{key_code:?}");
+            debug_name
+                .strip_prefix("Key")
+                .or_else(|| debug_name.strip_prefix("Digit"))
+                .unwrap_or(&debug_name)
+                .to_owned()
         }
     }
 }
@@ -224,6 +281,36 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn normalise_rotation_uses_configured_binding_and_preserves_orientation() {
+        let mut app = App::new();
+        app.init_resource::<ButtonInput<KeyCode>>()
+            .init_resource::<FileDialogRes>()
+            .init_resource::<EditorMode>()
+            .init_resource::<AppSettings>()
+            .add_message::<SaveFile>()
+            .add_systems(Update, keybinds);
+        let mut transform = Transform::default();
+        crate::ui::util::set_euler_rot(Vec3::new(700.0, -20.0, 720.0), &mut transform);
+        let expected = transform.rotation;
+        let entity = app
+            .world_mut()
+            .spawn((KmpEulerRotation(Vec3::new(700.0, -20.0, 720.0)), transform, Selected))
+            .id();
+        {
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.clear();
+            keys.press(KeyCode::KeyN);
+        }
+
+        app.update();
+
+        let rotation = app.world().get::<KmpEulerRotation>(entity).unwrap().0;
+        let transform = app.world().get::<Transform>(entity).unwrap();
+        assert!(rotation.abs_diff_eq(get_euler_rot(transform), 0.001));
+        assert!(transform.rotation.dot(expected).abs() > 0.99999);
     }
 
     #[test]

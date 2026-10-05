@@ -1,10 +1,11 @@
 use super::{select::Selected, EditorMode};
 use crate::{
-    ui::settings::AppSettings,
+    ui::{settings::AppSettings, util::nearest_euler_rot},
     viewer::{
         camera::EditorCamera,
         kmp::{
             checkpoints::{CheckpointLeft, CheckpointRight},
+            components::KmpEulerRotation,
             settings::{
                 DEFAULT_GIZMO_LINE_WIDTH, DEFAULT_GIZMO_SIZE, MAX_GIZMO_LINE_WIDTH, MAX_GIZMO_SIZE,
                 MIN_GIZMO_LINE_WIDTH, MIN_GIZMO_SIZE,
@@ -162,7 +163,7 @@ fn update_gizmo_options(
 pub fn show_transform_gizmo(ui: &mut Ui, viewport: egui::Rect, world: &mut World) {
     let mut system_state = SystemState::<(
         ResMut<TransformGizmoState>,
-        Query<(Entity, &mut Transform), (With<Selected>, With<GizmoTransformable>)>,
+        Query<(Entity, &mut Transform, Option<&mut KmpEulerRotation>), (With<Selected>, With<GizmoTransformable>)>,
         Query<(), (With<Selected>, Or<(With<CheckpointLeft>, With<CheckpointRight>)>)>,
         Query<(&Camera, &GlobalTransform), With<EditorCamera>>,
         Res<EditorMode>,
@@ -195,7 +196,7 @@ pub fn show_transform_gizmo(ui: &mut Ui, viewport: egui::Rect, world: &mut World
 
     let targets = q_targets
         .iter_mut()
-        .map(|(entity, transform)| (entity, to_gizmo_transform(&transform)))
+        .map(|(entity, transform, _)| (entity, to_gizmo_transform(&transform)))
         .collect::<Vec<_>>();
     if targets.is_empty() {
         state.is_focused = false;
@@ -251,10 +252,11 @@ pub fn show_transform_gizmo(ui: &mut Ui, viewport: egui::Rect, world: &mut World
                         config.orientation,
                     );
                 }
-                _ => {
+                result => {
                     state.group_scale_interaction = None;
+                    let rotation_changed = matches!(result, GizmoResult::Rotation { .. } | GizmoResult::Arcball { .. });
                     for ((entity, _), updated) in targets.into_iter().zip(updated_transforms) {
-                        apply_gizmo_transform(&mut q_targets, entity, updated);
+                        apply_gizmo_transform(&mut q_targets, entity, updated, rotation_changed);
                     }
                 }
             }
@@ -271,9 +273,10 @@ pub fn show_transform_gizmo(ui: &mut Ui, viewport: egui::Rect, world: &mut World
             focused |= gizmo.is_focused();
             paint_gizmo(ui, viewport, gizmo);
 
-            if let Some((_, updated_transforms)) = result {
+            if let Some((result, updated_transforms)) = result {
                 if let Some(updated) = updated_transforms.into_iter().next() {
-                    apply_gizmo_transform(&mut q_targets, *entity, updated);
+                    let rotation_changed = matches!(result, GizmoResult::Rotation { .. } | GizmoResult::Arcball { .. });
+                    apply_gizmo_transform(&mut q_targets, *entity, updated, rotation_changed);
                 }
             }
         }
@@ -286,7 +289,10 @@ pub fn show_transform_gizmo(ui: &mut Ui, viewport: egui::Rect, world: &mut World
 
 fn apply_group_spacing_scale(
     interaction: &mut Option<GroupScaleInteraction>,
-    q_targets: &mut Query<(Entity, &mut Transform), (With<Selected>, With<GizmoTransformable>)>,
+    q_targets: &mut Query<
+        (Entity, &mut Transform, Option<&mut KmpEulerRotation>),
+        (With<Selected>, With<GizmoTransformable>),
+    >,
     targets: &[(Entity, GizmoTransform)],
     total: Vec3,
     gizmo_orientation: GizmoOrientation,
@@ -322,7 +328,7 @@ fn apply_group_spacing_scale(
     });
 
     for (entity, start_position) in &interaction.start_positions {
-        let Ok((_, mut transform)) = q_targets.get_mut(*entity) else {
+        let Ok((_, mut transform, _)) = q_targets.get_mut(*entity) else {
             continue;
         };
         transform.translation = scaled_position(*start_position, interaction.pivot, interaction.orientation, total);
@@ -370,16 +376,25 @@ fn update_bevy_transform(transform: &mut Transform, updated: GizmoTransform) {
 }
 
 fn apply_gizmo_transform(
-    q_targets: &mut Query<(Entity, &mut Transform), (With<Selected>, With<GizmoTransformable>)>,
+    q_targets: &mut Query<
+        (Entity, &mut Transform, Option<&mut KmpEulerRotation>),
+        (With<Selected>, With<GizmoTransformable>),
+    >,
     entity: Entity,
     updated: GizmoTransform,
+    rotation_changed: bool,
 ) {
-    let Ok((_, mut transform)) = q_targets.get_mut(entity) else {
+    let Ok((_, mut transform, rotation)) = q_targets.get_mut(entity) else {
         return;
     };
     let scale = transform.scale;
     update_bevy_transform(&mut transform, updated);
     transform.scale = scale;
+    if rotation_changed {
+        if let Some(mut rotation) = rotation {
+            rotation.0 = nearest_euler_rot(transform.rotation, rotation.0);
+        }
+    }
 }
 
 #[cfg(test)]

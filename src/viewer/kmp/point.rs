@@ -2,8 +2,8 @@ use super::{
     meshes_materials::{KmpMeshes, PointMaterials},
     ordering::{NextOrderID, OrderId},
     routes::RouteLink,
-    KmpComponent, KmpSectionEntityIdMap, KmpSectionIdEntityMap, KmpSelectablePoint, MaybeRouteId, RespawnPoint,
-    RoutePoint, Section, Spawn, Spawner,
+    KmpComponent, KmpEulerRotation, KmpSectionEntityIdMap, KmpSectionIdEntityMap, KmpSelectablePoint, MaybeRouteId,
+    RespawnPoint, RoutePoint, Section, Spawn, Spawner,
 };
 use crate::{
     ui::settings::AppSettings,
@@ -66,6 +66,7 @@ pub fn spawn_point<T: Spawn + Component + Clone>(spawner: Spawner<T>, world: &mu
         Mesh3d(meshes.sphere.clone()),
         MeshMaterial3d(materials.point.clone()),
         spawner.get_transform(),
+        KmpEulerRotation(spawner.rot),
         if spawner.visible {
             Visibility::Visible
         } else {

@@ -71,6 +71,9 @@ pub mod multi_edit {
         ($iter:ident => 1 $($fields:tt)*) => {
             $iter.iter_mut().map(|x| x.1.reborrow().map_unchanged(|x| &mut x.$($fields)*))
         };
+        ($iter:ident => 2 $($fields:tt)*) => {
+            $iter.iter_mut().map(|x| x.2.reborrow().map_unchanged(|x| &mut x.$($fields)*))
+        };
         ($iter:ident => $($fields:tt)*) => {
             $iter.iter_mut().map(|x| x.reborrow().map_unchanged(|x| &mut x.$($fields)*))
         };
@@ -362,10 +365,31 @@ pub fn get_euler_rot(transform: &Transform) -> Vec3 {
 pub fn set_euler_rot(rot: Vec3, transform: &mut Transform) {
     transform.rotation = Quat::from_euler(
         EulerRot::XYZ,
-        f32::to_radians(rot.x),
-        f32::to_radians(rot.y),
-        f32::to_radians(rot.z),
+        f32::to_radians(rot.x.rem_euclid(360.0)),
+        f32::to_radians(rot.y.rem_euclid(360.0)),
+        f32::to_radians(rot.z.rem_euclid(360.0)),
     );
+}
+
+/// Select the XYZ Euler representation of `rotation` nearest to the previous
+/// explicit degree values, retaining accumulated full turns across gizmo frames.
+pub fn nearest_euler_rot(rotation: Quat, previous: Vec3) -> Vec3 {
+    let canonical = get_euler_rot(&Transform::from_rotation(rotation));
+    let alternate = vec3(canonical.x + 180.0, 180.0 - canonical.y, canonical.z + 180.0);
+    let near = |candidate: Vec3| {
+        vec3(
+            candidate.x + 360.0 * ((previous.x - candidate.x) / 360.0).round(),
+            candidate.y + 360.0 * ((previous.y - candidate.y) / 360.0).round(),
+            candidate.z + 360.0 * ((previous.z - candidate.z) / 360.0).round(),
+        )
+    };
+    let canonical = near(canonical);
+    let alternate = near(alternate);
+    if alternate.distance_squared(previous) < canonical.distance_squared(previous) {
+        alternate
+    } else {
+        canonical
+    }
 }
 pub fn euler_to_quat_ui(rot: Vec3, res: (Response, Response, Response), transform: &mut Transform) {
     let changed = res.0.changed() || res.1.changed() || res.2.changed();
@@ -663,5 +687,29 @@ mod tests {
         let rotation = get_euler_rot(&transform);
 
         assert!((rotation.x + 45.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn nearest_euler_rotation_retains_full_turns() {
+        let rotation = Quat::from_rotation_x(11_f32.to_radians());
+        let unwrapped = nearest_euler_rot(rotation, vec3(370.0, 0.0, 0.0));
+
+        assert!((unwrapped.x - 371.0).abs() < 0.001);
+        assert!(unwrapped.y.abs() < 0.001);
+        assert!(unwrapped.z.abs() < 0.001);
+    }
+
+    #[test]
+    fn nearest_euler_rotation_can_select_alternate_xyz_branch() {
+        let previous = vec3(170.0, 100.0, 190.0);
+        let mut transform = Transform::default();
+        set_euler_rot(previous, &mut transform);
+
+        let unwrapped = nearest_euler_rot(transform.rotation, previous);
+        let mut roundtrip = Transform::default();
+        set_euler_rot(unwrapped, &mut roundtrip);
+
+        assert!(unwrapped.distance(previous) < 0.001);
+        assert!(transform.rotation.dot(roundtrip.rotation).abs() > 0.99999);
     }
 }

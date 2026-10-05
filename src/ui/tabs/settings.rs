@@ -1,6 +1,7 @@
 use crate::{
     ui::{
         file_dialog::FileDialogManager,
+        keybinds::key_code_label,
         settings::{AppSettings, REBUILD_SAVING_WARNING},
     },
     util::kcl_file::KclFlag,
@@ -231,6 +232,13 @@ pub fn show_settings_tab(ui: &mut Ui, world: &mut World) {
             key_binding_row(
                 ui,
                 &keys,
+                SettingsKeyBinding::NormaliseRotation,
+                "Normalise Rotation",
+                &mut settings.editor_key_bindings.normalise_rotation,
+            );
+            key_binding_row(
+                ui,
+                &keys,
                 SettingsKeyBinding::Transform,
                 "Transform Gizmo",
                 &mut settings.editor_key_bindings.transform,
@@ -424,6 +432,7 @@ enum SettingsKeyBinding {
     Translate,
     Rotate,
     Scale,
+    NormaliseRotation,
     Transform,
     FlyForward,
     FlyBackward,
@@ -511,33 +520,6 @@ fn mouse_button_row(ui: &mut Ui, id_salt: &'static str, label: &str, hover_text:
                 }
             });
     });
-}
-
-fn key_code_label(key_code: KeyCode) -> String {
-    match key_code {
-        KeyCode::ShiftLeft => "Left Shift".into(),
-        KeyCode::ShiftRight => "Right Shift".into(),
-        KeyCode::ControlLeft => "Left Ctrl".into(),
-        KeyCode::ControlRight => "Right Ctrl".into(),
-        KeyCode::AltLeft => "Left Alt".into(),
-        KeyCode::AltRight => "Right Alt".into(),
-        KeyCode::SuperLeft => "Left Super".into(),
-        KeyCode::SuperRight => "Right Super".into(),
-        KeyCode::ArrowUp => "Up Arrow".into(),
-        KeyCode::ArrowDown => "Down Arrow".into(),
-        KeyCode::ArrowLeft => "Left Arrow".into(),
-        KeyCode::ArrowRight => "Right Arrow".into(),
-        KeyCode::PageUp => "Page Up".into(),
-        KeyCode::PageDown => "Page Down".into(),
-        key_code => {
-            let debug_name = format!("{key_code:?}");
-            debug_name
-                .strip_prefix("Key")
-                .or_else(|| debug_name.strip_prefix("Digit"))
-                .unwrap_or(&debug_name)
-                .to_owned()
-        }
-    }
 }
 
 fn mouse_button_label(mouse_button: MouseButton) -> String {

@@ -1,21 +1,24 @@
 use crate::{
-    ui::util::{
-        combobox_enum, framed_collapsing_header, link_select_btn,
-        multi_edit::{
-            bit_checkbox_multi_edit, checkbox_multi_edit, combobox_enum_multi_edit, drag_value_multi_edit, map,
-            rotation_multi_edit,
+    ui::{
+        keybinds::normalise_rotation_tooltip,
+        settings::AppSettings,
+        util::{
+            combobox_enum, framed_collapsing_header, link_select_btn,
+            multi_edit::{
+                bit_checkbox_multi_edit, checkbox_multi_edit, combobox_enum_multi_edit, drag_value_multi_edit, map,
+            },
+            set_euler_rot, DragSpeed, Icons, LinkSelectBtnType,
         },
-        DragSpeed, Icons, LinkSelectBtnType,
     },
-    util::{give_me_a_mut, iter_mut_from_entities},
+    util::iter_mut_from_entities,
     viewer::{
         edit::{link_select_mode::LinkSelectMode, select::Selected},
         kmp::{
             checkpoints::{CheckpointRespawnLink, GetSelectedCheckpoints},
             components::{
                 AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, CheckpointKind, EnemyPathPoint,
-                ItemPathPoint, KmpCamera, KmpCameraIntroStart, Object, PathOverallStart, RespawnPoint, RoutePoint,
-                RouteSettings, StartPoint, TrackInfo, TransformEditOptions,
+                ItemPathPoint, KmpCamera, KmpCameraIntroStart, KmpEulerRotation, Object, PathOverallStart,
+                RespawnPoint, RoutePoint, RouteSettings, StartPoint, TrackInfo, TransformEditOptions,
             },
             ordering::OrderId,
             path::{EntityPathGroups, PathType, RecalcPaths, ToPathType},
@@ -42,24 +45,49 @@ use std::{
 pub fn show_edit_tab(ui: &mut Ui, world: &mut World) {
     edit_track_info(ui, world);
 
-    edit_component::<(Option<&TransformEditOptions>, &mut Transform), ()>(ui, world, "Transform", |ui, items, _| {
-        let all_hide_rot = items.iter().all(|x| x.0.is_some_and(|x| x.hide_rotation));
+    edit_component::<
+        (
+            Option<&TransformEditOptions>,
+            Option<&mut KmpEulerRotation>,
+            &mut Transform,
+        ),
+        Res<AppSettings>,
+    >(ui, world, "Transform", |ui, items, settings| {
         let all_hide_y_tr = items.iter().all(|x| x.0.is_some_and(|x| x.hide_y_translation));
 
-        drag_value_edit_row(ui, "Translation X", DragSpeed::Fast, map!(items => 1 translation.x));
+        drag_value_edit_row(ui, "Translation X", DragSpeed::Fast, map!(items => 2 translation.x));
         if !all_hide_y_tr {
-            drag_value_edit_row(ui, "Y", DragSpeed::Fast, map!(items => 1 translation.y));
+            drag_value_edit_row(ui, "Y", DragSpeed::Fast, map!(items => 2 translation.y));
         }
-        drag_value_edit_row(ui, "Z", DragSpeed::Fast, map!(items => 1 translation.z));
+        drag_value_edit_row(ui, "Z", DragSpeed::Fast, map!(items => 2 translation.z));
 
-        if !all_hide_rot {
+        let mut rotations: Vec<_> = items
+            .iter_mut()
+            .filter_map(|(_, rotation, _)| {
+                rotation
+                    .as_mut()
+                    .map(|rotation| rotation.reborrow().map_unchanged(|rotation| &mut rotation.0))
+            })
+            .collect();
+        if !rotations.is_empty() {
             edit_spacing(ui);
-            rotation_multi_edit(ui, items.iter_mut().map(|(_, x)| &mut **x), |ui, rots| {
-                give_me_a_mut(rots, |rots| {
-                    let [x, y, z] = vec3_drag_value_edit_row(ui, "Rotation", DragSpeed::Slow, rots);
-                    (x, y, z)
-                })
-            });
+            let responses = vec3_drag_value_edit_row(
+                ui,
+                "Rotation",
+                DragSpeed::Slow,
+                rotations.iter_mut().map(|rotation| rotation.reborrow()),
+            );
+            let tooltip = normalise_rotation_tooltip(&settings.editor_key_bindings);
+            for response in &responses {
+                response.clone().on_hover_text_at_pointer(&tooltip);
+            }
+            if responses.iter().any(Response::changed) {
+                for (_, rotation, transform) in items.iter_mut() {
+                    if let Some(rotation) = rotation {
+                        set_euler_rot(rotation.0, transform);
+                    }
+                }
+            }
         }
     });
 

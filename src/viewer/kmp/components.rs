@@ -26,6 +26,21 @@ pub struct TransformEditOptions {
     pub hide_y_translation: bool,
 }
 
+/// The exact editable KMP Euler angles, in degrees and XYZ order.
+///
+/// `Transform::rotation` is the render/gizmo projection of this value and cannot
+/// retain full turns such as 700 degrees on its own.
+#[derive(Component, Default, Clone, Copy, PartialEq, Debug)]
+pub struct KmpEulerRotation(pub Vec3);
+
+pub fn kmp_euler_rotation(world: &World, entity: Entity, transform: Transform) -> [f32; 3] {
+    world
+        .get::<KmpEulerRotation>(entity)
+        .map(|rotation| rotation.0)
+        .unwrap_or_else(|| get_euler_rot(&transform))
+        .into()
+}
+
 #[derive(Component, Default)]
 pub struct KmpSelectablePoint;
 
@@ -445,10 +460,10 @@ impl KmpComponent for StartPoint {
             padding: data.padding,
         }
     }
-    fn to_kmp(&self, transform: Transform, _: &mut World, _: Entity) -> Ktpt {
+    fn to_kmp(&self, transform: Transform, world: &mut World, e: Entity) -> Ktpt {
         Ktpt {
             position: transform.translation.into(),
-            rotation: get_euler_rot(&transform).into(),
+            rotation: kmp_euler_rotation(world, e, transform),
             player_index: self.player_index,
             padding: self.padding,
         }
@@ -616,7 +631,7 @@ impl KmpComponent for Object {
             object_id: self.object_id,
             padding: self.padding,
             position: transform.translation.into(),
-            rotation: get_euler_rot(&transform).into(),
+            rotation: kmp_euler_rotation(world, e, transform),
             scale: self.scale.into(),
             route: {
                 let maybe_route = world.entity(e).get::<RouteLink>();
@@ -838,7 +853,7 @@ impl KmpComponent for AreaPoint {
         let setting_2 = area_setting_2.unwrap_or(0);
         Area {
             position: transform.translation.into(),
-            rotation: get_euler_rot(&transform).into(),
+            rotation: kmp_euler_rotation(world, e, transform),
             shape: self.shape as u8,
             priority: self.priority,
             scale: (self.scale / vec3(5000., 10000., 5000.)).into(),
@@ -889,7 +904,7 @@ impl KmpComponent for KmpCamera {
     fn to_kmp(&self, transform: Transform, world: &mut World, e: Entity) -> Came {
         Came {
             position: transform.translation.into(),
-            rotation: get_euler_rot(&transform).into(),
+            rotation: kmp_euler_rotation(world, e, transform),
             kind: self.kind as u8,
             next_index: self.next_index,
             shake: self.shake,
@@ -922,10 +937,10 @@ impl KmpComponent for RespawnPoint {
             extra_data: data.extra_data,
         }
     }
-    fn to_kmp(&self, transform: Transform, _: &mut World, _: Entity) -> Jgpt {
+    fn to_kmp(&self, transform: Transform, world: &mut World, e: Entity) -> Jgpt {
         Jgpt {
             position: transform.translation.into(),
-            rotation: get_euler_rot(&transform).into(),
+            rotation: kmp_euler_rotation(world, e, transform),
             respawn_id: self.respawn_id,
             extra_data: self.extra_data,
         }
@@ -947,10 +962,10 @@ impl KmpComponent for CannonPoint {
             },
         }
     }
-    fn to_kmp(&self, transform: Transform, _: &mut World, _: Entity) -> Cnpt {
+    fn to_kmp(&self, transform: Transform, world: &mut World, e: Entity) -> Cnpt {
         Cnpt {
             position: transform.translation.into(),
-            rotation: get_euler_rot(&transform).into(),
+            rotation: kmp_euler_rotation(world, e, transform),
             id: self.id,
             shoot_effect: self.shoot_effect as i16,
         }
@@ -964,10 +979,10 @@ impl KmpComponent for BattleFinishPoint {
             unknown: data.unknown,
         }
     }
-    fn to_kmp(&self, transform: Transform, _: &mut World, _: Entity) -> Mspt {
+    fn to_kmp(&self, transform: Transform, world: &mut World, e: Entity) -> Mspt {
         Mspt {
             position: transform.translation.into(),
-            rotation: get_euler_rot(&transform).into(),
+            rotation: kmp_euler_rotation(world, e, transform),
             id: self.id,
             unknown: self.unknown,
         }

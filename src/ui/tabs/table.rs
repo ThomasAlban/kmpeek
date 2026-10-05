@@ -1,7 +1,8 @@
 use crate::{
     ui::{
-        keybinds::ModifiersPressed,
-        util::{combobox_enum, drag_vec3, euler_to_quat_ui, get_euler_rot, DragSpeed},
+        keybinds::{normalise_rotation_tooltip, ModifiersPressed},
+        settings::AppSettings,
+        util::{combobox_enum, drag_vec3, set_euler_rot, DragSpeed},
         viewport::ViewportInfo,
     },
     viewer::{
@@ -9,7 +10,7 @@ use crate::{
         kmp::{
             components::{
                 AreaKind, AreaPoint, BattleFinishPoint, CannonPoint, Checkpoint, CheckpointKind, EnemyPathPoint,
-                ItemPathPoint, KmpCamera, Object, RespawnPoint, StartPoint,
+                ItemPathPoint, KmpCamera, KmpEulerRotation, Object, RespawnPoint, StartPoint,
             },
             ordering::OrderId,
             sections::KmpEditMode,
@@ -244,12 +245,20 @@ fn show_kmp_table<T: Component<Mutability = Mutable> + PartialEq + Clone + ShowK
     }
 
     let mut ss = SystemState::<(
-        Query<(&mut T, &mut Transform, Entity, Has<Selected>, &OrderId)>,
+        Query<(
+            &mut T,
+            &mut Transform,
+            Option<&mut KmpEulerRotation>,
+            Entity,
+            Has<Selected>,
+            &OrderId,
+        )>,
         Query<Entity, With<T>>,
         Commands,
         Res<ButtonInput<KeyCode>>,
+        Res<AppSettings>,
     )>::new(world);
-    let Ok((mut q, q_entities, mut commands, keys)) = ss.get_mut(world) else {
+    let Ok((mut q, q_entities, mut commands, keys, settings)) = ss.get_mut(world) else {
         return;
     };
 
@@ -297,7 +306,7 @@ fn show_kmp_table<T: Component<Mutability = Mutable> + PartialEq + Clone + ShowK
     });
 
     table.body(|mut body| {
-        for (mut t, mut transform, e, is_selected, order_id) in q.iter_mut().sort::<&OrderId>() {
+        for (mut t, mut transform, mut rotation, e, is_selected, order_id) in q.iter_mut().sort::<&OrderId>() {
             body.row(20., |mut row| {
                 row.set_selected(is_selected);
 
@@ -347,10 +356,18 @@ fn show_kmp_table<T: Component<Mutability = Mutable> + PartialEq + Clone + ShowK
                     });
                 });
                 if T::ROTATION {
-                    let mut rot = get_euler_rot(&transform_cp);
+                    let rotation = rotation
+                        .as_mut()
+                        .expect("rotation-bearing table point is missing KmpEulerRotation");
                     row.col(|ui| {
-                        let res = drag_vec3(ui, &mut rot, DragSpeed::Slow);
-                        euler_to_quat_ui(rot, res, &mut transform_cp);
+                        let responses = drag_vec3(ui, &mut rotation.0, DragSpeed::Slow);
+                        let tooltip = normalise_rotation_tooltip(&settings.editor_key_bindings);
+                        for response in [&responses.0, &responses.1, &responses.2] {
+                            response.clone().on_hover_text_at_pointer(&tooltip);
+                        }
+                        if responses.0.changed() || responses.1.changed() || responses.2.changed() {
+                            set_euler_rot(rotation.0, &mut transform_cp);
+                        }
                     });
                 }
 

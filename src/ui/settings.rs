@@ -107,6 +107,17 @@ mod tests {
             .remove("default_mode");
         let restored: AppSettings = serde_json::from_value(json).unwrap();
         assert!(!restored.editor_key_bindings.default_mode.is_empty());
+
+        let mut json = serde_json::to_value(AppSettings::default()).unwrap();
+        json["editor_key_bindings"]
+            .as_object_mut()
+            .unwrap()
+            .remove("normalise_rotation");
+        let restored: AppSettings = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            restored.editor_key_bindings.normalise_rotation,
+            super::super::keybinds::EditorKeyBindings::default().normalise_rotation
+        );
     }
 
     /// Export/import must retain an explicit opt-out as well as the enabled value.

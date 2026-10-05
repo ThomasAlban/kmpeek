@@ -78,6 +78,7 @@ struct PointSnapshot {
     id: Entity,
     payload: Payload,
     transform: Option<Transform>,
+    rotation: Option<KmpEulerRotation>,
     order: Option<u32>,
     node: Option<KmpPathNode>,
     pair: Option<Entity>,
@@ -237,6 +238,11 @@ impl DocumentSnapshot {
                     }
                     t.rotation = Quat::IDENTITY;
                 }
+                if let Some(rotation) = &mut point.rotation {
+                    for value in rotation.0.as_mut() {
+                        scalar(value);
+                    }
+                }
                 match &mut point.payload {
                     Payload::Enemy(v) => scalar(&mut v.leniency),
                     Payload::Item(v) => scalar(&mut v.bullet_control),
@@ -307,6 +313,7 @@ impl DocumentSnapshot {
                     }
                     t
                 }),
+                rotation: entity.get::<KmpEulerRotation>().copied(),
                 order: entity.get::<OrderId>().map(|o| o.0),
                 node,
                 pair: entity
@@ -355,6 +362,7 @@ impl DocumentSnapshot {
                 ($value:expr) => {
                     Spawner::builder()
                         .component($value.clone())
+                        .rot(p.rotation.map(|rotation| rotation.0).unwrap_or_default())
                         .e(e)
                         .order_id(p.order.unwrap_or(0))
                         .build()
@@ -490,6 +498,11 @@ impl DocumentSnapshot {
                 world.entity_mut(e).insert(t);
             } else {
                 world.entity_mut(e).remove::<Transform>();
+            }
+            if let Some(rotation) = p.rotation {
+                world.entity_mut(e).insert(rotation);
+            } else {
+                world.entity_mut(e).remove::<KmpEulerRotation>();
             }
             if let Some(order) = p.order {
                 world.entity_mut(e).insert(OrderId(order));
