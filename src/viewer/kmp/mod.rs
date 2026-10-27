@@ -248,6 +248,8 @@ pub fn open_kmp(world: &mut World) -> anyhow::Result<()> {
     document::normalize_ordering(world, &kmp)?;
     let document = document::LoadedKmp::capture(world, loaded_path.clone(), original_bytes, kmp)?;
     world.insert_resource(document);
+    world.write_message(FileResult {path: loaded_path.clone(), file_source: FileSource::OpenKmpKclDialog});
+
     world.insert_resource(KmpFilePath(loaded_path));
     // Loading itself is not a status that needs a permanent banner. Save failures
     // remain visible, while save-mode guidance lives next to its Settings toggle.

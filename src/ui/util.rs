@@ -13,8 +13,9 @@ use std::{
     hash::Hash,
     path::PathBuf
 };
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum FileSource {
     OpenKmpKclDialog,
     SaveKmpDialog,
@@ -24,10 +25,19 @@ pub enum FileSource {
     // ImportCsv,
 }
 
-#[derive(Message)]
+#[derive(Message, Serialize, Deserialize, Clone)]
 pub struct FileResult {
     pub path: PathBuf,
     pub file_source: FileSource,
+}
+
+impl Default for FileResult {
+    fn default() -> Self {
+        Self {
+            path: PathBuf::new(),
+            file_source: FileSource::OpenKmpKclDialog
+        }
+    }
 }
 
 pub fn get_egui_ctx(world: &mut World) -> Context {

@@ -1,5 +1,6 @@
 use self::{
-    keybinds::keybinds_plugin, settings::app_settings_plugin, tabs::docktree_plugin, ui_state::ui_state_plugin,
+    keybinds::keybinds_plugin, settings::app_settings_plugin, tabs::docktree_plugin, last_opened::last_opened_plugin,
+    ui_state::ui_state_plugin,
     unsaved_changes::unsaved_changes_plugin, update_ui::update_ui_plugin, viewport::viewport_plugin,
 };
 use bevy::app::App;
@@ -16,6 +17,7 @@ pub mod unsaved_changes;
 pub mod update_ui;
 pub mod util;
 pub mod viewport;
+pub(crate) mod last_opened;
 
 pub fn ui_plugin(app: &mut App) {
     app.add_plugins((
@@ -27,6 +29,7 @@ pub fn ui_plugin(app: &mut App) {
         },
         ui_state_plugin,
         docktree_plugin,
+        last_opened_plugin,
         unsaved_changes_plugin,
         update_ui_plugin,
         viewport_plugin,
